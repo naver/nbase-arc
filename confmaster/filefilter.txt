@@ -1,0 +1,5 @@
+# Please modify following
+# The included/excluded paths are applied sequentially from up to down
+# + included_path_patterns
+# - excluded_path_patterns
++ master/confmaster/src

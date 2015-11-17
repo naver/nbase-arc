@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns:context="http://www.springframework.org/schema/context"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans classpath:org/springframework/beans/factory/xml/spring-beans-4.1.xsd
+	http://www.springframework.org/schema/context classpath:org/springframework/context/config/spring-context-4.1.xsd
+	http://www.springframework.org/schema/tool classpath:org/springframework/beans/factory/xml/spring-tool-4.1.xsd" 
+	default-lazy-init="true">
+
+	<bean class="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor"></bean>
+	
+	<context:annotation-config />
+	
+	<bean class="com.navercorp.nbasearc.confmaster.EmbeddedZooKeeper"
+		init-method="start"  
+		lazy-init="false">
+		<property name="configPath" value="./target/test-classes/zoo.cfg" />
+	</bean>
+	 
+	<context:property-placeholder location="classpath:test.properties" />
+
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.config"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.repository"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.repository.dao"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.repository.znode.ver1_2"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.heartbeat"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.command"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.leaderelection"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.manager"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.workflow"/>
+	
+</beans>
