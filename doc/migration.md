@@ -36,4 +36,4 @@ In the first phase, the configuration master blocks operations in gateways belon
 In the second phase, the configuration master changes partition number (PN) to partition group (PG) mapping with redirect command.  After redirect, operations blocked in the gateways are sent to the target PG as in normal.
 
 ### Cleanup
-After migration, migrated data in source PG are deleted. This work is performed independently with the handling of client requests.
+After the migration, migrated data in source PG are deleted. This work is performed independently with the handling of client requests.

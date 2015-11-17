@@ -2,14 +2,14 @@
 nbase-arc and RC has different approaches in many ways. The following table summarizes the differences between nbase-arc and RC.
 
 |       | nbase-arc | RC |
-| ----- | -------- | -- |
+|-------|-----------|----|
 | *Key distribution* | crc16(key) % 8192 | crc16(key) % 16384 |
 | *Replication* | asynchronous | consensus-based |
 | *Data persistence* | RDB/AOF | RDB+LOG |
 | *Client connection* | Redis | Gateway |
 | *Migration* | key based | partition based |
 | *Fault-detection* | gossip | multiple heartbeat |
-| *fail-over* | master election protocol | configuration master | 
+| *fail-over* | master election protocol | configuration master |
 
 
 #### Key distribution model
@@ -36,7 +36,7 @@ Clients in RC directly connect to Redis nodes of the cluster. Because all operat
 In nbase-arc, clients connect to any gateways to perform operation and there is no redirection. Clients also can be hinted about the cluster configuration by the configuration master for the request to be routed to the most proper gateway.
 
 See [gateway](/doc/gateway.md) for a more information about gateway
-See [c API](/doc/c-api.md) for a more information about C API
+See [C API](/doc/c-api.md) for a more information about C API
 
 #### Migration
 In RC, Migration of a slot is performed by MIGRATE command  key by key.
