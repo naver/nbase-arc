@@ -1,7 +1,8 @@
-### redis commands
+### Command support.
 Nbasearc currently uses modified version of Redis 2.8.8. 
-Some of the commands are not supported and some are modified in the context of the cluster environment.
-Following table summarizes the commands  and differences supported by the gateways.
+Some of the Redis commands are not supported and some are modified in the context of the cluster environment. See also [s3 commands](/doc/s3-commands.md)
+
+Following table summarizes the supported Redis commands and differences supported by the nbase-arc gateways.
 
 | Commands | Supported | Note |
 | ------------ | ------------ | ----- |
