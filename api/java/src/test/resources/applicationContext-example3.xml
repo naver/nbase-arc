@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd">
+
+	<bean id="gatewayConfig" class="com.navercorp.redis.cluster.gateway.GatewayConfig">
+		<property name="zkAddress">
+			<bean class="com.navercorp.redis.cluster.util.TestEnvUtils"
+				factory-method="getZkAddress" />
+		</property>
+		<property name="clusterName">
+			<bean class="com.navercorp.redis.cluster.util.TestEnvUtils"
+				factory-method="getClusterName" />
+		</property>
+	</bean>
+
+	<bean id="redisCulsterConnectionFactory"
+		class="com.navercorp.redis.cluster.spring.RedisClusterConnectionFactory"
+		destroy-method="destroy">
+		<property name="config" ref="gatewayConfig" />
+	</bean>
+
+	<bean id="redisTemplate" class="com.navercorp.redis.cluster.spring.RedisClusterTemplate">
+		<property name="connectionFactory" ref="redisCulsterConnectionFactory" />
+		<property name="keySerializer" ref="redisStringSerializer" />
+		<property name="valueSerializer" ref="redisStringSerializer" />
+		<property name="hashKeySerializer" ref="redisStringSerializer" />
+		<property name="hashValueSerializer">
+			<bean id="redisJsonSerializer"
+				class="org.springframework.data.redis.serializer.JacksonJsonRedisSerializer">
+				<constructor-arg type="java.lang.Class" value="java.util.Map" />
+			</bean>
+		</property>
+	</bean>
+
+	<bean id="redisStringSerializer"
+		class="org.springframework.data.redis.serializer.StringRedisSerializer" />
+</beans>
+

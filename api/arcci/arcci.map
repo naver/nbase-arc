@@ -1,0 +1,5 @@
+{
+  global: arc_init_conf; arc_new_zk; arc_new_gw; arc_destroy; arc_create_request; arc_free_request; arc_append_command;
+	  arc_append_commandv; arc_append_commandcv; arc_do_request; arc_get_reply; arc_free_reply;
+  local: *;
+};
