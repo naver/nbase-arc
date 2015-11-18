@@ -1,0 +1,16 @@
++---------------------------+
+| EXTERNAL SOURCE REFERENCE |
++---------------------------+
+redis windows port
+  - https://github.com/MSOpenTech/redis/tags/Win2.6.8
+zookeeper c library
+hiredis
+
++----------+
+| features |
++----------+
+- supports linux, windows
+- event driven
+- multi-thread client support
+- zookeeper integration for gateway lookup
+- gateway affinity 
