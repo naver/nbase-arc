@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd">
+	
+	<bean id="gatewayConfig" class="com.nhncorp.redis.cluster.GatewayConfig">
+		<property name="ipAddress" value="1.1.1.1:6379,1.1.1.2:6379"/>
+	</bean>
+	
+	<bean id="redisCulsterConnectionFactory" class="com.navercorp.redis.cluster.spring.RedisClusterConnectionFactory" destroy-method="destroy">
+		<property name="config" ref="gatewayConfig"/>
+	</bean>
+	
+	<bean id="redisTemplate" class="org.springframework.data.redis.core.RedisTemplate">
+		<property name="connectionFactory" ref="redisCulsterConnectionFactory"/>
+	</bean>
+</beans>
