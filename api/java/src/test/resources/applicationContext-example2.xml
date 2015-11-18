@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.1.xsd">
+
+	<bean id="gatewayConfig" class="com.navercorp.redis.cluster.gateway.GatewayConfig">
+		<property name="zkAddress">
+			<bean class="com.navercorp.redis.cluster.util.TestEnvUtils"
+				factory-method="getZkAddress" />
+		</property>
+		<property name="clusterName">
+			<bean class="com.navercorp.redis.cluster.util.TestEnvUtils"
+				factory-method="getClusterName" />
+		</property>
+
+		<property name="timeoutMillisec" value="1000" />
+		<property name="healthCheckUsed" value="true" />
+		<property name="healthCheckThreadSize" value="3" />
+		<property name="healthCheckPeriodSeconds" value="10" />
+		<property name="gatewaySelectorMethod" value="round-robin" />
+		<property name="poolConfig" ref="poolConfig" />
+	</bean>
+
+	<bean id="poolConfig" class="com.navercorp.redis.cluster.RedisClusterPoolConfig">
+		<property name="initialSize" value="8"></property>
+		<property name="maxActive" value="8"></property>
+		<property name="maxIdle" value="8"></property>
+		<property name="minIdle" value="0"></property>
+		<property name="maxWait" value="1000"></property>
+		<property name="minEvictableIdleTimeMillis" value="-1"></property>
+		<property name="numTestsPerEvictionRun" value="2"></property>
+		<property name="testOnBorrow" value="false"></property>
+		<property name="testOnReturn" value="false"></property>
+		<property name="testWhileIdle" value="true"></property>
+		<property name="timeBetweenEvictionRunsMillis" value="300000"></property>
+	</bean>
+
+	<bean id="redisCulsterConnectionFactory"
+		class="com.navercorp.redis.cluster.spring.RedisClusterConnectionFactory"
+		destroy-method="destroy">
+		<property name="config" ref="gatewayConfig" />
+	</bean>
+
+	<bean id="redisTemplate"
+		class="com.navercorp.redis.cluster.spring.StringRedisClusterTemplate">
+		<property name="connectionFactory" ref="redisCulsterConnectionFactory" />
+	</bean>
+</beans>
+
