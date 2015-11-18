@@ -3,7 +3,7 @@ import os
 CWD = os.getcwd()
 BASE_DIR = CWD
 SMR_DIR = os.path.abspath("../../replicator")
-BE_DIR = os.path.abspath("../wc")
+BE_DIR = os.path.abspath("../cs")
 LOG_DIR = os.path.abspath("../../smr")
 
 SMR_BIN_PATH = os.path.join(SMR_DIR, "smr-replicator")
