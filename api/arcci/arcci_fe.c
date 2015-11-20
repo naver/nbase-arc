@@ -1686,34 +1686,27 @@ check_conf (const arc_conf_t * conf, int *log_prefix_size)
 }
 
 #ifdef _WIN32
-#define INIT_MUTEX_BEFORE 0L
-#define INIT_MUTEX_BEGIN 1L
-#define INIT_MUTEX_END 2L
-static int
+#define INIT_STATE_NONE 0L
+#define INIT_STATE_INITIALIZING 1L
+#define INIT_STATE_INITIALIZED 2L
+static void
 init_mutex ()
 {
-  static LONG mutex_initialized = INIT_MUTEX_BEFORE;
+  static volatile LONG mutex_init_state = INIT_STATE_NONE;
 
-  if (InterlockedCompareExchange
-      (&mutex_initialized, INIT_MUTEX_BEGIN,
-       INIT_MUTEX_BEFORE) == INIT_MUTEX_BEFORE)
+  LONG prev = InterlockedCompareExchange
+    (&mutex_init_state, INIT_STATE_INITIALIZING,
+     INIT_STATE_NONE);
+  if (prev == INIT_STATE_NONE)
     {
       /* initialize command_table_init_mutex */
-      if (pthread_mutex_init (&command_table_init_mutex, NULL) != 0)
-	{
-	  return -1;
-	}
-      InterlockedCompareExchange (&mutex_initialized, INIT_MUTEX_END,
-				  INIT_MUTEX_BEGIN);
+      pthread_mutex_init (&command_table_init_mutex, NULL);
+      mutex_init_state = INIT_STATE_INITIALIZED;
     }
-  else
+  else if (prev == INIT_STATE_INITIALIZING)
     {
-      while (InterlockedCompareExchange
-	     (&mutex_initialized, INIT_MUTEX_END,
-	      INIT_MUTEX_END) != INIT_MUTEX_END) {}
+      while (mutex_init_state != INIT_STATE_INITIALIZED) {}
     }
-
-  return 0;
 }
 #endif
 
@@ -1729,11 +1722,7 @@ arc_new_common (int use_zk, const char *hosts, const char *cluster_name,
   int log_prefix_size = 0;
 
 #ifdef _WIN32
-  if (init_mutex () == -1)
-    {
-      FE_ERROR (ARC_ERR_SYSCALL);
-      return NULL;
-    }
+  init_mutex ();
 #endif
 
   if (conf != NULL)
