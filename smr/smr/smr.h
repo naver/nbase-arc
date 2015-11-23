@@ -48,10 +48,11 @@
  *    SEQ_CKPTED
  *
  * 3) <-- messages
- *    CONFIGURE "init"
+ *    CONFIGURE "init" <log dir> <master client port> <commit seq> <nid>
  *    SEQ_SAFE
- *    CONFIGURE "new_master"
- *    CONFIGURE "rckpt"
+ *    CONFIGURE "new_master" <master host> <client port> <last seq> <nid>
+ *    CONFIGURE "rckpt" <BE host> <BE port>
+ *    CONFIGURE "lconn"
  *
  * +-----------------------------------------+
  * | slave replicator <--> master replicator |
@@ -59,10 +60,10 @@
  * 1) handshake
  *    --> connect
  *    <-- <min seq> (my minimum sequence number)
- *    <-- <max commit seq> (my committed sequence number)
- *    <-- <max seq> (my maximum sequence number)
+ *        <max commit seq> (my committed sequence number)
+ *        <max seq> (my maximum sequence number)
  *    --> <nid> (my nid)
- *    --> <seq>  (from which slave wants to receive log)
+ *        <seq>  (from which slave wants to receive log)
  *
  * 2) --> messages
  *    SEQ_RECEIVED
