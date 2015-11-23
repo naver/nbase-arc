@@ -148,7 +148,11 @@ static arc_t *arc_new_common (int use_zk, const char *hosts,
 /* STATIC VARIABLE */
 /* --------------- */
 
+#ifndef _WIN32
 static pthread_mutex_t command_table_init_mutex = PTHREAD_MUTEX_INITIALIZER;
+#else
+static pthread_mutex_t command_table_init_mutex;
+#endif
 static int command_table_initialized = 0;
 
 static struct redisCommand redisCommandTable[] = {
@@ -1681,6 +1685,31 @@ check_conf (const arc_conf_t * conf, int *log_prefix_size)
   return 0;
 }
 
+#ifdef _WIN32
+#define INIT_STATE_NONE 0L
+#define INIT_STATE_INITIALIZING 1L
+#define INIT_STATE_INITIALIZED 2L
+static void
+init_mutex ()
+{
+  static volatile LONG mutex_init_state = INIT_STATE_NONE;
+
+  LONG prev = InterlockedCompareExchange
+    (&mutex_init_state, INIT_STATE_INITIALIZING,
+     INIT_STATE_NONE);
+  if (prev == INIT_STATE_NONE)
+    {
+      /* initialize command_table_init_mutex */
+      pthread_mutex_init (&command_table_init_mutex, NULL);
+      mutex_init_state = INIT_STATE_INITIALIZED;
+    }
+  else if (prev == INIT_STATE_INITIALIZING)
+    {
+      while (mutex_init_state != INIT_STATE_INITIALIZED) {}
+    }
+}
+#endif
+
 static arc_t *
 arc_new_common (int use_zk, const char *hosts, const char *cluster_name,
 		const arc_conf_t * conf)
@@ -1691,6 +1720,10 @@ arc_new_common (int use_zk, const char *hosts, const char *cluster_name,
   int ret;
   arc_conf_t my_conf;
   int log_prefix_size = 0;
+
+#ifdef _WIN32
+  init_mutex ();
+#endif
 
   if (conf != NULL)
     {
