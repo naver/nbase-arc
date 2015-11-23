@@ -1,9 +1,9 @@
 ### Compare with Redis Cluster (RC, in short)
 nbase-arc and RC has different approaches in many ways. The following table summarizes the differences between nbase-arc and RC.
 
-|       | nbase-arc | RC |
+|       | RC | nbase-arc |
 |-------|-----------|----|
-| *Key distribution* | crc16(key) % 8192 | crc16(key) % 16384 |
+| *Key distribution* | crc16(key) % 16384 | crc16(key) % 8192 |
 | *Replication* | asynchronous | consensus-based |
 | *Data persistence* | RDB/AOF | RDB+LOG |
 | *Client connection* | Redis | Gateway |
