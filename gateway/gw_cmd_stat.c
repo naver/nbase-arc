@@ -185,6 +185,7 @@ sdscatinfo_redis (sds info, command_context * ctx)
 	    max_latency = zmalloc (sizeof (unsigned int));
 	    *max_latency = stat->max_latency;
 	    ret = dictAdd (aggr, stat->redis_id, max_latency);
+	    assert (ret == DICT_OK);
 	  }
 	else
 	  {
@@ -848,9 +849,8 @@ info_command (command_context * ctx)
 	  snprintf (buf, 1024, "INFO\r\n");
 	}
 
-      ret =
-	pool_send_query_all (mgr->pool, buf, cmd_redis_coro_invoker, ctx,
-			     &ctx->msg_handles);
+      pool_send_query_all (mgr->pool, buf, cmd_redis_coro_invoker, ctx,
+			   &ctx->msg_handles);
       // Ignore failed msgs and try best to get information from success msgs.
     }
   zfree (section);
@@ -968,14 +968,12 @@ dbsize_command (command_context * ctx)
 {
   command_manager *mgr = ctx->my_mgr;
   sbuf *reply;
-  int ret;
 
   COROUTINE_BEGIN (ctx->coro_line);
 
   // Send queries to all servers
-  ret =
-    pool_send_query_all (mgr->pool, "DBSIZE\r\n", cmd_redis_coro_invoker, ctx,
-			 &ctx->msg_handles);
+  pool_send_query_all (mgr->pool, "DBSIZE\r\n", cmd_redis_coro_invoker, ctx,
+		       &ctx->msg_handles);
   // Ignore failed msgs and try best to get information from success msgs.
 
   // Receive replies of queries
