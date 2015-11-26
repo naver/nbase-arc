@@ -11,11 +11,15 @@ DEBUG=-g -ggdb
 CAPI_DIR=../../api/arcci
 OBJDIR64=.obj64
 OBJDIR32=.obj32
+RELEASE_DIR64=release
+RELEASE_DIR32=release32
 LOCAL_PROXY=local_proxy
 ifeq ($(CFLAGS),-m32)
     OBJDIR=$(OBJDIR32)
+    RELEASE_DIR=$(RELEASE_DIR32)
 else
     OBJDIR=$(OBJDIR64)
+    RELEASE_DIR=$(RELEASE_DIR64)
 endif
 CAPI_LIB=$(CAPI_DIR)/$(OBJDIR)/lib/libarcci.a
 $(shell mkdir -p $(OBJDIR))
@@ -23,13 +27,13 @@ $(shell mkdir -p $(OBJDIR))
 # CFLAGS
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(GCOV_FLAGS)
 FINAL_CFLAGS+=-I$(CAPI_DIR)
-FINAL_CFLAGS+=-D_REENTRANT -D_POSIX_SOURCE -D_SVID_SOURCE
+FINAL_CFLAGS+=-D_REENTRANT -D_BSD_SOURCE -D_XOPEN_SOURCE
 
 # LDFLAGS
 FINAL_LDFLAGS=$(DEBUG) $(LDFLAGS) $(GCOV_FLAGS)
 
 # LIBS
-FINAL_LIBS=-lpthread -lm $(CAPI_LIB)
+FINAL_LIBS=$(CAPI_LIB) -lpthread -lm
 
 # OBJECT
 OBJECT=local_proxy.o
@@ -56,8 +60,10 @@ $(CAPI_LIB):
 
 $(LOCAL_PROXY): $(OBJECT) $(FINAL_LIBS)
 	$(CC) -o $(OBJDIR)/$@ $(OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS)
-	cp $(OBJDIR)/$@ .
+	mkdir -p $(RELEASE_DIR)
+	cp $(OBJDIR)/$@ $(RELEASE_DIR)
 
 clean:
-	rm -f *.o *.gcno *.gcda $(LOCAL_PROXY)
+	rm -f *.o *.gcno *.gcda
 	rm -rf $(OBJDIR64) $(OBJDIR32)
+	rm -rf $(RELEASE_DIR64) $(RELEASE_DIR32)

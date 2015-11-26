@@ -13,6 +13,8 @@ OBJDIR64=.obj64
 OBJDIR32=.obj32
 ZK_LIB_DIR64=zk/.lib64
 ZK_LIB_DIR32=zk/.lib32
+RELEASE_DIR64=release
+RELEASE_DIR32=release32
 SHARED_LIB=libarcci.so
 STATIC_LIB=libarcci.a
 DUMMY_PERF=dummy-perf
@@ -21,9 +23,11 @@ ZKLIB_TMPDIR=.zk_lib_tmp
 ifeq ($(CFLAGS),-m32)
     OBJDIR=$(OBJDIR32)
     ZK_LIB_DIR=$(PWD)/$(ZK_LIB_DIR32)
+    RELEASE_DIR=$(PWD)/$(RELEASE_DIR32)
 else
     OBJDIR=$(OBJDIR64)
     ZK_LIB_DIR=$(PWD)/$(ZK_LIB_DIR64)
+    RELEASE_DIR=$(PWD)/$(RELEASE_DIR64)
 endif
 ZK_LIB=$(ZK_LIB_DIR)/lib/libzookeeper_st.a
 $(shell mkdir -p $(OBJDIR)/lib)
@@ -51,11 +55,18 @@ DUMMYPERF_OBJ_WITH_DIR=$(addprefix $(OBJDIR)/,$(DUMMYPERF_OBJ))
 TESTFI_OBJ_WITH_DIR=$(addprefix $(OBJDIR)/,$(TESTFI_OBJ))
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(DUMMY_PERF) $(TEST_FI)
+	mkdir -p $(RELEASE_DIR)
+	cp $(OBJDIR)/include/arcci.h $(RELEASE_DIR)
+	cp $(OBJDIR)/lib/$(STATIC_LIB) $(RELEASE_DIR)
+	cp $(OBJDIR)/lib/$(SHARED_LIB) $(RELEASE_DIR)
 
 %.o : %.c
 	$(CC) $(FINAL_CFLAGS) -c -o $(OBJDIR)/$@ $<
 
 32bit:
+	@echo ""
+	@echo "WARNING: if it fails under Linux you probably need to install libc6-dev-i386"
+	@echo ""
 	$(MAKE) CFLAGS="-m32" LDFLAGS="-m32"
 
 gcov:
@@ -88,3 +99,4 @@ clean:
 	cd zk-$(ZK_VERSION) && $(MAKE) $@
 	rm -f zk *.o *.so *.gcno *.gcda
 	rm -rf $(ZKLIB_TMPDIR) $(OBJDIR64) $(OBJDIR32) $(DUMMY_PERF) $(TEST_FI)
+	rm -rf $(RELEASE_DIR64) $(RELEASE_DIR32)

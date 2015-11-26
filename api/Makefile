@@ -1,10 +1,5 @@
-all:
-	cd arcci && $(MAKE) 32bit
-	cd arcci && $(MAKE) $@
+default: all
 
-clean:
+.DEFAULT:
 	cd arcci && $(MAKE) $@
-
-gcov:
-	cd arcci && $(MAKE) gcov32
-	cd arcci && $(MAKE) $@
+	cd java && $(MAKE) $@
