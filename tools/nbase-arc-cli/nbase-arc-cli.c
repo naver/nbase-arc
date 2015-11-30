@@ -61,7 +61,7 @@ executeAndPrint (FILE * fp, arc_t * arc, int argc, char **argv,
   out = executeCommand (arc, argc, argv, timeout, raw_mode, &err);
   if (!out)
     {
-      fprintf (fp, err);
+      fprintf (fp, "%s", err);
       fflush (fp);
       sdsfree (err);
       return;
@@ -69,7 +69,7 @@ executeAndPrint (FILE * fp, arc_t * arc, int argc, char **argv,
 
   if (!handler)
     {
-      fprintf (fp, out);
+      fprintf (fp, "%s", out);
       if (raw_mode)
 	{
 	  fprintf (fp, "\n");
