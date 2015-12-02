@@ -574,10 +574,10 @@ def send_binaries_to_testmachine( rpc, server ):
     path = '../api/arcci/.obj32/lib/%s' % (c.CAPI_SO_FILE)
     capi32_so_file = open(path, 'rb')
 
-    path = '../api/test/.obj64/%s' % (c.CAPI_TEST_SERVER)
+    path = '../tools/local_proxy/.obj64/%s' % (c.CAPI_TEST_SERVER)
     capi_test_server = open(path, 'rb')
 
-    path = '../api/test/.obj32/%s' % (c.CAPI_TEST_SERVER)
+    path = '../tools/local_proxy/.obj32/%s' % (c.CAPI_TEST_SERVER)
     capi32_test_server = open(path, 'rb')
 
     try:

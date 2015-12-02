@@ -91,9 +91,9 @@ zk_session_timeout_millis 10000
         os.chdir(old_cwd)
 
         if arch is 32:
-            cmd = "./capi-server32 capi_server.conf"
+            cmd = "./%s capi_server.conf" % constant.CAPI32_TEST_SERVER
         else:
-            cmd = "./capi-server capi_server.conf"
+            cmd = "./%s capi_server.conf" % constant.CAPI_TEST_SERVER
 
         capi_server = util.exec_proc_async(util.capi_dir(0), 
                             cmd, True, None, subprocess.PIPE, None)
