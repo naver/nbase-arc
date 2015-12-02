@@ -786,13 +786,13 @@ sss_add_value (sss * s3, void *ks, void *svc, void *key, long long idx,
 static void
 s3_get (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc, *key;
+  robj *ks, *svc, *key;
   sssIterCategories ctg;
   sssTypeIterator *iter;
   long long curr_time = smr_mstime ();
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
   svc = c->argv[3];
   key = c->argv[4];
 
@@ -820,7 +820,7 @@ s3_get (redisClient * c, robj * s3obj)
 static void
 s3_mget (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc;
+  robj *ks, *svc;
   int key_count;
   int i;
   int tot_count = 0;
@@ -828,7 +828,7 @@ s3_mget (redisClient * c, robj * s3obj)
   sssTypeIterator *iter;
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
   svc = c->argv[3];
 
   /* get multi bulk len to return */
@@ -929,14 +929,14 @@ s3_keys_cb (sssEntry * e, int *flag, void *arg)
 static void
 s3_keys (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc = NULL;
+  robj *ks, *svc = NULL;
   sssIterCategories ctg;
   sssTypeIterator *iter;
   long long curr_time = smr_mstime ();
   struct s3_keys_cb_arg arg;
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
 
   if (c->argc == 4)
     {
@@ -980,13 +980,13 @@ s3_keys (redisClient * c, robj * s3obj)
 static void
 s3_vals (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc;
+  robj *ks, *svc;
   sssIterCategories ctg;
   sssTypeIterator *iter;
   long long curr_time = smr_mstime ();
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
   svc = c->argv[3];
 
   iterate_values_with_hook (s3obj, ks, svc, NULL, curr_time, &ctg,
@@ -1354,13 +1354,13 @@ s3_count_cb (sssEntry * e, int *flag, void *arg)
 static void
 s3_count (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc = NULL, *key = NULL, *val = NULL;
+  robj *ks, *svc = NULL, *key = NULL, *val = NULL;
   long long curr_time = smr_mstime ();
   sssIterCategories ctg;
   struct s3_count_cb_arg arg;
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
   if (c->argc >= 4)
     {
       svc = c->argv[3];
@@ -1412,13 +1412,13 @@ s3_exists_cb (sssEntry * e, int *flag, void *arg)
 static void
 s3_exists (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc, *key, *val = NULL;
+  robj *ks, *svc, *key, *val = NULL;
   long long curr_time = smr_mstime ();
   sssIterCategories ctg;
   struct s3_exists_cb_arg arg;
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
   svc = c->argv[3];
   key = c->argv[4];
   if (c->argc == 6)
@@ -1479,7 +1479,7 @@ s3_expire_cb (sssEntry * e, int *flag, void *arg)
 static void
 s3_expire (redisClient * c, robj * s3obj, long long expire)
 {
-  robj *ks, *uuid, *ttl, *svc = NULL, *key = NULL, *val = NULL;
+  robj *ks, *uuid, *svc = NULL, *key = NULL, *val = NULL;
   long long curr_time = smr_mstime ();
   sssIterCategories ctg;
   int count;
@@ -1487,7 +1487,7 @@ s3_expire (redisClient * c, robj * s3obj, long long expire)
 
   ks = c->argv[1];
   uuid = c->argv[2];
-  ttl = c->argv[3];
+  //ttl = c->argv[3];
   if (c->argc >= 5)
     {
       svc = c->argv[4];
@@ -1519,7 +1519,7 @@ s3_expire (redisClient * c, robj * s3obj, long long expire)
 static void
 s3_mexpire (redisClient * c, robj * s3obj, long long expire)
 {
-  robj *ks, *uuid, *svc, *ttl, *key;
+  robj *ks, *uuid, *svc, *key;
   long long curr_time = smr_mstime ();
   int key_count, nreplaced = 0;
   int i;
@@ -1529,7 +1529,7 @@ s3_mexpire (redisClient * c, robj * s3obj, long long expire)
   ks = c->argv[1];
   uuid = c->argv[2];
   svc = c->argv[3];
-  ttl = c->argv[4];
+  //ttl = c->argv[4];
 
   key_count = c->argc - 5;
   for (i = 0; i < key_count; i++)
@@ -1584,13 +1584,13 @@ s3_ttl_cb (sssEntry * e, int *flag, void *arg)
 static void
 s3_ttl (redisClient * c, robj * s3obj)
 {
-  robj *ks, *uuid, *svc, *key = NULL, *val = NULL;
+  robj *ks, *svc, *key = NULL, *val = NULL;
   sssIterCategories ctg;
   long long curr_time = smr_mstime ();
   struct s3_ttl_cb_arg arg;
 
   ks = c->argv[1];
-  uuid = c->argv[2];
+  //uuid = c->argv[2];
   svc = c->argv[3];
   key = c->argv[4];
   if (c->argc >= 6)

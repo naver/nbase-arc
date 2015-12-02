@@ -2689,7 +2689,6 @@ connect_to_master (smrReplicator * rep, char *host, int port,
 {
   masterConn *mc;
   long long master_min_seq;
-  long long master_commit_seq;
   long long net_seq;
   int ret;
   short net_nid;
@@ -2750,7 +2749,7 @@ connect_to_master (smrReplicator * rep, char *host, int port,
       LOG (LG_ERROR, "failed to read master max commit sequence number");
       goto error;
     }
-  master_commit_seq = ntohll (net_seq);
+  // master_commit_seq is not used
 
   if (tcp_read_fully (mc->fd, &net_seq, sizeof (long long)) < 0)
     {
@@ -6065,7 +6064,7 @@ static int
 mig_dest_connect (smrReplicator * rep)
 {
   short net_nid;
-  long long master_cseq, net_seq = 0LL;
+  long long net_seq = 0LL;
   int fd = -1;
   migStruct *mig;
 
@@ -6095,7 +6094,7 @@ mig_dest_connect (smrReplicator * rep)
 	       "handshake error: failed to read commit sequence from dest");
       goto error;
     }
-  master_cseq = htonll (net_seq);
+  // unused master_cseq
 
   if (tcp_set_option (fd, TCP_OPT_NODELAY | TCP_OPT_NONBLOCK) < 0)
     {

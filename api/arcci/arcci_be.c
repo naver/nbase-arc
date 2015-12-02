@@ -2266,7 +2266,6 @@ arc_job_try_alloc_conn (be_t * be, be_job_t * job, dlisth * retry_head)
 {
   long long curr;
   gw_t *cand[NUM_GW_PEEK] = { NULL, };
-  int cand_affinity[NUM_GW_PEEK];
   arc_job_t *aj = NULL;
   int num_cand = 0;
   int rand_idx;
@@ -2303,7 +2302,7 @@ arc_job_try_alloc_conn (be_t * be, be_job_t * job, dlisth * retry_head)
       if (wgw != NULL)
 	{
 	  cand[num_cand] = wgw;
-	  cand_affinity[num_cand] = GW_AFF_WRITE;
+	  // GW_AFF_WRITE
 	  num_cand++;
 	}
 
@@ -2311,7 +2310,7 @@ arc_job_try_alloc_conn (be_t * be, be_job_t * job, dlisth * retry_head)
       if (rgw != NULL)
 	{
 	  cand[num_cand] = rgw;
-	  cand_affinity[num_cand] = GW_AFF_READ;
+	  // GW_AFF_READ
 	  num_cand++;
 	}
     }
@@ -2327,7 +2326,7 @@ arc_job_try_alloc_conn (be_t * be, be_job_t * job, dlisth * retry_head)
 	  && gw->n_active > 0)
 	{
 	  cand[num_cand] = gw;
-	  cand_affinity[num_cand] = GW_AFF_NONE;
+	  // GW_AFF_NONE
 	  num_cand++;
 	}
     }
