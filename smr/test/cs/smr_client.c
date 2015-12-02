@@ -1136,7 +1136,6 @@ static void
 user_cmd_sleep (masterState * ms_ary, char **tokens, int ntok)
 {
   int msec;
-  int ret;
   struct timespec ts;
 
 
@@ -1155,7 +1154,7 @@ user_cmd_sleep (masterState * ms_ary, char **tokens, int ntok)
 
   ts.tv_sec = msec / 1000;
   ts.tv_nsec = (msec % 1000) * 1000000;
-  ret = nanosleep (&ts, NULL);
+  (void) nanosleep (&ts, NULL);
   fprintf (stdout, "+OK\n");
 }
 

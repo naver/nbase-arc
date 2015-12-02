@@ -1281,7 +1281,7 @@ fe_do_arc_job (fe_t * fe, be_job_t * job, int *be_errno)
 
 	  /* Note: no fault injection, set by backend */
 	  aj_resp_ncmd = aj->resp.ncmd;
-	  if (aj->resp.ncmd > 0)
+	  if (aj_resp_ncmd > 0)
 	    {
 	      FE_ERROR (ARC_ERR_PARTIAL);
 	    }

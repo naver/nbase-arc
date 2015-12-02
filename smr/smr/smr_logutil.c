@@ -112,7 +112,7 @@ static void
 verify_checksum (int argc, char *argv[])
 {
   void *addr = NULL;
-  char *bp, *cp, *ep;
+  char *bp, *ep;
   logChecksum *master, *checksums;
   unsigned short mcsum;
   int num_pages;
@@ -130,7 +130,7 @@ verify_checksum (int argc, char *argv[])
     }
 
   /* set up pointers */
-  cp = bp = (char *) addr;
+  bp = (char *) addr;
   ep = bp + SMR_LOG_FILE_DATA_SIZE;
   master = (logChecksum *) ep;
   checksums = master + 1;

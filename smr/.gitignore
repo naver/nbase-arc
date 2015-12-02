@@ -1,0 +1,9 @@
+*.o
+*.gcno
+*.gcda
+replicator/smr-replicator
+smr/libsmr.a
+smr/smr-logutil
+test/cs/smr-client
+test/cs/smr-server
+test/unit/test-*
