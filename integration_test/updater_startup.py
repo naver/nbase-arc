@@ -90,7 +90,6 @@ def rpc_update( o_binary, file_name ):
   f.write( o_binary.data )
   f.close()
 
-  os.chmod( file_name, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH )
   return 0
 
 
