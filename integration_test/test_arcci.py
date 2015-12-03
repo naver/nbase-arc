@@ -33,7 +33,7 @@ MGMT_IP = "127.0.0.1"
 MGMT_PORT = 1122
 ZK_ADDR = "localhost:2181"
 CLUSTER_NAME = config.clusters[2]['cluster_name']
-ARCCI_LOG_FILE_PREFIX = 'arcci_log'
+ARCCI_LOG_FILE_PREFIX = 'bin/log/arcci_log'
 
 class MultipleARCCIThread(threading.Thread):
     def __init__(self, id, api):
@@ -101,19 +101,6 @@ class MultipleARCCIThread(threading.Thread):
 class TestARCCI(unittest.TestCase):
     cluster = config.clusters[2]
     load_gen_list = {}
-
-    @classmethod
-    def setUpClass( cls ):
-        return 0
-
-    @classmethod
-    def tearDownClass( cls ):
-        cmd = 'mv -f ./%s* %s' % (ARCCI_LOG_FILE_PREFIX, constant.logdir)
-        ret = util.shell_cmd_sync( cmd, 0 )
-        if ret <> 0:
-            util.log('failed to move arcci-log-files.')
-
-        return 0
 
     def setUp(self):
         # Initialize cluster
@@ -1423,10 +1410,10 @@ class TestARCCI(unittest.TestCase):
 
 class TestARCCI32(TestARCCI):
     arch = 32
-    arcci_log = 'arcci_log32'
+    arcci_log = 'bin/log/arcci_log32'
     so_path = constant.ARCCI32_SO_PATH
     
 class TestARCCI64(TestARCCI):
     arch = 64
-    arcci_log = 'arcci_log64'
+    arcci_log = 'bin/log/arcci_log64'
     so_path = constant.ARCCI_SO_PATH
