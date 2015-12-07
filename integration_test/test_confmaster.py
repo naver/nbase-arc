@@ -310,7 +310,7 @@ class TestConfMaster(unittest.TestCase):
         i = 0
         while i < 3:
             i += 1
-            log_prefix = 'arcci_log_%d' % i
+            log_prefix = 'bin/log/arcci_log_%d' % i
 
             util.log('create arcci')
             arcci = ARC_API(ZK_ADDR, cluster['cluster_name'], logFilePrefix = log_prefix, 
