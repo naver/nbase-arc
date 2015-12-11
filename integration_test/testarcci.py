@@ -2,7 +2,7 @@
 import subprocess
 import util
 import unittest
-import test_base
+import testbase
 import default_cluster
 import os
 import smr_mgmt
@@ -21,7 +21,6 @@ import traceback
 from load_generator import *
 from arcci.arcci import *
 from ctypes import *
-import pdb
 
 MSG_GATEWAY_ADD_ZK = 'Got zookeeper node'
 MSG_GATEWAY_ADD_GW_PREFIX_FMT = 'Connection [%s:%d('
@@ -104,7 +103,7 @@ class TestARCCI(unittest.TestCase):
 
     def setUp(self):
         # Initialize cluster
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestARCCI%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestARCCI%s' % self._testMethodName )
         ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
         if ret is not 0:
             default_cluster.finalize( self.cluster )
@@ -142,7 +141,7 @@ class TestARCCI(unittest.TestCase):
         addrs = make_gw_addrs(self.cluster)
         api = ARC_API(None, None, gwAddrs=addrs, logFilePrefix = self.arcci_log, so_path = self.so_path)
         self._gateway_load_info(api)
-    
+
     def _gateway_load_info(self, api):
         time.sleep(3)
 
@@ -151,7 +150,7 @@ class TestARCCI(unittest.TestCase):
         gw_list = copy.deepcopy(self.GW_LIST)
         while True:
             line = log_reader.readline()
-            if line == None: 
+            if line == None:
                 break
 
             if line.find(MSG_GATEWAY_ADD_ZK) != -1:
@@ -173,7 +172,7 @@ class TestARCCI(unittest.TestCase):
                         if line.find(MSG_GATEWAY_ADD_GW_POSTFIX) != -1:
                             print gw
                             gw_list.remove(gw)
-        
+
         if len(gw_list) != 0:
             self.fail("FAIL, load gateway information. gw:%s" % util.json_to_str(gw_list))
         else:
@@ -199,11 +198,11 @@ class TestARCCI(unittest.TestCase):
 
         # Deploy gateway
         server = self.cluster['servers'][0]
-        ret = util.deploy_gateway(gw_id, server['rpc'])
+        ret = util.deploy_gateway(gw_id)
         self.assertTrue(ret, 'failed to deploy_gateway')
 
         # Start gateway
-        ret = server['rpc'].rpc_start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
+        ret = util.start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
         self.assertEqual( ret, 0, 'failed : start gateawy%d' % gw_id )
 
         time.sleep(5)
@@ -215,7 +214,7 @@ class TestARCCI(unittest.TestCase):
         found = False
         while True:
             line = log_reader.readline()
-            if line == None: 
+            if line == None:
                 break
 
             if line.find(MSG_GATEWAY_ADD_ZK) == -1:
@@ -226,7 +225,7 @@ class TestARCCI(unittest.TestCase):
 
             if gw['ip'] == added_gw['ip'] and gw['port'] == added_gw['port']:
                 found = True
-        
+
         if not found:
             self.fail('FAIL, load gateway information, gw:%s' % util.json_to_str(added_gw))
         else:
@@ -243,7 +242,7 @@ class TestARCCI(unittest.TestCase):
 
         # Check if gateway is deleted
         deleted_gw = {"ip":HOST_IP,"port":gw_port}
-        
+
         found = check_gateway_deleted(deleted_gw, api)
         if not found:
             self.fail('FAIL, delete gateway information, gw:%s' % util.json_to_str(deleted_gw))
@@ -251,7 +250,7 @@ class TestARCCI(unittest.TestCase):
             util.log('SUCCESS, delete gateway information.')
 
         # Stop gateway
-        ret = server['rpc'].rpc_shutdown_gateway(gw_id, gw_port)
+        ret = util.shutdown_gateway(gw_id, gw_port)
         self.assertEqual(ret, 0, 'failed : shutdown gateawy%d' % gw_id)
 
         api.destroy()
@@ -293,7 +292,7 @@ class TestARCCI(unittest.TestCase):
         gw_port = server['gateway_port']
 
         # Stop gateway
-        ret = server['rpc'].rpc_shutdown_gateway(gw_id, gw_port, True)
+        ret = util.shutdown_gateway(gw_id, gw_port, True)
         self.assertEqual(ret, 0, 'failed : shutdown gateawy%d' % gw_id)
         time.sleep(3)
 
@@ -324,7 +323,7 @@ class TestARCCI(unittest.TestCase):
 
         # Check if gateway is deleted
         deleted_gw = {"ip":HOST_IP,"port":gw_port}
-        
+
         found = check_gateway_deleted(deleted_gw, api)
         if not found:
             self.fail('FAIL, delete gateway information, gw:%s' % util.json_to_str(deleted_gw))
@@ -332,7 +331,7 @@ class TestARCCI(unittest.TestCase):
             util.log('SUCCESS, delete gateway information.')
 
         # Start gateway
-        ret = server['rpc'].rpc_start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
+        ret = util.start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
         self.assertEqual( ret, 0, 'failed : start gateawy%d' % gw_id )
         time.sleep(3)
 
@@ -397,7 +396,7 @@ class TestARCCI(unittest.TestCase):
 
         # Delete gateway
         self.assertTrue(
-                util.gw_del(CLUSTER_NAME, gw_id, MGMT_IP, MGMT_PORT), 
+                util.gw_del(CLUSTER_NAME, gw_id, MGMT_IP, MGMT_PORT),
                 'failed to delete gateway')
 
         # Check load
@@ -415,12 +414,12 @@ class TestARCCI(unittest.TestCase):
         self.assertTrue(ok, 'failed to send requests')
 
         # Stop gateway
-        ret = server['rpc'].rpc_shutdown_gateway(gw_id, gw_port, True)
+        ret = util.shutdown_gateway(gw_id, gw_port, True)
         self.assertEqual(ret, 0, 'failed : shutdown gateawy%d' % gw_id)
 
         # Check if gateway is deleted
         deleted_gw = {"ip":HOST_IP,"port":gw_port}
-        
+
         found = check_gateway_deleted(deleted_gw, api)
         if not found:
             self.fail('FAIL, delete gateway information, gw:%s' % util.json_to_str(deleted_gw))
@@ -428,13 +427,13 @@ class TestARCCI(unittest.TestCase):
             util.log('SUCCESS, delete gateway information.')
 
         # Start gateway
-        ret = server['rpc'].rpc_start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
+        ret = util.start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
         self.assertEqual( ret, 0, 'failed : start gateawy%d' % gw_id )
         time.sleep(3)
 
         # Add gateway
         self.assertTrue(
-                util.gw_add(CLUSTER_NAME, gw_id, HOST_NAME, HOST_IP, gw_port, MGMT_IP, MGMT_PORT), 
+                util.gw_add(CLUSTER_NAME, gw_id, HOST_NAME, HOST_IP, gw_port, MGMT_IP, MGMT_PORT),
                 'failed to add gateway')
 
         # Check if gateway is added
@@ -444,7 +443,7 @@ class TestARCCI(unittest.TestCase):
         found = False
         while True:
             line = log_reader.readline()
-            if line == None: 
+            if line == None:
                 break
 
             if line.find(MSG_GATEWAY_ADD_ZK) == -1:
@@ -455,7 +454,7 @@ class TestARCCI(unittest.TestCase):
 
             if gw['ip'] == added_gw['ip'] and gw['port'] == added_gw['port']:
                 found = True
-        
+
         if not found:
             self.fail('FAIL, load gateway information, gw:%s' % util.json_to_str(added_gw))
         else:
@@ -513,7 +512,7 @@ class TestARCCI(unittest.TestCase):
             self.assertTrue(ok, 'failed to send requests')
 
             # Stop zookeeper
-            stdout, returncode = server['rpc'].rpc_stop_zookeeper(config.zookeeper_info[0]['bin_dir'])
+            stdout, returncode = util.stop_zookeeper(config.zookeeper_info[0]['bin_dir'])
             util.log("zookeeper stop - stdout:%s" % stdout)
             self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
@@ -536,7 +535,7 @@ class TestARCCI(unittest.TestCase):
 
         finally:
             # Start zookeeper
-            stdout, returncode = server['rpc'].rpc_start_zookeeper(config.zookeeper_info[0]['bin_dir'])
+            stdout, returncode = util.start_zookeeper(config.zookeeper_info[0]['bin_dir'])
             util.log("zookeeper start - stdout:%s" % stdout)
             self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
@@ -594,7 +593,7 @@ class TestARCCI(unittest.TestCase):
 
             # Stop zookeeper ensemble
             for zk in config.zookeeper_info:
-                stdout, returncode = server['rpc'].rpc_stop_zookeeper(zk['bin_dir'])
+                stdout, returncode = util.stop_zookeeper(zk['bin_dir'])
                 util.log("zookeeper stop - stdout:%s" % stdout)
                 self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
@@ -618,7 +617,7 @@ class TestARCCI(unittest.TestCase):
         finally:
             # Start zookeeper ensemble
             for zk in config.zookeeper_info:
-                stdout, returncode = server['rpc'].rpc_start_zookeeper(zk['bin_dir'])
+                stdout, returncode = util.start_zookeeper(zk['bin_dir'])
                 util.log("zookeeper start - stdout:%s" % stdout)
                 self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
@@ -677,7 +676,7 @@ class TestARCCI(unittest.TestCase):
 
         # Delete root of GW znodes
         print 'try remove root of GW znodes'
-        ret = server['rpc'].rpc_zk_cmd('rmr /RC/NOTIFICATION/CLUSTER/%s/GW' % server['cluster_name'])
+        ret = util.zk_cmd('rmr /RC/NOTIFICATION/CLUSTER/%s/GW' % server['cluster_name'])
         ret = ret['err']
         self.assertEqual(ret, '', 'failed to remove root of GW znodes, ret:%s' % ret)
 
@@ -702,15 +701,15 @@ class TestARCCI(unittest.TestCase):
 
         # Recover root of GW znodes
         print 'try recover GW znodes'
-        ret = server['rpc'].rpc_zk_cmd('create /RC/NOTIFICATION/CLUSTER/%s/GW test' % server['cluster_name'])
+        ret = util.zk_cmd('create /RC/NOTIFICATION/CLUSTER/%s/GW test' % server['cluster_name'])
         ret = ret['err']
-        self.assertNotEqual(ret.find('Created /RC/NOTIFICATION/CLUSTER/testCluster0/GW'), -1, 
+        self.assertNotEqual(ret.find('Created /RC/NOTIFICATION/CLUSTER/testCluster0/GW'), -1,
                 'failed to create root of GW znodes, ret:%s' % ret)
         for s in self.cluster['servers']:
             path = '/RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (s['cluster_name'], s['id'])
             cmd = 'create %s \'{"ip":"%s","port":%d}\'' % (path, s['ip'], s['gateway_port'])
             print cmd
-            ret = s['rpc'].rpc_zk_cmd(cmd)
+            ret = util.zk_cmd(cmd)
             ret = ret['err']
             self.assertNotEqual(ret.find('Created %s' % path), -1, 'failed to recover GW znode, ret:%s' % ret)
 
@@ -798,7 +797,7 @@ class TestARCCI(unittest.TestCase):
         self.assertTrue(ret, 'gw_del fail')
 
         # Add gateway
-        ret= util.gw_add(CLUSTER_NAME, gw_id, VIRTUAL_HOST_NAME, VIRTUAL_HOST_IP, gw_port, MGMT_IP, MGMT_PORT) 
+        ret= util.gw_add(CLUSTER_NAME, gw_id, VIRTUAL_HOST_NAME, VIRTUAL_HOST_IP, gw_port, MGMT_IP, MGMT_PORT)
         self.assertTrue(ret, 'gw_add fail')
 
         # Check load balancing
@@ -886,7 +885,7 @@ class TestARCCI(unittest.TestCase):
         self.assertTrue(ret, 'gw_del fail')
 
         # Add gateway
-        ret= util.gw_add(CLUSTER_NAME, gw_id, server['pm_name'], server['ip'], gw_port, MGMT_IP, MGMT_PORT) 
+        ret= util.gw_add(CLUSTER_NAME, gw_id, server['pm_name'], server['ip'], gw_port, MGMT_IP, MGMT_PORT)
         self.assertTrue(ret, 'gw_add fail')
 
         # Check load balancing
@@ -1026,7 +1025,7 @@ class TestARCCI(unittest.TestCase):
                 self.assertEqual(reply[1], '%d_%d' % (i, j), 'failed to get_reply, value:%s' % reply[1])
 
             api.free_request(rqst)
-            
+
     def test_timeout_in_partial_PG(self):
         util.print_frame()
 
@@ -1154,7 +1153,7 @@ class TestARCCI(unittest.TestCase):
 
         # Start with valgrind
         p = util.exec_proc_async('%s/.obj%d' % (constant.ARCCI_DIR, self.arch),
-                "valgrind ./dummy-perf -z localhost:2181 -c %s -n 5 -s 60" % self.cluster['cluster_name'], 
+                "valgrind ./dummy-perf -z localhost:2181 -c %s -n 5 -s 60" % self.cluster['cluster_name'],
                 subprocess.PIPE, subprocess.PIPE, subprocess.PIPE);
 
         # Set up arguments
@@ -1179,7 +1178,7 @@ class TestARCCI(unittest.TestCase):
 
         # Delete gateway
         self.assertTrue(
-                util.gw_del(CLUSTER_NAME, gw_id, MGMT_IP, MGMT_PORT), 
+                util.gw_del(CLUSTER_NAME, gw_id, MGMT_IP, MGMT_PORT),
                 'failed to delete gateway')
 
         # Check load
@@ -1197,18 +1196,18 @@ class TestARCCI(unittest.TestCase):
         self.assertTrue(ok, 'failed to send requests')
 
         # Stop gateway
-        ret = server['rpc'].rpc_shutdown_gateway(gw_id, gw_port, True)
+        ret = util.shutdown_gateway(gw_id, gw_port, True)
         self.assertEqual(ret, 0, 'failed : shutdown gateawy%d' % gw_id)
         time.sleep(5)
 
         # Start gateway
-        ret = server['rpc'].rpc_start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
+        ret = util.start_gateway( gw_id, server['ip'], MGMT_PORT, server['cluster_name'], gw_port)
         self.assertEqual( ret, 0, 'failed : start gateawy%d' % gw_id )
         time.sleep(3)
 
         # Add gateway
         self.assertTrue(
-                util.gw_add(CLUSTER_NAME, gw_id, HOST_NAME, HOST_IP, gw_port, MGMT_IP, MGMT_PORT), 
+                util.gw_add(CLUSTER_NAME, gw_id, HOST_NAME, HOST_IP, gw_port, MGMT_IP, MGMT_PORT),
                 'failed to add gateway')
         time.sleep(10)
 
@@ -1326,9 +1325,9 @@ class TestARCCI(unittest.TestCase):
         rqst = api.create_request()
         self.assertNotEqual(rqst, None, 'fail, call create_request')
 
-        # append_command 
+        # append_command
         ret = api.append_command(rqst, None, None)
-        self.assertEqual(ret, -1, 'fail, call append_command with Null format and Null args.') 
+        self.assertEqual(ret, -1, 'fail, call append_command with Null format and Null args.')
 
         ret = api.append_command(rqst, None, 'hahahoho')
         self.assertEqual(ret, -1, 'fail, call append_command with Null format')
@@ -1385,7 +1384,7 @@ class TestARCCI(unittest.TestCase):
 
         # Start test-fiall
         p = util.exec_proc_async('%s/.obj%d' % (constant.ARCCI_DIR, self.arch),
-                "./test-fiall -z localhost:2181 -c %s -s 10" % cluster['cluster_name'], 
+                "./test-fiall -z localhost:2181 -c %s -s 10" % cluster['cluster_name'],
                 subprocess.PIPE, subprocess.PIPE, subprocess.PIPE);
 
         # Set up arguments
@@ -1407,13 +1406,3 @@ class TestARCCI(unittest.TestCase):
         for line in stdout.split("\n"):
             util.log(line)
         util.log(' ### END - ARCCI LOGS ### ')
-
-class TestARCCI32(TestARCCI):
-    arch = 32
-    arcci_log = 'bin/log/arcci_log32'
-    so_path = constant.ARCCI32_SO_PATH
-    
-class TestARCCI64(TestARCCI):
-    arch = 64
-    arcci_log = 'bin/log/arcci_log64'
-    so_path = constant.ARCCI_SO_PATH

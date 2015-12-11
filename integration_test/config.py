@@ -5,12 +5,16 @@ import sys
 opt_use_memlog = os.path.exists("/tmp/opt_use_memlog")
 sudoer = os.getenv("NBASE_ARC_TEST_SUDOER")
 
-physical_machines = [
+zookeeper_info = [
+        {'id':0, 'bin_dir':'$HOME/bin/zk1/bin'},
+        {'id':1, 'bin_dir':'$HOME/bin/zk2/bin'},
+        {'id':2, 'bin_dir':'$HOME/bin/zk3/bin'},
+]
+
+machines = [
   {
     'name' : 'localhost',
     'ip' : '127.0.0.1',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'real',
   },
 
@@ -18,16 +22,12 @@ physical_machines = [
     'name' : 'virtual_localhost',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.100',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   },
   {
     'name' : 'virtual_localhost1',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.101',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   },
 
@@ -35,8 +35,6 @@ physical_machines = [
     'name' : 'vm2',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.101',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   },
 
@@ -44,22 +42,14 @@ physical_machines = [
     'name' : 'vm3',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.102',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   }
 ]
 
-zookeeper_info = [
-        {'id':0, 'bin_dir':'$HOME/bin/zk1/bin'},
-        {'id':1, 'bin_dir':'$HOME/bin/zk2/bin'},
-        {'id':2, 'bin_dir':'$HOME/bin/zk3/bin'},
-]
-
-server1  = { 
+server1  = {
   'id' : 0,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1122,
   'pg_id' : 0,
@@ -69,13 +59,12 @@ server1  = {
   'gateway_mgmt_port' : 8201,
   'redis_port' : 8109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-server2 = { 
+server2 = {
   'id' : 1,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1123,
   'pg_id' : 0,
@@ -85,13 +74,12 @@ server2 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-server3 = { 
+server3 = {
   'id' : 2,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1124,
   'pg_id' : 0,
@@ -101,13 +89,12 @@ server3 = {
   'gateway_mgmt_port' : 10201,
   'redis_port' : 10109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-server4  = { 
+server4  = {
   'id' : 3,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1125,
   'pg_id' : 1,
@@ -117,13 +104,12 @@ server4  = {
   'gateway_mgmt_port' : 8211,
   'redis_port' : 8119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-server40  = { 
+server40  = {
   'id' : 3,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1125,
   'pg_id' : 0,
@@ -133,13 +119,12 @@ server40  = {
   'gateway_mgmt_port' : 8211,
   'redis_port' : 8119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-server5 = { 
+server5 = {
   'id' : 4,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1126,
   'pg_id' : 1,
@@ -149,14 +134,13 @@ server5 = {
   'gateway_mgmt_port' : 9211,
   'redis_port' : 9119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 
-server6 = { 
+server6 = {
   'id' : 5,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1127,
   'pg_id' : 1,
@@ -166,14 +150,13 @@ server6 = {
   'gateway_mgmt_port' : 10211,
   'redis_port' : 10119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server1 = { 
+virtual_server1 = {
   'id' : 0,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1122,
   'pg_id' : 0,
@@ -183,14 +166,13 @@ virtual_server1 = {
   'gateway_mgmt_port' : 8201,
   'redis_port' : 8109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server2 = { 
+virtual_server2 = {
   'id' : 1,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1123,
   'pg_id' : 0,
@@ -200,14 +182,13 @@ virtual_server2 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server21 = { 
+virtual_server21 = {
   'id' : 1,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1123,
   'pg_id' : 1,
@@ -217,14 +198,13 @@ virtual_server21 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server3 = { 
+virtual_server3 = {
   'id' : 2,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1124,
   'pg_id' : 0,
@@ -234,14 +214,13 @@ virtual_server3 = {
   'gateway_mgmt_port' : 10201,
   'redis_port' : 10109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server4 = { 
+virtual_server4 = {
   'id' : 3,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost1',
   'cm_port' : 1125,
   'pg_id' : 1,
@@ -251,14 +230,13 @@ virtual_server4 = {
   'gateway_mgmt_port' : 8211,
   'redis_port' : 8119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server5 = { 
+virtual_server5 = {
   'id' : 4,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost1',
   'cm_port' : 1126,
   'pg_id' : 1,
@@ -268,14 +246,13 @@ virtual_server5 = {
   'gateway_mgmt_port' : 9211,
   'redis_port' : 9119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-virtual_server6 = { 
+virtual_server6 = {
   'id' : 5,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost1',
   'cm_port' : 1127,
   'pg_id' : 1,
@@ -285,14 +262,13 @@ virtual_server6 = {
   'gateway_mgmt_port' : 10211,
   'redis_port' : 10119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-vm1 = { 
+vm1 = {
   'id' : 0,
   'cluster_name' : 'no_opinion',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1122,
   'pg_id' : 0,
@@ -302,14 +278,13 @@ vm1 = {
   'gateway_mgmt_port' : 8201,
   'redis_port' : 8109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-vm2 = { 
+vm2 = {
   'id' : 1,
   'cluster_name' : 'no_opinion',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'vm2',
   'cm_port' : 1123,
   'pg_id' : 0,
@@ -319,14 +294,13 @@ vm2 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
-vm3 = { 
+vm3 = {
   'id' : 2,
   'cluster_name' : 'no_opinion',
-  'ip' : '127.0.0.102', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.102',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'vm3',
   'cm_port' : 1124,
   'pg_id' : 0,
@@ -336,7 +310,6 @@ vm3 = {
   'gateway_mgmt_port' : 10201,
   'redis_port' : 10109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 clusters = [
@@ -351,7 +324,7 @@ clusters = [
   },
 
   # 1
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -361,7 +334,7 @@ clusters = [
   },
 
   # 2
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -371,7 +344,7 @@ clusters = [
   },
 
   # 3
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -381,7 +354,7 @@ clusters = [
   },
 
   # 4
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -442,16 +415,15 @@ clusters = [
 ]
 
 def verify_config():
-  print "### Verify config ###"
-  if opt_use_memlog == None:
-    print "  Invalid opt_use_memlog."
-    sys.exit(-1)
-  else:
-    print "  opt_use_memlog : %s" % opt_use_memlog 
+    print "### Verify config ###"
+    if opt_use_memlog == None:
+        print "  Invalid opt_use_memlog."
+        sys.exit(-1)
+    else:
+        print "  opt_use_memlog : %s" % opt_use_memlog
 
-  if sudoer == None:
-    print "  Invalid sudoer. Check environmental variable, NBASE_ARC_TEST_SUDOER."
-    sys.exit(-1)
-  else:
-    print "  sudoer : %s" % sudoer
-
+    if sudoer == None:
+        print "  Invalid sudoer. Check environmental variable, NBASE_ARC_TEST_SUDOER."
+        sys.exit(-1)
+    else:
+        print "  sudoer : %s" % sudoer

@@ -7,7 +7,7 @@ r""" A JSON data encoder and decoder.
  encoding format; a subset of ECMAScript (aka JavaScript) for encoding
  primitive data types (numbers, strings, booleans, lists, and
  associative arrays) in a language-neutral simple text-based syntax.
- 
+
  It can encode or decode between JSON formatted strings and native
  Python data types.  Normally you would use the encode() and decode()
  functions defined by this module, but if you want more control over
@@ -32,7 +32,7 @@ r""" A JSON data encoder and decoder.
     String                 str or unicode  ( "..." or u"..." )
     Array [a, ...]         list  ( [...] )
     Object {a:b, ...}      dict  ( {...} )
-    
+
     -- Note 1. an 'undefined' object is declared in this module which
        represents the native Python value for this type when in
        non-strict mode.
@@ -64,7 +64,7 @@ r""" A JSON data encoder and decoder.
  JSON-formatted string.  There is no such aid provided to decode
  JSON back into user-defined classes as that would dramatically
  complicate the interface.
- 
+
  When decoding strings with this module it may operate in either
  strict or non-strict mode.  The strict mode only allows syntax which
  is conforming to RFC 4627 (JSON), while the non-strict allows much
@@ -110,7 +110,7 @@ r""" A JSON data encoder and decoder.
       <http://www.ecma-international.org/publications/files/ecma-st/ECMA-262.pdf>
     * IEEE 754-1985: Standard for Binary Floating-Point Arithmetic.
       <http://www.cs.berkeley.edu/~ejr/Projects/ieee754/>
-    
+
 """
 
 __author__ = "Deron Meranda <http://deron.meranda.us/>"
@@ -230,13 +230,13 @@ del _undefined_class
 
 def _nonnumber_float_constants():
     """Try to return the Nan, Infinity, and -Infinity float values.
-    
+
     This is unnecessarily complex because there is no standard
     platform- independent way to do this in Python as the language
     (opposed to some implementation of it) doesn't discuss
     non-numbers.  We try various strategies from the best to the
     worst.
-    
+
     If this Python interpreter uses the IEEE 754 floating point
     standard then the returned values will probably be real instances
     of the 'float' type.  Otherwise a custom class object is returned
@@ -825,7 +825,7 @@ class JSON(object):
     Likewise the allowed_behaviors and prevented_behaviors list which
     behaviors will be allowed and which will not.  Call the allow()
     or prevent() methods to adjust these.
-    
+
     """
     _escapes_json = { # character escapes in JSON
         '"': '"',
@@ -864,17 +864,17 @@ class JSON(object):
 
     def __init__(self, strict=False, compactly=True, escape_unicode=False):
         """Creates a JSON encoder/decoder object.
-        
+
         If 'strict' is set to True, then only strictly-conforming JSON
         output will be produced.  Note that this means that some types
         of values may not be convertable and will result in a
         JSONEncodeError exception.
-        
+
         If 'compactly' is set to True, then the resulting string will
         have all extraneous white space removed; if False then the
         string will be "pretty printed" with whitespace and indentation
         added to make it more readable.
-        
+
         If 'escape_unicode' is set to True, then all non-ASCII characters
         will be represented as a unicode escape sequence; if False then
         the actual real unicode character will be inserted if possible.
@@ -882,11 +882,11 @@ class JSON(object):
         The 'escape_unicode' can also be a function, which when called
         with a single argument of a unicode character will return True
         if the character should be escaped or False if it should not.
-        
+
         If you wish to extend the encoding to ba able to handle
         additional types, you should subclass this class and override
         the encode_default() method.
-        
+
         """
         import sys
         self._set_strictness(strict)
@@ -987,10 +987,10 @@ class JSON(object):
 
     def isws(self, c):
         """Determines if the given character is considered as white space.
-        
+
         Note that Javscript is much more permissive on what it considers
         to be whitespace than does JSON.
-        
+
         Ref. ECMAScript section 7.2
 
         """
@@ -1221,14 +1221,14 @@ class JSON(object):
 
     def encode_number(self, n):
         """Encodes a Python numeric type into a JSON numeric literal.
-        
+
         The special non-numeric values of float('nan'), float('inf')
         and float('-inf') are translated into appropriate JSON
         literals.
-        
+
         Note that Python complex types are not handled, as there is no
         ECMAScript equivalent type.
-        
+
         """
         if isinstance(n, complex):
             if n.imag:
@@ -1391,7 +1391,7 @@ class JSON(object):
             # Could use "lambda c:c", but that is too slow.  So we set to None
             # and use an explicit if test inside the loop.
             tochar = None
-        
+
         chunks = []
         chunks.append('"')
         revesc = self._rev_escapes
@@ -1870,7 +1870,7 @@ class JSON(object):
         If a caller wishes to disable the calling of json_equivalent()
         methods, then subclass this class and override this method
         to just return None.
-        
+
         """
         if hasattr(obj, 'json_equivalent') \
                and callable(getattr(obj,'json_equivalent')):
@@ -1958,7 +1958,7 @@ def encode( obj, strict=False, compactly=True, escape_unicode=False, encoding=No
                 # encode anything past the BMP.
                 encoding = 'utf-16'
                 if not escape_unicode and not callable(escape_unicode):
-                   escape_unicode = lambda c: (0xD800 <= ord(c) <= 0xDFFF) or ord(c) >= 0x10000
+                    escape_unicode = lambda c: (0xD800 <= ord(c) <= 0xDFFF) or ord(c) >= 0x10000
             else:
                 raise JSONEncodeError('this python has no codec for this character encoding',encoding)
 
@@ -2015,7 +2015,7 @@ def decode( txt, strict=False, encoding=None, **kw ):
     the character encoding.  This will be successful if the input was
     encoded in any of UTF-8, UTF-16 (BE or LE), or UTF-32 (BE or LE),
     and of course plain ASCII works too.
-    
+
     Note though that if you know the character encoding, then you
     should convert to a unicode string yourself, or pass it the name
     of the 'encoding' to avoid the guessing made by the auto
@@ -2032,7 +2032,7 @@ def decode( txt, strict=False, encoding=None, **kw ):
     then by also passing 'allow_comments=True' then comments will be
     allowed.  If strict=False then prevent_comments=True will allow
     everything except comments.
-    
+
     """
     # Initialize the JSON object
     j = JSON( strict=strict )

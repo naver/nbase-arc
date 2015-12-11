@@ -19,7 +19,7 @@ class TestDumpUtil(unittest.TestCase):
     cluster = config.clusters[0]
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix(self.cluster, 'TestDumpUtil')
+        util.set_process_logfile_prefix('TestDumpUtil_%s' % self._testMethodName)
         if default_cluster.initialize_starting_up_smr_before_redis(self.cluster) is not 0:
             util.log('failed to TestDumpUtil.initialize')
             return -1
@@ -32,10 +32,10 @@ class TestDumpUtil(unittest.TestCase):
 
     def b32hexdecode(self, s):
         s = s.encode('ascii')
-        s = s.upper() 
+        s = s.upper()
         base32 = string.translate(s, TRANS)
         return base64.b32decode(base32)
-    
+
     #def string_gen(self, size=6, chars=string.printable):
     def string_gen(self, size=6, chars=string.ascii_letters):
         return ''.join(random.choice(chars) for x in range(size))
@@ -63,9 +63,9 @@ class TestDumpUtil(unittest.TestCase):
             if lastsave_time > before_save_time: break
             time.sleep(0.1)
 
-    def test_base32hex_conversion(self):
+    def testbase32hex_conversion(self):
         util.print_frame()
-    
+
         count = 100
         dict = {}
 
@@ -201,7 +201,7 @@ class TestDumpUtil(unittest.TestCase):
         redis0.write('$%d\r\n%s\r\n' % (len(val2), val2))
         ret = redis0.read_until('\r\n', 1)
         self.assertEqual(ret, '+OK\r\n')
-        
+
         self.bgsave(redis0)
 
         cmd = "./dump-util --dump-iterator dump.rdb ./dump2json_base32hex.so out.json"
@@ -251,9 +251,9 @@ class TestDumpUtil(unittest.TestCase):
 
                 val1 = self.b32hexdecode(data['value'][0])
                 val2 = self.b32hexdecode(data['value'][1])
-                if not (val1 == dict['set']['val1'] and val2 == dict['set']['val2'] 
+                if not (val1 == dict['set']['val1'] and val2 == dict['set']['val2']
                     or val1 == dict['set']['val2'] and val2 == dict['set']['val1']):
-                    
+
                     util.log("values(%s, %s) is not match with (%s, %s)" % (dict['set']['val1'],
                                                                             dict['set']['val2'],
                                                                             val1,
@@ -294,7 +294,7 @@ class TestDumpUtil(unittest.TestCase):
                                  "val(%s) is not match with %s" % (dict['hash'][key1], val1))
                 self.assertEqual(dict['hash'][key2], val2,
                                  "val(%s) is not match with %s" % (dict['hash'][key2], val2))
-                
+
             else:
                 self.assertTrue(False, "Unknown type")
 
@@ -308,7 +308,7 @@ class TestDumpUtil(unittest.TestCase):
         redis.read_until('\r\n')
         redis.read_until('\r\n')
         return cur_time
-        
+
     def timedump_and_make_json_output(self, target_time):
         cmd = "./dump-util --dump %d ../smr0/log0 . out.rdb" % target_time
         p = util.exec_proc_async(util.dump_util_dir(0), cmd, True, None, subprocess.PIPE, None)
@@ -343,7 +343,7 @@ class TestDumpUtil(unittest.TestCase):
         server0 = self.cluster['servers'][0]
         redis0 = telnetlib.Telnet(server0['ip'], server0['redis_port'])
         json_file = "%s/out.json" % util.dump_util_dir(0)
-        
+
         redis0.write('setex key1 5 value\r\n')
         ret = redis0.read_until('\r\n')
 
@@ -362,7 +362,7 @@ class TestDumpUtil(unittest.TestCase):
         ret = redis0.read_until('\r\n')
         curtime_3 = self.get_redis_curtime(redis0)
 
-	print 'currtime_1:%d currtime_2:%d currtime_3:%d ' % (curtime_1, curtime_2, curtime_3)
+        print 'currtime_1:%d currtime_2:%d currtime_3:%d ' % (curtime_1, curtime_2, curtime_3)
         self.timedump_and_make_json_output(curtime_1)
         self.print_file(json_file)
         self.assertTrue(self.is_key_exists_in_json_file('key1', json_file))
@@ -405,7 +405,7 @@ class TestDumpUtil(unittest.TestCase):
             key = self.string_gen(random.randint(1, 64))
             val = self.string_gen(random.randint(1, 64))
             dict[key] = val
-            
+
             redis0.write('*3\r\n$3\r\nset\r\n')
             redis0.write('$%d\r\n%s\r\n' % (len(key), key))
             redis0.write('$%d\r\n%s\r\n' % (len(val), val))
@@ -450,7 +450,7 @@ class TestDumpUtil(unittest.TestCase):
             key = self.string_gen(random.randint(1, 64))
             val = self.string_gen(random.randint(1, 64))
             dict[key] = val
-            
+
             redis0.write('*3\r\n$3\r\nset\r\n')
             redis0.write('$%d\r\n%s\r\n' % (len(key), key))
             redis0.write('$%d\r\n%s\r\n' % (len(val), val))
@@ -482,4 +482,3 @@ class TestDumpUtil(unittest.TestCase):
 
         print "Total Count of json output = %d" % count
         f.close()
-

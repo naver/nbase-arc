@@ -6,14 +6,13 @@ import default_cluster
 import util
 import subprocess
 import copy
-import pdb
 import time
 
 class TestFreeClient(unittest.TestCase):
     cluster = config.clusters[0]
-    
+
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestFreeClient_%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestFreeClient_%s' % self._testMethodName )
         ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
         if ret is not 0:
             default_cluster.finalize( self.cluster )
@@ -25,7 +24,7 @@ class TestFreeClient(unittest.TestCase):
         return 0
 
     def numOpenFds(self, pid):
-        p = util.exec_proc_async(util.cluster_util_dir(0), 'ls /proc/%s/fd | wc -l' % pid, 
+        p = util.exec_proc_async(util.cluster_util_dir(0), 'ls /proc/%s/fd | wc -l' % pid,
                                  True, None, subprocess.PIPE, None)
         ret = p.wait()
         return p.stdout.read()[:-1]

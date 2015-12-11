@@ -13,13 +13,13 @@ class TestProtocolError(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         return 0
-       
+
     @classmethod
     def tearDownClass(cls):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestProtocolError_%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestProtocolError_%s' % self._testMethodName )
         ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
         if ret is not 0:
             util.log('failed to test_basic_op.initialize')

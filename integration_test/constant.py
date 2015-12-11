@@ -39,4 +39,3 @@ ROLE_SLAVE = '3'
 
 CC_LEADER = 'leader'
 CC_FOLLOWER = 'follower'
-

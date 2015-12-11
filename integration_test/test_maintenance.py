@@ -1,7 +1,7 @@
 import subprocess
 import util
 import unittest
-import test_base
+import testbase
 import default_cluster
 import os
 import smr_mgmt
@@ -28,7 +28,7 @@ class TestMaintenance(unittest.TestCase):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestMaintenance_%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestMaintenance_%s' % self._testMethodName )
         if default_cluster.initialize_starting_up_smr_before_redis( self.cluster ) is not 0:
             util.log('failed to TestMaintenance.initialize')
             return -1
@@ -70,7 +70,7 @@ class TestMaintenance(unittest.TestCase):
             ret = redis.connect( server_to_del['ip'], server_to_del['redis_port'] )
             self.assertEquals( ret, 0, 'failed : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
             util.log( 'succeeded : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
-  
+
             redis.write( 'info stats\r\n' )
             for i in range( 6 ):
                 redis.read_until( '\r\n' )
@@ -94,9 +94,9 @@ class TestMaintenance(unittest.TestCase):
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
         # shutdown
-        ret = test_base.request_to_shutdown_smr( server_to_del )
+        ret = testbase.request_to_shutdown_smr( server_to_del )
         self.assertEqual( ret, 0, 'failed : shutdown smr. id:%d' % server_to_del['id'] )
-        ret = test_base.request_to_shutdown_redis( server_to_del )
+        ret = testbase.request_to_shutdown_redis( server_to_del )
         self.assertEquals( ret, 0, 'failed : shutdown redis. id:%d' % server_to_del['id'] )
         util.log('succeeded : shutdown pgs%d.' % server_to_del['id'] )
 
@@ -165,7 +165,7 @@ class TestMaintenance(unittest.TestCase):
                         break
                     time.sleep(0.1)
                 self.assertTrue(ok, 'redis state error.')
-            
+
             # Get new timestamp
             util.log_server_state( self.cluster )
             new_timestamp_list = []
@@ -216,7 +216,7 @@ class TestMaintenance(unittest.TestCase):
                         break
                     time.sleep(0.1)
                 self.assertTrue(ok, 'redis state error.')
-            
+
             # Get new timestamp
             util.log_server_state( self.cluster )
             new_timestamp_list = []
@@ -298,7 +298,7 @@ class TestMaintenance(unittest.TestCase):
             load_gen.start()
             self.load_gen_list[i] = load_gen
 
-        # Check quorum 
+        # Check quorum
         if master in hanging_servers:
             m, s1, s2 = util.get_mss(self.cluster)
             self.assertNotEqual(m, None, 'master is None.')
@@ -397,10 +397,10 @@ class TestMaintenance(unittest.TestCase):
 
             # shutdown
             util.log('shutdown pgs%d(%s:%d)' % (target['id'], target['ip'], target['smr_base_port']))
-            ret = test_base.request_to_shutdown_smr( target )
+            ret = testbase.request_to_shutdown_smr( target )
             self.assertEqual( ret, 0, 'failed to shutdown smr' )
 
-            ret = test_base.request_to_shutdown_redis( target )
+            ret = testbase.request_to_shutdown_redis( target )
             self.assertEquals( ret, 0, 'failed to shutdown redis' )
 
             running_servers = []
@@ -446,7 +446,7 @@ class TestMaintenance(unittest.TestCase):
                 new_ts = new_timestamps[s['id']]
                 self.assertNotEqual(old_ts, new_ts, 'Timestamp of a running server has not changed. %d->%d' % (old_ts, new_ts))
 
-            # Check quorum 
+            # Check quorum
             m = self.cluster['servers'][master_id]
             expected = 1
             ok = self.__check_quorum(m, expected)
@@ -454,21 +454,21 @@ class TestMaintenance(unittest.TestCase):
 
             # recovery
             util.log('recovery pgs%d(%s:%d)' % (target['id'], target['ip'], target['smr_base_port']))
-            ret = test_base.request_to_start_smr( target )
+            ret = testbase.request_to_start_smr( target )
             self.assertEqual( ret, 0, 'failed to start smr' )
             util.log('start smr-replicator done')
 
-            ret = test_base.request_to_start_redis( target, 60 )
+            ret = testbase.request_to_start_redis( target, 60 )
             self.assertEqual( ret, 0, 'failed to start redis' )
             util.log('start redis-arc done')
 
-            ret = test_base.wait_until_finished_to_set_up_role( target, max_try=300)
+            ret = testbase.wait_until_finished_to_set_up_role( target, max_try=300)
             self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (target['id']) )
 
             util.log("States (after recovery)")
             util.log_server_state(self.cluster)
 
-            # Check quorum 
+            # Check quorum
             expected = 1
             ok = self.__check_quorum(m, expected)
             self.assertTrue(ok, 'unexpected quorum(after recovery). expected:%s' % (expected))
@@ -537,10 +537,10 @@ class TestMaintenance(unittest.TestCase):
         # add new slaves
         for s in new_servers:
             util.log('delete pgs%d`s check point.' % s['id'])
-            s['rpc'].rpc_del_dumprdb(s['id'])
+            util.del_dumprdb(s['id'])
 
             ret = util.cluster_util_getdump(s['id'], m['ip'], m['redis_port'], 'dump.rdb', 0, 8191)
-            self.assertEqual(True, ret, 
+            self.assertEqual(True, ret,
                 'failed : util.cluster_util_getdump returns false, src=%s:%d dest_pgsid=%d' % (
                 m['ip'], m['redis_port'], s['id']))
 
@@ -581,4 +581,3 @@ class TestMaintenance(unittest.TestCase):
             self.load_gen_list[i].join()
             self.assertTrue(self.load_gen_list[i].isConsistent(), 'Inconsistent after migration')
             self.load_gen_list.pop(i, None)
-
