@@ -14,6 +14,8 @@ import java.nio.channels.SocketChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
+import java.util.Arrays;
+import java.util.List;
 
 import org.apache.zookeeper.KeeperException;
 
@@ -28,10 +30,12 @@ import com.navercorp.nbasearc.confmaster.io.LineReader;
 import com.navercorp.nbasearc.confmaster.io.Session;
 import com.navercorp.nbasearc.confmaster.io.SessionHandler;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
+import com.navercorp.nbasearc.confmaster.server.JobResult.CommonKey;
 import com.navercorp.nbasearc.confmaster.server.command.CommandCallback;
 import com.navercorp.nbasearc.confmaster.server.command.CommandExecutor;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionHandler;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.statistics.Statistics;
 
 public class ClientSessionHandler implements SessionHandler {
 
@@ -51,6 +55,7 @@ public class ClientSessionHandler implements SessionHandler {
     private final LeaderElectionHandler leaderElectionHandler;
     private final EventSelector eventSelector;
     private final ReplyFormatter formatter;
+    private final Config config;
     
     public ClientSessionHandler(CommandExecutor commandTemplate,
             LeaderElectionHandler leaderElectionHandler, Config config,
@@ -64,6 +69,7 @@ public class ClientSessionHandler implements SessionHandler {
         this.leaderElectionHandler = leaderElectionHandler;
         this.eventSelector = eventSelector;
         this.formatter = new ReplyFormatter();
+        this.config = config;
     }
 
     @Override
@@ -220,12 +226,30 @@ public class ClientSessionHandler implements SessionHandler {
                 Logger.error("Reply job result to client fail. {}", session, e);
                 sendBuffer.put(convert(e.getMessage()));
             } finally {
+                slowLog(result);
+
                 try {
                     sendBuffer.flip();
                     session.getSelectionKey().interestOps(SelectionKey.OP_WRITE);
                 } catch (Exception e) {
                     Logger.error("Register OP_WRITE to nio selector fail. {}", session, e);
                 }
+            }
+        }
+
+        private void slowLog(JobResult result) {
+            Long start = (Long) result.getValue(CommonKey.START_TIME);
+            Long end = (Long) result.getValue(CommonKey.END_TIME);
+            String request = (String) result.getValue(CommonKey.REQUEST);
+            List<String> reply = result.getMessages();
+
+            try {
+                Statistics.updateElapsedTimeForCommands(session.getRemoteHostIP(),
+                        session.getRemoteHostPort(), request,
+                        Arrays.toString(reply.toArray()), end - start,
+                        config.getServerCommandSlowlog());
+            } catch (Exception e) {
+                Logger.error("Log slow command fail.", e);
             }
         }
         
