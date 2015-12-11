@@ -90,7 +90,6 @@ $ python testrunner.py -n -b all
 #### Run nbase-arc processes without executing testcases.
 ```
 $ python testrunner.py -i
-(Press Ctrl-C if you want to quit testrunner.py and kill nBase-ARC processes)
 ```
   
 #### Run a specific testcase.
