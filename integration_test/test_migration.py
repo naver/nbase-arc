@@ -1,7 +1,7 @@
 import subprocess
 import util
 import unittest
-import test_base
+import testbase
 import default_cluster
 import os
 import smr_mgmt
@@ -9,7 +9,6 @@ import redis_mgmt
 import time
 import load_generator
 import config
-import pdb
 import random
 import json
 
@@ -102,7 +101,7 @@ class TestMigration(unittest.TestCase):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestMigration_%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestMigration_%s' % self._testMethodName )
         ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
         if ret is not 0:
             default_cluster.finalize( self.cluster )
@@ -117,7 +116,7 @@ class TestMigration(unittest.TestCase):
         migration_count = 10
         # start load generator
         load_gen_thrd_list = {}
-        print "start load_generator"
+        util.log("start load_generator")
         for i in range(self.max_load_generator):
             ip, port = util.get_rand_gateway(self.cluster)
             load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
@@ -155,7 +154,7 @@ class TestMigration(unittest.TestCase):
 
         # start load generator
         load_gen_thrd_list = {}
-        print "start load_generator"
+        util.log("start load_generator")
         for i in range(self.max_load_generator):
             ip, port = util.get_rand_gateway(self.cluster)
             load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
@@ -218,7 +217,7 @@ class TestMigration(unittest.TestCase):
     def test_migration_with_expire_command(self):
         util.print_frame()
 
-        print "start load_generator"
+        util.log("start load_generator")
         load_gen_thrd_list = {}
         for i in range(1):
             ip, port = util.get_rand_gateway(self.cluster)
@@ -544,19 +543,19 @@ class TestMigration(unittest.TestCase):
         util.log(">>> kill dst_redis and recover from bgsave (%s)" % time.asctime())
         
         dst_redis.disconnect()
-        ret = test_base.request_to_shutdown_redis(dst_master)
+        ret = testbase.request_to_shutdown_redis(dst_master)
         self.assertEquals( ret, 0, 'failed to shutdown redis' )
-        ret = test_base.request_to_shutdown_smr(dst_master)
+        ret = testbase.request_to_shutdown_smr(dst_master)
         self.assertEquals(ret, 0, 'failed to shutdown smr')
         time.sleep(5)
 
-	test_base.request_to_start_smr(dst_master)
+	testbase.request_to_start_smr(dst_master)
 	self.assertEqual( ret, 0, 'failed to start smr, server:%d' % dst_master['id'] )
         
-        ret = test_base.request_to_start_redis(dst_master)
+        ret = testbase.request_to_start_redis(dst_master)
         self.assertEqual( ret, 0, 'failed to start redis, server:%d' % dst_master['id']  )
 
-        ret = test_base.wait_until_finished_to_set_up_role(dst_master)
+        ret = testbase.wait_until_finished_to_set_up_role(dst_master)
         self.assertEquals( ret, 0, 'failed to role change. server:%d' % (dst_master['id']) )
 
         dst_redis = redis_mgmt.Redis(dst_master['id'])
@@ -604,19 +603,19 @@ class TestMigration(unittest.TestCase):
         util.log(">>> kill dst_redis and recover without dump file (%s)" % time.asctime())
         dst_slave = util.get_server_by_role_and_pg(self.cluster['servers'], 'slave', dst_pg_id)
         
-        ret = test_base.request_to_shutdown_redis(dst_slave)
+        ret = testbase.request_to_shutdown_redis(dst_slave)
         self.assertEquals( ret, 0, 'failed to shutdown redis' )
-        ret = test_base.request_to_shutdown_smr(dst_slave)
+        ret = testbase.request_to_shutdown_smr(dst_slave)
         self.assertEquals(ret, 0, 'failed to shutdown smr')
         time.sleep(5)
 
-        test_base.request_to_start_smr(dst_slave)
+        testbase.request_to_start_smr(dst_slave)
         self.assertEqual( ret, 0, 'failed to start smr, server:%d' % dst_slave['id'] )
         
-        ret = test_base.request_to_start_redis(dst_slave)
+        ret = testbase.request_to_start_redis(dst_slave)
         self.assertEqual( ret, 0, 'failed to start redis, server:%d' % dst_slave['id']  )
 
-        ret = test_base.wait_until_finished_to_set_up_role(dst_slave)
+        ret = testbase.wait_until_finished_to_set_up_role(dst_slave)
         self.assertEquals( ret, 0, 'failed to role change. server:%d' % (dst_slave['id']) )
 
         dst_redis_slave = redis_mgmt.Redis(dst_slave['id'])

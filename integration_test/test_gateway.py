@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import random
@@ -21,7 +21,6 @@ class TestGateway( unittest.TestCase ):
 
   @classmethod
   def setUpClass( cls ):
-    util.set_remote_process_logfile_prefix( cls.cluster, 'TestGateway' )
     ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
     if ret is not 0:
       util.log( 'failed to initialize_starting_up_smr_before_redis in TestUpgrade' ) 
@@ -34,6 +33,7 @@ class TestGateway( unittest.TestCase ):
     return 0
 
   def setUp( self ):
+    util.set_process_logfile_prefix( 'TestGateway_%s' % self._testMethodName )
     return 0
 
   def tearDown( self ):
@@ -130,7 +130,7 @@ class TestGateway( unittest.TestCase ):
       success = False
       for try_cnt in range( 5 ):
         cmd = 'get /RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (self.cluster['cluster_name'], server['id'])
-        ret = self.leader_cm['rpc'].rpc_zk_cmd( cmd )
+        ret = util.zk_cmd( cmd )
         ret = ret['err']
         if -1 != ret.find('cZxid'):
           success = True
@@ -144,12 +144,12 @@ class TestGateway( unittest.TestCase ):
     for server in self.cluster['servers']:
       success = False
 
-      ret = server['rpc'].rpc_shutdown_gateway( server['id'], server['gateway_port'] )
+      ret = util.shutdown_gateway( server['id'], server['gateway_port'] )
       self.assertEqual( ret, 0, 'failed : shutdown gateawy%d' % server['id'] )
 
       for try_cnt in range( 10 ):
         cmd = 'get /RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (self.cluster['cluster_name'], server['id'])
-        ret = self.leader_cm['rpc'].rpc_zk_cmd( cmd )
+        ret = util.zk_cmd( cmd )
         ret = ret['err']
         if -1 != ret.find('Node does not exist'):
           success = True
@@ -163,12 +163,12 @@ class TestGateway( unittest.TestCase ):
     for server in self.cluster['servers']:
       success = False
 
-      ret = server['rpc'].rpc_start_gateway( server['id'], server['ip'], self.leader_cm['cm_port'], server['cluster_name'], server['gateway_port'])
+      ret = util.start_gateway( server['id'], server['ip'], self.leader_cm['cm_port'], server['cluster_name'], server['gateway_port'])
       self.assertEqual( ret, 0, 'failed : start gateawy%d' % server['id'] )
 
       for try_cnt in range( 5 ):
         cmd = 'get /RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (self.cluster['cluster_name'], server['id'])
-        ret = self.leader_cm['rpc'].rpc_zk_cmd( cmd )
+        ret = util.zk_cmd( cmd )
         ret = ret['err']
         if -1 != ret.find('cZxid'):
           success = True

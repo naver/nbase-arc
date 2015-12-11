@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import gateway_mgmt
@@ -26,7 +26,7 @@ class TestRestartRecovery( unittest.TestCase ):
     return 0
 
   def setUp( self ):
-    util.set_remote_process_logfile_prefix( self.cluster, 'TestRestartRecovery_%s' % self._testMethodName )
+    util.set_process_logfile_prefix( 'TestRestartRecovery_%s' % self._testMethodName )
     ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
     if ret is not 0:
       default_cluster.finalize( self.cluster )
@@ -57,10 +57,10 @@ class TestRestartRecovery( unittest.TestCase ):
     server = util.get_server_by_role( self.cluster['servers'], role )
 
     if redis_only == False:
-        ret = test_base.request_to_shutdown_smr( server )
+        ret = testbase.request_to_shutdown_smr( server )
         self.assertEqual( ret, 0, 'failed to shutdown smr' )
 
-    ret = test_base.request_to_shutdown_redis( server )
+    ret = testbase.request_to_shutdown_redis( server )
     self.assertEquals( ret, 0, 'failed to shutdown redis' )
 
     # check state F
@@ -84,13 +84,13 @@ class TestRestartRecovery( unittest.TestCase ):
 
     # recovery
     if redis_only == False:
-        ret = test_base.request_to_start_smr( server )
+        ret = testbase.request_to_start_smr( server )
         self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( server )
+    ret = testbase.request_to_start_redis( server )
     self.assertEqual( ret, 0, 'failed to start redis' )
 
-    ret = test_base.wait_until_finished_to_set_up_role( server, wait_count )
+    ret = testbase.wait_until_finished_to_set_up_role( server, wait_count )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server['id']) )
 
     redis = redis_mgmt.Redis( server['id'] )
@@ -134,9 +134,9 @@ class TestRestartRecovery( unittest.TestCase ):
 
   def failover( self, server ):
     # shutdown
-    ret = test_base.request_to_shutdown_smr( server )
+    ret = testbase.request_to_shutdown_smr( server )
     self.assertEqual( ret, 0, 'failed to shutdown smr' )
-    ret = test_base.request_to_shutdown_redis( server )
+    ret = testbase.request_to_shutdown_redis( server )
     self.assertEquals( ret, 0, 'failed to shutdown redis' )
 
     # check state F
@@ -151,13 +151,13 @@ class TestRestartRecovery( unittest.TestCase ):
                        'server%d - state:%s, expected:%s' % (server['id'], state, expected) )
 
     # recovery
-    ret = test_base.request_to_start_smr( server )
+    ret = testbase.request_to_start_smr( server )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( server )
+    ret = testbase.request_to_start_redis( server )
     self.assertEqual( ret, 0, 'failed to start redis' )
 
-    ret = test_base.wait_until_finished_to_set_up_role( server, 10 )
+    ret = testbase.wait_until_finished_to_set_up_role( server, 10 )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server['id']) )
 
     redis = redis_mgmt.Redis( server['id'] )
@@ -196,9 +196,9 @@ class TestRestartRecovery( unittest.TestCase ):
 
     # shutdown
     server_to_join = util.get_server_by_role( self.cluster['servers'], 'master' )
-    ret = test_base.request_to_shutdown_smr( server_to_join )
+    ret = testbase.request_to_shutdown_smr( server_to_join )
     self.assertEqual( ret, 0, 'failed to shutdown smr' )
-    ret = test_base.request_to_shutdown_redis( server_to_join )
+    ret = testbase.request_to_shutdown_redis( server_to_join )
     self.assertEquals( ret, 0, 'failed to shutdown redis' )
 
     # check state F
@@ -243,13 +243,13 @@ class TestRestartRecovery( unittest.TestCase ):
 
     # recovery
     util.log('master recovery start.')
-    ret = test_base.request_to_start_smr( server_to_join )
+    ret = testbase.request_to_start_smr( server_to_join )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( server_to_join )
+    ret = testbase.request_to_start_redis( server_to_join )
     self.assertEqual( ret, 0, 'failed to start redis' )
 
-    ret = test_base.wait_until_finished_to_set_up_role( server_to_join, 10 )
+    ret = testbase.wait_until_finished_to_set_up_role( server_to_join, 10 )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server_to_join['id']) )
     util.log('master recovery end successfully.')
 
@@ -318,11 +318,11 @@ class TestRestartRecovery( unittest.TestCase ):
     server_to_join = [s1, s2]
     # shutdown slaves
     for i in range(0, 2):
-      ret = test_base.request_to_shutdown_smr( server_to_join[i] )
+      ret = testbase.request_to_shutdown_smr( server_to_join[i] )
       self.assertEqual( ret, 0, 'failed to shutdown smr%d' % server_to_join[i]['id'])
       util.log('succeeded to shutdown smr%d' % server_to_join[i]['id'])
 
-      ret = test_base.request_to_shutdown_redis( server_to_join[i] )
+      ret = testbase.request_to_shutdown_redis( server_to_join[i] )
       self.assertEquals( ret, 0, 'failed to shutdown redis' )
       util.log('succeeded to shutdown redis%d' % server_to_join[i]['id'])
 
@@ -345,10 +345,10 @@ class TestRestartRecovery( unittest.TestCase ):
     self.assertTrue(ret, 'failed to bgsave. pgs%d' % master['id'])
 
     # shutdown master
-    ret = test_base.request_to_shutdown_smr( master )
+    ret = testbase.request_to_shutdown_smr( master )
     self.assertEqual( ret, 0, 'failed to shutdown smr' )
     util.log('succeeded to shutdown master smr, id=%d' % master['id'])
-    ret = test_base.request_to_shutdown_redis( master )
+    ret = testbase.request_to_shutdown_redis( master )
     self.assertEquals( ret, 0, 'failed to shutdown redis' )
     util.log('succeeded to shutdown master redis, id=%d' % master['id'])
 
@@ -365,13 +365,13 @@ class TestRestartRecovery( unittest.TestCase ):
 
     # recovery slaves
     for i in range(0, 2):
-      ret = test_base.request_to_start_smr( server_to_join[i] )
+      ret = testbase.request_to_start_smr( server_to_join[i] )
       self.assertEqual( ret, 0, 'failed to start smr' )
   
-      ret = test_base.request_to_start_redis( server_to_join[i] )
+      ret = testbase.request_to_start_redis( server_to_join[i] )
       self.assertEqual( ret, 0, 'failed to start redis' )
   
-      ret = test_base.wait_until_finished_to_set_up_role( server_to_join[i], 10 )
+      ret = testbase.wait_until_finished_to_set_up_role( server_to_join[i], 10 )
       self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server_to_join[i]['id']) )
   
       # check state N
@@ -414,10 +414,10 @@ class TestRestartRecovery( unittest.TestCase ):
         self.assertEqual( response, '%d\r\n' % (j), 'inconsistent %s, %d' % (response[:-2], j) )
 
     # try to recover master, but failed
-    ret = test_base.request_to_start_smr( master )
+    ret = testbase.request_to_start_smr( master )
     self.assertEqual( ret, 0, 'failed to start smr' )
   
-    ret = test_base.request_to_start_redis( master, False )
+    ret = testbase.request_to_start_redis( master, False )
     self.assertEqual( ret, 0, 'failed to start redis' )
   
     max_try = 3

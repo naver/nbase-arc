@@ -23,7 +23,7 @@ class TestLocalProxy(unittest.TestCase):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix(self.cluster, 'TestLocalProxy_%s' % self._testMethodName)
+        util.set_process_logfile_prefix('TestLocalProxy_%s' % self._testMethodName)
         ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
         if ret is not 0:
             util.log('failed to test_local_proxy.initialize')

@@ -4,7 +4,6 @@ import telnet
 import crc16
 import util
 import sys
-import pdb
 import random
 from arcci.arcci import *
 

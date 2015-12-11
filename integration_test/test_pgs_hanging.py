@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import gateway_mgmt
@@ -28,6 +28,7 @@ class TestPGSHanging( unittest.TestCase ):
     return 0
 
   def setUp( self ):
+    util.set_process_logfile_prefix( 'TestPGSHanging_%s' % self._testMethodName )
     return 0
 
   def tearDown( self ):
@@ -41,7 +42,6 @@ class TestPGSHanging( unittest.TestCase ):
     self.mgmt_ip = self.leader_cm['ip']
     self.mgmt_port = self.leader_cm['cm_port']
 
-    util.set_remote_process_logfile_prefix( self.cluster, 'TestPGSHanging_%s' % self._testMethodName )
     ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
     if ret is not 0:
       default_cluster.finalize( self.cluster )
@@ -706,9 +706,9 @@ class TestPGSHanging( unittest.TestCase ):
 
     # shutdown
     util.log( 'shutdown pgs%d while hanging.' % server['id'] )
-    ret = test_base.request_to_shutdown_smr( server )
+    ret = testbase.request_to_shutdown_smr( server )
     self.assertEqual( ret, 0, 'failed to shutdown smr. id:%d' % server['id'] )
-    ret = test_base.request_to_shutdown_redis( server )
+    ret = testbase.request_to_shutdown_redis( server )
     self.assertEquals( ret, 0, 'failed to shutdown redis. id:%d' % server['id'] )
 
     # check state F
@@ -725,14 +725,14 @@ class TestPGSHanging( unittest.TestCase ):
 
     # recovery
     util.log( 'restart pgs%d.' % server['id'] )
-    ret = test_base.request_to_start_smr( server )
+    ret = testbase.request_to_start_smr( server )
     self.assertEqual( ret, 0, 'failed to start smr. id:%d' % server['id'] )
 
-    ret = test_base.request_to_start_redis( server )
+    ret = testbase.request_to_start_redis( server )
     self.assertEqual( ret, 0, 'failed to start redis. id:%d' % server['id'] )
 
     wait_count = 20
-    ret = test_base.wait_until_finished_to_set_up_role( server, wait_count )
+    ret = testbase.wait_until_finished_to_set_up_role( server, wait_count )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server['id']) )
 
     redis = redis_mgmt.Redis( server['id'] )

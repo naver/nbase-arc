@@ -1,6 +1,6 @@
 import subprocess
 import unittest
-import test_base
+import testbase
 import default_cluster
 import util
 import os
@@ -22,7 +22,7 @@ class TestBasicOp(unittest.TestCase):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestBasicOp_%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestBasicOp_%s' % self._testMethodName )
         ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
         if ret is not 0:
             util.log('failed to test_basic_op.initialize')

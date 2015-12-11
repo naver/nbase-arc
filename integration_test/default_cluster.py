@@ -1,5 +1,5 @@
 import time
-import test_base
+import testbase
 import util
 
 
@@ -7,41 +7,42 @@ def initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
   if conf == None:
       conf = {'smr_log_delete_delay':86400}
 
-  if test_base.cleanup_zookeeper_root( cluster['servers'][0] ) is not 0:
+  if testbase.cleanup_zookeeper_root() is not 0:
     util.log('failed to cleanup_zookeeper_root')
     return -1
 
+  if testbase.cleanup_processes() is not 0:
+    util.log('failed to cleanup_test_environment')
+    return -1
+
   for server in cluster['servers']:
-    if test_base.cleanup_test_environment( cluster['cluster_name'], server ) is not 0:
-      util.log('failed to cleanup_test_environment')
+    if testbase.cleanup_pgs_log_and_ckpt( cluster['cluster_name'], server ) is not 0:
+      util.log( 'failed to cleanup_pgs_data' )
       return -1
 
   for server in cluster['servers']:
-    if test_base.request_to_start_cm( server['id'], server['rpc'], server['cm_port'] ) is not 0:
+    if testbase.request_to_start_cm( server['id'], server['cm_port'] ) is not 0:
       util.log('failed to request_to_start_cm')
       return -1
 
-  if test_base.initialize_cluster( cluster ) is not 0:
+  if testbase.initialize_cluster( cluster ) is not 0:
     util.log('failed to setup_znodes')
     return -1
 
   for server in cluster['servers']:
-#    if test_base.request_to_start_heartbeat_checker( server ) is not 0:
-#      return -1
-    
-    if test_base.request_to_start_smr( server, verbose=verbose, log_delete_delay=conf['smr_log_delete_delay'] ) is not 0:
+    if testbase.request_to_start_smr( server, verbose=verbose, log_delete_delay=conf['smr_log_delete_delay'] ) is not 0:
       return -1
 
   for server in cluster['servers']:
-    if test_base.request_to_start_redis( server, check=False ) is not 0:
+    if testbase.request_to_start_redis( server, check=False ) is not 0:
       return -1
 
   for server in cluster['servers']:
-    if test_base.wait_until_finished_to_set_up_role( server ) is not 0:
+    if testbase.wait_until_finished_to_set_up_role( server ) is not 0:
       return -1
 
   for server in cluster['servers']:
-    if test_base.request_to_start_gateway( cluster['cluster_name'], server, cluster['servers'][0] ) is not 0:
+    if testbase.request_to_start_gateway( cluster['cluster_name'], server, cluster['servers'][0] ) is not 0:
       util.log('failed to request_to_start_gateway')
       return -1
 
@@ -49,17 +50,21 @@ def initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
 
 
 def initialize_for_test_confmaster( cluster ):
-  if test_base.cleanup_zookeeper_root( cluster['servers'][0] ) is not 0:
+  if testbase.cleanup_zookeeper_root() is not 0:
     util.log('failed to cleanup_zookeeper_root')
     return -1
 
+  if testbase.cleanup_processes() is not 0:
+    util.log('failed to cleanup_test_environment')
+    return -1
+
   for server in cluster['servers']:
-    if test_base.cleanup_test_environment( cluster['cluster_name'], server ) is not 0:
-      util.log('failed to cleanup_test_environment')
+    if testbase.cleanup_pgs_log_and_ckpt( cluster['cluster_name'], server ) is not 0:
+      util.log( 'failed to cleanup_pgs_data' )
       return -1
 
   for server in cluster['servers']:
-    if test_base.request_to_start_cm( server['id'], server['rpc'], server['cm_port'] ) is not 0:
+    if testbase.request_to_start_cm( server['id'], server['cm_port'] ) is not 0:
       util.log('failed to request_to_start_cm')
       return -1
 
@@ -68,8 +73,8 @@ def initialize_for_test_confmaster( cluster ):
 
 def finalize( cluster ):
   for server in cluster['servers']:
-    if test_base.kill_all_processes( server ) is not 0:
-      util.log('failed to rpc_kill_all_processes')
+    if testbase.kill_all_processes( server ) is not 0:
+      util.log('failed to kill_all_processes')
       return -1
   return 0
 

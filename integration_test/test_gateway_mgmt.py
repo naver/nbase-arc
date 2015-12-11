@@ -1,7 +1,7 @@
 import subprocess
 import util
 import unittest
-import test_base
+import testbase
 import default_cluster
 import os
 import smr_mgmt
@@ -27,7 +27,7 @@ class TestGatewayMgmt(unittest.TestCase):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestGatewayMgmt' )
+        util.set_process_logfile_prefix( 'TestGatewayMgmt_%s' % self._testMethodName )
         if default_cluster.initialize_starting_up_smr_before_redis( self.cluster ) is not 0:
             util.log('failed to TestScaleout.initialize')
             return -1

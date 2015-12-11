@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import copy
@@ -27,7 +27,7 @@ class TestQuorumPolicy( unittest.TestCase ):
     return 0
 
   def setUp( self ):
-    util.set_remote_process_logfile_prefix( self.cluster, 'TestQuorumPolicy_%s' % self._testMethodName )
+    util.set_process_logfile_prefix( 'TestQuorumPolicy_%s' % self._testMethodName )
     ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
     if ret is not 0:
       default_cluster.finalize( self.cluster )
@@ -71,7 +71,7 @@ class TestQuorumPolicy( unittest.TestCase ):
     self.assertEquals( quorum, expected, 
                        'quorum:%d, expected:%d' % (quorum, expected) )
 
-    ret = test_base.request_to_shutdown_smr( slave1 )
+    ret = testbase.request_to_shutdown_smr( slave1 )
     self.assertEqual( ret, 0, 'failed to shutdown smr, server:%d' % slave1['id'] )
     time.sleep( 1 )
 
@@ -85,7 +85,7 @@ class TestQuorumPolicy( unittest.TestCase ):
     self.assertEquals( quorum, expected, 
                        'quorum:%d, expected:%d' % (quorum, expected) )
 
-    ret = test_base.request_to_shutdown_smr( slave2 )
+    ret = testbase.request_to_shutdown_smr( slave2 )
     self.assertEqual( ret, 0, 'failed to shutdown smr, server:%d' % slave2['id'] )
     time.sleep( 1 )
 
@@ -100,13 +100,13 @@ class TestQuorumPolicy( unittest.TestCase ):
                        'quorum:%d, expected:%d' % (quorum, expected) )
 
     # recovery
-    ret = test_base.request_to_start_smr( slave1 )
+    ret = testbase.request_to_start_smr( slave1 )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( slave1 )
+    ret = testbase.request_to_start_redis( slave1 )
     self.assertEqual( ret, 0, 'failed to start redis' )
 
-    ret = test_base.wait_until_finished_to_set_up_role( slave1 )
+    ret = testbase.wait_until_finished_to_set_up_role( slave1 )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (slave1['id']) )
     time.sleep( 1 )
 
@@ -121,13 +121,13 @@ class TestQuorumPolicy( unittest.TestCase ):
                        'quorum:%d, expected:%d' % (quorum, expected) )
 
     # recovery
-    ret = test_base.request_to_start_smr( slave2 )
+    ret = testbase.request_to_start_smr( slave2 )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( slave2 )
+    ret = testbase.request_to_start_redis( slave2 )
     self.assertEqual( ret, 0, 'failed to start redis' )
 
-    ret = test_base.wait_until_finished_to_set_up_role( slave2 )
+    ret = testbase.wait_until_finished_to_set_up_role( slave2 )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (slave2['id']) )
     time.sleep( 1 )
 
@@ -176,7 +176,7 @@ class TestQuorumPolicy( unittest.TestCase ):
 
     # shutdown confmaster
     for server in self.cluster['servers']:
-      server['rpc'].rpc_shutdown_cm( server['id'] )
+      util.shutdown_cm( server['id'] )
 
     # wait until hanging master wake up
     time.sleep( 5 )

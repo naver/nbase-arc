@@ -1,6 +1,4 @@
-import socket
 import os
-import xmlrpclib
 import subprocess 
 import stat
 import config
@@ -19,13 +17,16 @@ import telnet
 import json
 import demjson
 import inspect
-import test_base
-import subprocess
+import testbase
 import load_generator
 import numbers
 import traceback
-import pdb
+import string
+import process_mgmt
+import shutil
+import exceptions
 
+proc_mgmt = process_mgmt.ProcessMgmt()
 
 class Output(str):
     @property
@@ -42,12 +43,6 @@ def log( msg ):
   d = datetime.datetime.now()
   log_msg = '[%s] %s' % (strtime(), msg)
   print log_msg
-
-
-def set_remote_process_logfile_prefix( cluster, prefix ):
-  for server in cluster['servers']:
-    server['rpc'].rpc_set_process_logfile_prefix( prefix )
-  return 0;
 
 
 g_process_logfile_prefix = ""
@@ -177,7 +172,6 @@ def exec_proc_async( working_dir,
                         stdout=out_handle, 
                         stderr=err_handle,
                         close_fds=True )
-  log( 'working_dir:%s, pid=%d' % (working_dir, p.pid) )
   os.chdir( old_cwd )
 
   return p;
@@ -247,7 +241,7 @@ def kill_proc( popen ):
   popen.poll()
 
 
-def killps_y( name ):
+def _killps_y( name ):
   return shell_cmd_sync( '%s %s' 
     % ("""
       function my_ps()
@@ -447,98 +441,32 @@ def get_rand_gateway( cluster ):
   return server['ip'], server['gateway_port']
 
 
-def deploy_gateway(id, rpc):
-    gw = None
+def deploy_gateway(id):
     try:
-        path = '../gateway/%s' % c.GW
-        gw = open( path, 'rb' )
-      
-        gw.seek(0, 0)
-  
-        log('copy binaries, server_id=%d' % id)
-        if rpc.rpc_copy_gw( xmlrpclib.Binary( gw.read() ), id ) is not 0:
-            log('failed to copy gateway')
-            return False 
+        copy_gw( id )
         
     except IOError as e:
         log(e)
         log('Error: can not find file or read data')
         return False
     
-    finally:
-        if gw != None:
-            gw.close()
-
     return True
 
 
-def deploy_pgs(id, rpc):
-    smr = None
-    redis = None
-    cluster_util = None
-    dump_util = None
-    dump_util_plugin = None
+def deploy_pgs(id):
     try:
-        path = '../smr/replicator/%s' % (c.SMR)
-        smr = open( path, 'rb' )
-        smr.seek(0, 0)
-
-        path = '../redis-2.8.8/src/%s' % (c.REDIS)
-        redis = open( path, 'rb' )
-        redis.seek(0, 0)
-
-        path = '../redis-2.8.8/src/%s' % (c.CLUSTER_UTIL)
-        cluster_util = open( path, 'rb' )
-        cluster_util.seek(0, 0)
-
-        path = '../redis-2.8.8/src/%s' % (c.DUMP_UTIL)
-        dump_util = open( path, 'rb' )
-        dump_util.seek(0, 0)
-
-        path = '../redis-2.8.8/src/%s' % (c.DUMP_UTIL_PLUGIN)
-        dump_util_plugin = open( path, 'rb' )
-        dump_util_plugin.seek(0, 0)
-
-	path = '../smr/smr/%s' % (c.LOG_UTIL)
-	log_util = open(path, 'rb')
-	log_util.seek(0,0)
-  
         log('copy binaries, server_id=%d' % id)
-        if rpc.rpc_copy_smrreplicator( xmlrpclib.Binary( smr.read() ), id ) is not 0:
-            log('failed to copy smr-replicator')
-            return False
-        if rpc.rpc_copy_redis_server( xmlrpclib.Binary( redis.read() ), id ) is not 0:
-            log('failed to copy redis-arc')
-            return False
-        if rpc.rpc_copy_cluster_util( xmlrpclib.Binary( cluster_util.read() ), id ) is not 0:
-            log('failed to copy cluster-util')
-            return False
-        if rpc.rpc_copy_dump_util( xmlrpclib.Binary( dump_util.read() ), id ) is not 0:
-            log('failed to copy dump-util')
-            return False
-        if rpc.rpc_copy_dump_util_plugin( xmlrpclib.Binary( dump_util_plugin.read() ), id ) is not 0:
-            log('failed to copy dump-util')
-            return False
-        if rpc.rpc_copy_dump_util_plugin( xmlrpclib.Binary( log_util.read() ), id ) is not 0:
-            log('failed to copy log-util')
-            return False
+        copy_smrreplicator( id )
+        copy_redis_server( id )
+        copy_cluster_util( id )
+        copy_dump_util( id )
+        copy_dump_util_plugin( id )
+        copy_log_util( id )
         
     except IOError as e:
         log(e)
         log('Error: can not find file or read data')
         return False
-    
-    finally:
-        if smr is not None:
-            smr.close()
-        if redis is not None:
-            redis.close()
-        if cluster_util is not None:
-            cluster_util.close()
-        if dump_util is not None:
-            dump_util.close()
-        if dump_util_plugin is not None:
-            dump_util_plugin.close()
 
     return True
 
@@ -776,7 +704,7 @@ def pm_add(name, ip, mgmt_ip, mgmt_port):
 
 def pg_del(cluster, servers, leader_cm, stop_gw=True):
   for server in servers:
-    if test_base.finalize_info_of_cm_about_pgs(cluster, server, leader_cm) is not 0:
+    if testbase.finalize_info_of_cm_about_pgs(cluster, server, leader_cm) is not 0:
       log('scale in : failed to finalize cc_info, pgs_del command faile')
       return False
 
@@ -788,18 +716,18 @@ def pg_del(cluster, servers, leader_cm, stop_gw=True):
     return False
 
   for server in servers:
-    if test_base.request_to_shutdown_redis(server) is not 0:
+    if testbase.request_to_shutdown_redis(server) is not 0:
       log('scale in : failed to request_to_shutdown_redis')
       return False
 
   for server in servers:
-    if test_base.request_to_shutdown_smr(server) is not 0:
+    if testbase.request_to_shutdown_smr(server) is not 0:
       log('scale in : failed to request_to_shutdown_smr')
       return False
   
   if stop_gw:
     for server in servers:
-      if test_base.request_to_shutdown_gateway(cluster['cluster_name'], server, leader_cm) is not 0:
+      if testbase.request_to_shutdown_gateway(cluster['cluster_name'], server, leader_cm) is not 0:
         log('scale in : failed to request_to_shutdown_gateway')
         return False
 
@@ -808,12 +736,12 @@ def pg_del(cluster, servers, leader_cm, stop_gw=True):
 
 def pg_add(cluster, servers, leader_cm, start_gw=True):
   for server in servers:
-    ret = server['rpc'].rpc_delete_smr_log_dir( server['id'], server['smr_base_port'] )
+    ret = delete_smr_log_dir( server['id'], server['smr_base_port'] )
     if ret is not 0:
       log('failed to delete smr log dir')
       return False
 
-    ret = server['rpc'].rpc_delete_redis_check_point( server['id'] )
+    ret = delete_redis_check_point( server['id'] )
     if ret is not 0:
       log('failed to delete redis check point')
       return False
@@ -826,24 +754,24 @@ def pg_add(cluster, servers, leader_cm, start_gw=True):
     return False
   
   for server in servers:
-    test_base.initialize_info_of_cm_about_pgs(cluster, server, leader_cm)
+    testbase.initialize_info_of_cm_about_pgs(cluster, server, leader_cm)
   
   for server in servers:
-    if test_base.request_to_start_smr( server ) is not 0:
+    if testbase.request_to_start_smr( server ) is not 0:
       return False
   
   for server in servers:
-    if test_base.request_to_start_redis( server, check=False ) is not 0:
+    if testbase.request_to_start_redis( server, check=False ) is not 0:
       return False
   
   time.sleep( 10 )
   for server in servers:
-    if test_base.wait_until_finished_to_set_up_role( server ) is not 0:
+    if testbase.wait_until_finished_to_set_up_role( server ) is not 0:
       return False
 
   if start_gw:
     for server in servers:
-      if test_base.request_to_start_gateway( cluster['cluster_name'], server, leader_cm ) is not 0:
+      if testbase.request_to_start_gateway( cluster['cluster_name'], server, leader_cm ) is not 0:
         log('failed to request_to_start_gateway')
         return False
 
@@ -851,27 +779,27 @@ def pg_add(cluster, servers, leader_cm, start_gw=True):
 
 
 def pgs_add(cluster, server, leader_cm, pg_id=None, rm_ckpt=True):
-  ret = server['rpc'].rpc_delete_smr_log_dir( server['id'], server['smr_base_port'] )
+  ret = delete_smr_log_dir( server['id'], server['smr_base_port'] )
   if ret is not 0:
     log('failed to delete smr log dir')
     return False
 
   if rm_ckpt:
-    ret = server['rpc'].rpc_delete_redis_check_point( server['id'] )
+    ret = delete_redis_check_point( server['id'] )
     if ret is not 0:
       log('failed to delete redis check point')
       return False
   
-  test_base.initialize_info_of_cm_about_pgs(cluster, server, leader_cm, pg_id=pg_id)
+  testbase.initialize_info_of_cm_about_pgs(cluster, server, leader_cm, pg_id=pg_id)
   
-  if test_base.request_to_start_smr( server ) is not 0:
+  if testbase.request_to_start_smr( server ) is not 0:
     return False
 
-  if test_base.request_to_start_redis( server ) is not 0:
+  if testbase.request_to_start_redis( server ) is not 0:
     return False
   
   time.sleep( 10 )
-  if test_base.wait_until_finished_to_set_up_role( server ) is not 0:
+  if testbase.wait_until_finished_to_set_up_role( server ) is not 0:
     return False
 
   return True
@@ -1484,11 +1412,11 @@ def bgsave(server, max_try=120):
 
 def failover(server, leader_cm):
   # shutdown
-  ret = test_base.request_to_shutdown_smr( server )
+  ret = testbase.request_to_shutdown_smr( server )
   if ret != 0:
     log('failed to shutdown smr%d' % server['id'])
     return False
-  ret = test_base.request_to_shutdown_redis( server )
+  ret = testbase.request_to_shutdown_redis( server )
   if ret != 0:
     log('failed to shutdown redis%d' % server['id'])
     return False
@@ -1506,17 +1434,17 @@ def failover(server, leader_cm):
     return False
 
   # recovery
-  ret = test_base.request_to_start_smr( server )
+  ret = testbase.request_to_start_smr( server )
   if ret != 0:
     log('failed to start smr')
     return False
 
-  ret = test_base.request_to_start_redis( server, max_try=120 )
+  ret = testbase.request_to_start_redis( server, max_try=120 )
   if ret != 0:
     log('failed to start redis')
     return False
 
-  ret = test_base.wait_until_finished_to_set_up_role( server, 11 )
+  ret = testbase.wait_until_finished_to_set_up_role( server, 11 )
   if ret != 0:
     log('failed to role change. smr_id:%d' % (server['id']))
     return False
@@ -1588,8 +1516,8 @@ def handle_not_json_format_object(o):
     return None
 
 
-def get_gateway_affinity(rpc, cluster_name):
-  ret = rpc.rpc_zk_cmd('get /RC/NOTIFICATION/CLUSTER/%s/AFFINITY' % cluster_name)
+def get_gateway_affinity(cluster_name):
+  ret = zk_cmd('get /RC/NOTIFICATION/CLUSTER/%s/AFFINITY' % cluster_name)
   znode_data = ret['znode_data']
   log('Gateway affinity znode data : %s' % znode_data)
   affinity_data = znode_data
@@ -1640,7 +1568,6 @@ def get_gateway_affinity_hit_ratio(server):
   return True, ratio
 
 
-# It isn't able to use copy.deepcopy for rpc
 def deepcopy_server(server):
   copy_server = {}
   copy_server['id'] = server['id']
@@ -1654,15 +1581,19 @@ def deepcopy_server(server):
   copy_server['gateway_port'] = server['gateway_port']
   copy_server['redis_port'] = server['redis_port']
   copy_server['zk_port'] = server['zk_port']
-  copy_server['rpc'] = server['rpc']
   return copy_server
 
 
-def get_proc_fd_cnt(pid):
+def get_proc_fd_cnt( proc_uid ):
+  p = proc_mgmt.get( proc_uid )
+  pid = p.getPopen().pid
   return len(os.listdir('/proc/%d/fd' % pid))
 
 
-def get_childproc_fd_cnt(ppid, child_proc_name):
+def get_childproc_fd_cnt(parent_proc_uid, child_proc_name):
+  p = proc_mgmt.get( parent_proc_uid )
+  ppid = p.getPopen().pid
+
   cmd = "ps -ef | grep -v grep | grep %d | grep %s | awk -F \" \" '{print $2}'" % (ppid, child_proc_name)
   p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE)
   if 0 != p.wait():
@@ -1675,7 +1606,10 @@ def get_childproc_fd_cnt(ppid, child_proc_name):
   return len(fds)
 
 
-def get_childproc_socket_cnt(ppid, child_proc_name, dst_ports):
+def get_childproc_socket_cnt(parent_proc_uid, child_proc_name, dst_ports):
+  p = proc_mgmt.get( parent_proc_uid )
+  ppid = p.getPopen().pid
+
   log(' ### SOCKET INFO BEGIN. PPID:%s, CHILD_PROC_NAME:%s ###' % (str(ppid), child_proc_name))
 
   cmd = "ps --ppid %d -f | grep -v awk | awk '%s' | awk -F \" \" '{print $2}'" % (ppid, child_proc_name)
@@ -1770,12 +1704,12 @@ def upgrade_gw(server, leader_cm):
   cluster_name = server['cluster_name']
 
   # delete gw info from confmaster and shutdown gw
-  if test_base.request_to_shutdown_gateway(cluster_name, server, leader_cm) != 0:
+  if testbase.request_to_shutdown_gateway(cluster_name, server, leader_cm) != 0:
     log('[UPGRADE_GW] Failed to shutdown gateway %d (%s:%d)' % (id, ip, port))
     return False
 
   # restart gw and add gw info to confmaster
-  if test_base.request_to_start_gateway(cluster_name, server, leader_cm) != 0:
+  if testbase.request_to_start_gateway(cluster_name, server, leader_cm) != 0:
     log('[UPGRADE_GW] Failed to start gateway %d (%s:%d)' % (id, ip, port))
     return False
 
@@ -1873,12 +1807,12 @@ def upgrade_pgs(upgrade_server, leader_cm, cluster):
   log('succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]))
 
   # shutdown
-  ret = test_base.request_to_shutdown_smr(upgrade_server)
+  ret = testbase.request_to_shutdown_smr(upgrade_server)
   if ret != 0:
     log('failed : shutdown smr. id:%d' % upgrade_server['id'])
     return False
 
-  ret = test_base.request_to_shutdown_redis(upgrade_server)
+  ret = testbase.request_to_shutdown_redis(upgrade_server)
   if ret != 0:
     log('failed : shutdown redis. id:%d' % upgrade_server['id'])
     return False
@@ -1912,20 +1846,20 @@ def upgrade_pgs(upgrade_server, leader_cm, cluster):
 
   # recovery
   log('restart pgs%d.' % upgrade_server['id'])
-  ret = test_base.request_to_start_smr(upgrade_server, verbose=2)
+  ret = testbase.request_to_start_smr(upgrade_server, verbose=2)
   if ret != 0:
     log('failed : start smr. id:%d' % upgrade_server['id'])
     return False
   log('succeeded : to start smr. id:%d' % upgrade_server['id'])
 
-  ret = test_base.request_to_start_redis(upgrade_server, False)
+  ret = testbase.request_to_start_redis(upgrade_server, False)
   if ret != 0:
     log('failed : start redis. id:%d' % upgrade_server['id'])
     return False
   log('succeeded : start redis. id:%d' % upgrade_server['id'])
 
   wait_count = 20
-  ret = test_base.wait_until_finished_to_set_up_role(upgrade_server, wait_count)
+  ret = testbase.wait_until_finished_to_set_up_role(upgrade_server, wait_count)
   if ret != 0:
     log('failed : role change. smr_id:%d' % (upgrade_server['id']))
     return False
@@ -2015,12 +1949,12 @@ Get the number of file descriptors of a confmaster in a cluster.
 """
 def cm_get_fd_cnt(s):
     uid = cc_uid(s['id'])
-    return s['rpc'].rpc_get_childproc_fd_cnt(uid, 'confmaster')
+    return get_childproc_fd_cnt(uid, 'confmaster')
 
 
 def cm_get_socket_cnt(s, dst_ports):
     uid = cc_uid(s['id'])
-    return s['rpc'].rpc_get_childproc_socket_cnt(uid, '/java/*/jar/*/confmaster/*/jar/', dst_ports)
+    return get_childproc_socket_cnt(uid, '/java/*/jar/*/confmaster/*/jar/', dst_ports)
 
 
 """
@@ -2051,6 +1985,491 @@ def is_leader_cm( cc ):
     return True
   else:
     return False
+
+def copy_smrreplicator( id ):
+  if not os.path.exists( smr_dir( id ) ):
+    os.mkdir( smr_dir( id ) )
+
+  src = '../smr/replicator/%s' % (c.SMR)
+  shutil.copy(src, smr_dir( id ))
+
+def copy_gw( id ):
+  if not os.path.exists( gw_dir( id ) ):
+    os.mkdir( gw_dir( id ) )
+
+  src = '../gateway/%s' % c.GW
+  shutil.copy(src, gw_dir( id ))
+
+def copy_redis_server( id ):
+  if not os.path.exists( redis_dir( id ) ):
+    os.mkdir( redis_dir( id ) )
+
+  src = '../redis-2.8.8/src/%s' % (c.REDIS)
+  shutil.copy(src, redis_dir( id ))
+
+def copy_cluster_util( id ):
+  if not os.path.exists( cluster_util_dir( id ) ):
+    os.mkdir( cluster_util_dir( id ) )
+
+  src = '../redis-2.8.8/src/%s' % (c.CLUSTER_UTIL)
+  shutil.copy(src, cluster_util_dir( id ))
+
+def copy_dump_util( id ):
+  if not os.path.exists( dump_util_dir( id ) ):
+    os.mkdir( dump_util_dir( id ) )
+
+  src = '../redis-2.8.8/src/%s' % (c.DUMP_UTIL)
+  shutil.copy(src, dump_util_dir( id ))
+
+def copy_log_util( id ):
+  if not os.path.exists( log_util_dir( id ) ):
+    os.mkdir( log_util_dir( id ) )
+
+  src = '../smr/smr/%s' % (c.LOG_UTIL)
+  shutil.copy(src, log_util_dir( id ))
+
+def copy_dump_util_plugin( id ):
+  if not os.path.exists( dump_util_dir( id ) ):
+    os.mkdir( dump_util_dir( id ) )
+
+  src = '../redis-2.8.8/src/%s' % (c.DUMP_UTIL_PLUGIN)
+  shutil.copy(src, dump_util_dir( id ))
+
+def copy_capi_so_file( id ):
+  if not os.path.exists( capi_dir( id ) ):
+    os.mkdir( capi_dir( id ) )
+
+  src = '../api/arcci/.obj64/lib/%s' % (c.CAPI_SO_FILE)
+  shutil.copy(src, capi_dir( id ))
+
+def copy_capi32_so_file( id ):
+  if not os.path.exists( capi_dir( id ) ):
+    os.mkdir( capi_dir( id ) )
+
+  src = '../api/arcci/.obj32/lib/%s' % (c.CAPI_SO_FILE)
+  shutil.copy(src, capi_dir( id ))
+
+def copy_capi_test_server( id ):
+  if not os.path.exists( capi_dir( id ) ):
+    os.mkdir( capi_dir( id ) )
+
+  src = '../tools/local_proxy/.obj64/%s' % (c.CAPI_TEST_SERVER)
+  shutil.copy(src, capi_dir( id ))
+
+def copy_capi32_test_server( id ):
+  if not os.path.exists( capi_dir( id ) ):
+    os.mkdir( capi_dir( id ) )
+
+  src = '../tools/local_proxy/.obj32/%s' % (c.CAPI_TEST_SERVER)
+  shutil.copy(src, '%s/%s' % (capi_dir( id ), c.CAPI32_TEST_SERVER))
+
+def copy_cm( id ):
+  if not os.path.exists( cc_dir( id ) ):
+    os.mkdir( cc_dir( id ) )
+
+  src = '../confmaster/target/%s' % (c.CC)
+  shutil.copy(src, '%s/%s' % (cc_dir( id ), c.CC))
+
+  src = '../confmaster/target/%s' % (c.CM_PROPERTY_FILE_NAME)
+  shutil.copy(src, '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME))
+
+  src = '../confmaster/script/%s' % (c.CM_EXEC_SCRIPT)
+  dst = '%s/%s' % (cc_dir( id ), c.CM_EXEC_SCRIPT)
+  shutil.copy(src, dst)
+  os.chmod( dst, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH )
+
+def start_confmaster( id, port ):
+  f_properties = open( '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME), 'r' )
+  contents = f_properties.read()
+  contents = string.replace( contents, 
+                             'confmaster.port=%d' % c.CM_DEFAULT_PORT, 
+                             'confmaster.port=%d' % port)
+  f_properties.close()
+
+  f_properties = open( '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME), 'w' )
+  f_properties.write( contents )
+  f_properties.close()
+
+  f_log_std = open_process_logfile( id, 'cc_std' )
+  f_log_err = open_process_logfile( id, 'cc_err' )
+  p = exec_proc_async( cc_dir( id ), './%s' % c.CM_EXEC_SCRIPT, True, None, f_log_std, f_log_err )
+  proc_mgmt.insert( cc_uid( id ), p )
+
+  time.sleep(2)
+  # check if the process is running properly
+  error = True
+  for try_cnt in range( 0, 20 ):
+    try:
+      t = telnetlib.Telnet( 'localhost', port )
+      t.write( 'ping\r\n' )
+      response = t.read_until( '\r\n' )
+      t.close()
+      if response.find('+PONG') is not -1:
+        error = False
+        break
+
+    except socket.error:
+      log('wait for connection established to confmaster, port=%d' % port)
+
+    time.sleep(1)
+
+  if error:
+    log('confmaster is not running properly. port=%d' % port)
+    kill_proc( p )
+    return -1
+  else:
+    return 0
+
+
+def do_logutil_cmd (id, subcmd):
+  parent_dir, log_dir = smr_log_dir( id ) 
+  cmd = './%s %s %s' % (c.LOG_UTIL, subcmd, log_dir)
+  p = exec_proc_async(log_util_dir(id), cmd, True, None, subprocess.PIPE, None)
+  ret = p.wait()
+  if ret <> 0:
+    log('failed to make memory log.')
+    log('  cmd:%s' % cmd)
+    log('  return code:%d' % p.returncode)
+    log(p.stdout.readlines())
+    return -1
+  else:
+    return 0 
+
+def start_smr_replicator( id, ip, base_port, mgmt_port, verbose, check, log_delete_delay ):
+  # setting log directory
+  parent_dir, log_dir = smr_log_dir( id ) 
+  full_path = '%s/%s' % (parent_dir, log_dir)
+  if not os.path.exists( full_path ):
+    cmd = 'mkdir %s' % full_path
+    ret = shell_cmd_sync( cmd, 0 )
+    if ret <> 0:
+      log('failed to make log directory.')
+      return -1
+    # make in memory volume
+    if config.opt_use_memlog:
+      do_logutil_cmd(id, 'createlog')
+
+  cmd = './%s -d %s -b %d -v %d -x %d' % (c.SMR, log_dir, base_port, verbose, log_delete_delay)
+  log(cmd)
+  f_log_std = open_process_logfile( id, 'smr_std' )
+  f_log_err = open_process_logfile( id, 'smr_err' )
+  p = exec_proc_async( smr_dir( id ), cmd, True, None, f_log_std, f_log_err )  
+
+  uid = smr_uid( id )
+  proc_mgmt.insert( uid, p )
+
+  # check if the process is running properly
+  if check:
+    if check_if_smr_is_running_properly( ip, mgmt_port ) is not 0:
+      proc_mgmt.kill( uid )
+      return -1
+
+  return 0
+
+
+def start_redis_server( id, smr_port, redis_port, check=True, max_try=30 ):
+  cmd = './%s --smr-local-port %d --port %d --save ""' % (c.REDIS, smr_port, redis_port)
+  f_log_std = open_process_logfile( id, 'redis_std' )
+  f_log_err = open_process_logfile( id, 'redis_err' )
+  p = exec_proc_async(   redis_dir( id )
+                            , cmd
+                            , True
+                            , None
+                            , f_log_std
+                            , f_log_err )
+
+  uid = redis_uid( id )
+  proc_mgmt.insert( uid, p )
+
+  # check if the process is running properly
+  if check:
+    if check_if_redis_is_running_properly( redis_port, 1, max_try ) is not 0:
+      proc_mgmt.kill( uid )
+      return -1
+  return 0
+
+
+def start_gateway( id, ip, cm_port, cluster_name, gw_port, check=True ):
+  cmd = './%s -c %s -b %d -n %s -p %d' % (c.GW, ip, cm_port, cluster_name, gw_port)
+  log(cmd)
+  f_log_std = open_process_logfile( id, 'gw_std' )
+  f_log_err = open_process_logfile( id, 'gw_err' )
+  p = exec_proc_async( gw_dir( id ), cmd, True, None, f_log_std, f_log_err )
+
+  uid = gateway_uid( id )
+  proc_mgmt.insert( uid, p )
+
+  # check if the process is running properly
+  if check:
+    if check_if_gateway_is_running_properly( ip, gw_port ) is not 0:
+      proc_mgmt.kill( uid )
+      return -1
+  return 0
+
+
+def start_proc( working_dir, cmd ):
+  f_properties.close()
+
+  f_properties = open( '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME), 'w' )
+  f_properties.write( contents )
+  f_properties.close()
+
+  f_log_std = open_process_logfile( id, 'cc_std' )
+  f_log_err = open_process_logfile( id, 'cc_err' )
+  p = exec_proc_async( cc_dir( id ), './%s' % c.CM_EXEC_SCRIPT, True, None, f_log_std, f_log_err )
+  proc_mgmt.insert( cc_uid( id ), p )
+
+  time.sleep(2)
+  # check if the process is running properly
+  error = True
+  for try_cnt in range( 0, 10 ):
+    try:
+      t = telnetlib.Telnet( 'localhost', port )
+      t.write( 'ping\r\n' )
+      response = t.read_until( '\r\n' )
+      t.close()
+      if response.find('+PONG') is not -1:
+        error = False
+        break
+
+    except socket.error:
+      print 'failed to connect to confmaster, port=%d' % port
+
+    time.sleep(1)
+
+  if error:
+    log('confmaster is not running properly.')
+    kill_proc( p )
+    return -1
+
+  return 0
+
+
+def killps_y( name ):
+  _killps_y( name )
+  log('kill processes "%s"' % name)
+  shell_cmd_sync( 'ps -ef | grep smr', 0 )
+  shell_cmd_sync( 'ps -ef | grep confmaster', 0 )
+  return 0
+
+
+def kill_smr( id ):
+  uid = smr_uid( id )
+  proc_mgmt.kill( uid )
+  return 0
+
+
+def kill_redis( id ):
+  uid = redis_uid( id )
+  proc_mgmt.kill( uid )
+  return 0
+
+
+def kill_all_processes():
+  proc_mgmt.kill_all()
+  return 0
+
+
+def zk_cmd( cmd ):
+  args = 'zkCli.sh -server localhost:2181 %s' % (cmd)
+  p = exec_proc_async( './', args, True, out_handle=subprocess.PIPE, err_handle=subprocess.PIPE )
+  p.wait()
+  (std, err) = p.communicate()
+  # zkCli.sh stdout : znode data
+  #          stderr : output messages(not error) and error messages
+  if err != '':
+    log( 'failed to execute zkCli.sh. command:%s, err:%s' % (cmd, err) )
+  
+  lines = std.split('\n')
+  znode_data = ''
+  i = 0
+  while i < len(lines):
+    if lines[i] == 'WatchedEvent state:SyncConnected type:None path:null':
+      j = i+1
+      while j < len(lines)-1:
+        if znode_data != '':
+          znode_data += '\n'
+        znode_data += lines[j]
+        j += 1
+      break
+    i += 1
+
+  return {'err':err, 'znode_data':znode_data}
+
+
+def delete_redis_check_point( id ):
+  full_path = '%s/%s' % (redis_dir( id ), c.REDIS_CHECK_POINT_FILE_NAME)
+  cmd = 'rm -f %s' % full_path
+  ret = shell_cmd_sync( cmd, 0 )
+  if ret <> 0:
+    log('failed to delete redis check point')
+    return -1
+  return 0
+ 
+
+def delete_smr_log_dir( id, base_port ):
+  if config.opt_use_memlog:
+    do_logutil_cmd(id, 'deletelog')
+
+  parent_dir, log_dir = smr_log_dir( id ) 
+  full_path = '%s/%s' % (parent_dir, log_dir)
+  cmd = 'rm -rf %s' % full_path
+  ret = shell_cmd_sync( cmd, 0 )
+  if ret <> 0:
+    log('failed to delete the log directory.')
+    return -1
+  return 0
+
+
+def delete_smr_logs( id ):
+  if config.opt_use_memlog:
+    do_logutil_cmd(id, 'deletelog')
+
+  parent_dir, log_dir = smr_log_dir( id )
+  full_path = '%s/%s' % (parent_dir, log_dir)
+  cmd = 'rm -rf %s/*' % full_path
+  ret = shell_cmd_sync( cmd, 0 )
+  if ret <> 0:
+    log('failed to delete the logs.')
+    return -1
+  return 0
+
+
+def shutdown_smr( id, ip, base_port ):
+  uid = smr_uid( id )
+  proc = proc_mgmt.get( uid )
+  if proc is None:
+    log('process(%s) does not exist.')
+    return -1
+
+  proc_mgmt.kill( uid )
+  time.sleep( 1 )
+
+  cmd = "kill `ps aux | grep smr-replicator | grep '\-b %d' | grep -v grep | awk '{print $2}'`" % base_port
+  shell_cmd_sync(cmd, 0)
+  log(cmd)
+
+  time.sleep( 1 )
+  return 0
+
+
+def shutdown_redis( id, redis_port ):
+  uid = redis_uid( id )
+  proc = proc_mgmt.get( uid )
+  if proc is None:
+    return -1
+
+  proc_mgmt.kill( uid )
+  time.sleep( 1 )
+
+  cmd = "kill `ps axu | grep redis-arc | grep '\-\-port %d' | grep -v grep | awk '{print $2}'`" % redis_port
+  shell_cmd_sync(cmd, 0)
+
+  time.sleep( 1 )
+  return 0
+
+def shutdown_hbc( id ):
+  uid = hbc_uid( id )
+  proc = proc_mgmt.get( uid )
+  if proc is None:
+    return -1
+
+  proc_mgmt.kill( uid )
+  time.sleep( 1 )
+  return 0
+
+
+def shutdown_cm( id ):
+  uid = cc_uid( id )
+  proc = proc_mgmt.get( uid )
+  if proc is None:
+    return -1
+
+  proc_mgmt.kill( uid )
+  time.sleep( 1 )
+  return 0
+
+
+def shutdown_gateway( id, port, force=False ):
+  uid = gateway_uid( id )
+  proc = proc_mgmt.get( uid )
+  if proc is None:
+    if not force:
+      return -1
+  else:
+    proc_mgmt.kill( uid )
+    time.sleep( 1 )
+
+  cmd = "kill `ps axu | grep redis-gateway | grep '\-p %d' | grep -v grep | awk '{print $2}'`" % port
+  shell_cmd_sync(cmd, 0)
+
+  time.sleep( 1 )
+  return 0
+
+
+def backup_log( backup_log_dir ):
+  try:
+    shutil.copytree(c.homedir, backup_log_dir)
+  except exceptions.OSError as e:
+    if e.errno == 17:
+      pass
+    else:
+      raise e
+  return 0
+
+
+def del_dumprdb( id ):
+  dir = redis_dir( id )
+  path = '%s/dump.rdb' % dir 
+  ret = os.path.exists( path )
+  if ret:
+    print 'delete %s' % path
+    os.remove( path )
+  return 0
+
+
+def check_if_dumprdb_exists( id ):
+  dir = redis_dir( id )
+  path = '%s/dump.rdb' % dir 
+  print 'check_if_dumprdb_exists %s' % path
+  ret = os.path.exists( path )
+  return ret
+
+
+def start_zookeeper( zk_dir ):
+  old_cwd = os.path.abspath( os.getcwd() )
+  try:
+    zk_dir = zk_dir.replace('$HOME', os.getenv('HOME'))
+    os.chdir( zk_dir )
+    p = subprocess.Popen(
+            ["./zkServer.sh", "start"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
+    stdout, stderr = p.communicate()
+    return stdout, p.returncode
+  finally:
+    os.chdir( old_cwd )
+  return None, None
+
+
+def stop_zookeeper( zk_dir ):
+  old_cwd = os.path.abspath( os.getcwd() )
+  try:
+    zk_dir = zk_dir.replace('$HOME', os.getenv('HOME'))
+    os.chdir( zk_dir )
+    p = subprocess.Popen(
+            ["./zkServer.sh", "stop"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,)
+    stdout, stderr = p.communicate()
+    return stdout, p.returncode
+  finally:
+    os.chdir( old_cwd )
+  return None, None
+
+
+def ls( dir ):
+  try:
+    return os.listdir( dir )
+  except OSError as e:
+    log('failed to os.listdir.', e)
+    return []
 
 
 def cc_uid( id ):

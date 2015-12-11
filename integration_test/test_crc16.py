@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import gateway_mgmt
 import config
@@ -11,7 +11,6 @@ class TestCRC16( unittest.TestCase ):
 
   @classmethod
   def setUpClass( cls ):
-    util.set_remote_process_logfile_prefix( cls.cluster, 'TestCRC16' )
     ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
     if ret  is not 0:
       default_cluster.finalize( cls.cluster )
@@ -21,6 +20,7 @@ class TestCRC16( unittest.TestCase ):
     default_cluster.finalize( cls.cluster )
 
   def setUp( self ):
+    util.set_process_logfile_prefix( 'TestCRC16_%s' % self._testMethodName )
     return 0
 
   def tearDown( self ):

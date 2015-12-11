@@ -1,18 +1,16 @@
 import unittest
-import test_base
+import testbase
 import util
 import gateway_mgmt
 import config
 import default_cluster
 import demjson
-import xmlrpclib
 import random
 import threading
 import telnetlib
 import constant
 import time
 import sys
-import pdb
 import load_generator
 import functools
 from arcci.arcci import *
@@ -23,12 +21,11 @@ cluster_2_pg_count = 4
 cluster_2_pgs_per_pg = 2
 
 class CresteClusterThread(threading.Thread):
-    def __init__(self, cluster_name, ip, pm_name, rpc, pg_max, pgs_per_pg, leader_cm):
+    def __init__(self, cluster_name, ip, pm_name, pg_max, pgs_per_pg, leader_cm):
         threading.Thread.__init__(self)
         self.cluster_name = cluster_name
         self.ip = ip
         self.pm_name = pm_name
-        self.rpc = rpc
         self.leader_cm = leader_cm
         self.pg_max = pg_max
         self.pgs_per_pg = pgs_per_pg
@@ -75,54 +72,22 @@ class CresteClusterThread(threading.Thread):
               server['gateway_port'] = gateway_port
               server['redis_port'] = redis_port
               server['zk_port'] = 2181
-              server['rpc'] = self.rpc
 
               cluster['servers'].append(server)
 
         # Send cluster information to MGMT-CC
-        test_base.initialize_cluster(cluster, self.leader_cm)
+        testbase.initialize_cluster(cluster, self.leader_cm)
 
         # Set up pgs binaries
         try:
-           smr = None
-           gw = None
-           redis = None
-           cluster_util = None
-
-           path = '../smr/replicator/%s' % constant.SMR
-           smr = open(path, 'rb')
-
-           path = '../gateway/%s' % constant.GW
-           gw = open(path, 'rb')
-
-           path = '../redis-2.8.8/src/%s' % constant.REDIS
-           redis = open(path, 'rb')
-
-           path = '../redis-2.8.8/src/%s' % constant.CLUSTER_UTIL
-           cluster_util = open(path, 'rb')
-
            for server in cluster['servers']:
               id = server['id']
-              rpc = server['rpc']
-
-              smr.seek(0, 0)
-              gw.seek(0, 0)
-              redis.seek(0, 0)
-              cluster_util.seek(0, 0)
-
               util.log('copy binaries, server_id=%d' % id)
-              if rpc.rpc_copy_smrreplicator(xmlrpclib.Binary(smr.read()), id) is not 0:
-                 util.log('failed to copy smr-replicator')
-                 return 
-              if rpc.rpc_copy_gw(xmlrpclib.Binary(gw.read()), id) is not 0:
-                 util.log('failed to copy gateway')
-                 return 
-              if rpc.rpc_copy_redis_server(xmlrpclib.Binary(redis.read()), id) is not 0:
-                 util.log('failed to copy redis-arc')
-                 return 
-              if rpc.rpc_copy_cluster_util(xmlrpclib.Binary(cluster_util.read()), id) is not 0:
-                 util.log('failed to copy cluster-util')
-                 return 
+
+              util.copy_smrreplicator(id)
+              util.copy_gw(id)
+              util.copy_redis_server(id)
+              util.copy_cluster_util(id)
            
         except IOError as e:
            util.log(e)
@@ -130,45 +95,35 @@ class CresteClusterThread(threading.Thread):
            return
 
         except:
-           util.log('Error: file transfer error.')
+           util.log('Error: file copy error.')
            util.log(sys.exc_info()[0])
            raise
 
-        finally:
-           if smr != None:
-              smr.close()
-           if gw != None:
-              gw.close()
-           if redis != None:
-              redis.close()
-           if cluster_util != None:
-              cluster_util.close()
-
         # Cleanup servers`s directories
         for server in cluster['servers']:
-           if test_base.cleanup_pgs_log_and_ckpt(cluster['cluster_name'], server) != 0:
+           if testbase.cleanup_pgs_log_and_ckpt(cluster['cluster_name'], server) != 0:
               util.log('failed to cleanup_test_environment, id=%d' % server['id'])
               return
 
         # Start pgs
         for server in cluster['servers']:
-           if test_base.request_to_start_smr(server) != 0:
+           if testbase.request_to_start_smr(server) != 0:
               util.log('failed to request_to_start_smr, id=%d' % server['id'])
               return
 
         for server in cluster['servers']:
-           if test_base.request_to_start_redis(server, check=False) != 0:
+           if testbase.request_to_start_redis(server, check=False) != 0:
               util.log('failed to request_to_start_redis, id=%d' % server['id'])
               return
 
         for server in cluster['servers']:
-           if test_base.wait_until_finished_to_set_up_role(server) != 0:
+           if testbase.wait_until_finished_to_set_up_role(server) != 0:
               util.log('failed to role set up, id=%d' % server['id'])
               return 
 
         for i in range(self.pg_max):
            server = cluster['servers'][i]
-           if test_base.request_to_start_gateway(cluster['cluster_name'], server, self.leader_cm) != 0:
+           if testbase.request_to_start_gateway(cluster['cluster_name'], server, self.leader_cm) != 0:
               util.log('failed to request_to_start_gateway, id=%d' % server['id'])
               return
 
@@ -299,6 +254,7 @@ class TestConfMaster(unittest.TestCase):
         pass
 
     def setUp(self):
+        util.set_process_logfile_prefix('TestConfMaster_%s' % self._testMethodName)
         pass
 
     def tearDown(self):
@@ -334,7 +290,6 @@ class TestConfMaster(unittest.TestCase):
         self.configuration_master_commands()
 
     def configuration_master_commands(self):
-        util.set_remote_process_logfile_prefix(self.cluster, 'TestConfMaster')
         util.print_frame()
 
         ret = default_cluster.initialize_for_test_confmaster(self.cluster)
@@ -449,7 +404,7 @@ class TestConfMaster(unittest.TestCase):
                     break
             self.assertNotEquals(None, follower2, 'failed to get follower2')
 
-            ret = test_base.request_to_shutdown_cm(leader)
+            ret = testbase.request_to_shutdown_cm(leader)
             self.assertEquals(0, ret, 'failed to request_to_shutdown_cm. server:%d' % leader['id'])
             time.sleep(5)
 
@@ -547,7 +502,6 @@ class TestConfMaster(unittest.TestCase):
 
             try:
                 # Start default cluster
-                util.set_remote_process_logfile_prefix(self.cluster, 'TestConfMaster_%s' % self._testMethodName)
                 ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster) 
                 self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
 
@@ -618,7 +572,7 @@ class TestConfMaster(unittest.TestCase):
                 # Test CresteClusterThread (additioal cluster)
                 create_cluster_thrd = CresteClusterThread(cluster_2_name, 
                         self.cluster['servers'][0]['ip'], self.cluster['servers'][0]['pm_name'], 
-                        self.cluster['servers'][0]['rpc'], cluster_2_pg_count, cluster_2_pgs_per_pg, self.leader_cm)
+                        cluster_2_pg_count, cluster_2_pgs_per_pg, self.leader_cm)
 
                 create_cluster_thrd.start()
                 create_cluster_thrd.join()
@@ -696,7 +650,6 @@ class TestConfMaster(unittest.TestCase):
         util.print_frame()
         load_gen_list = {}
         try:
-            util.set_remote_process_logfile_prefix( self.cluster, 'TestConfMaster_%s' % self._testMethodName )
             ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
             self.assertEquals( ret, 0, 'failed to TestConfMaster.initialize' )
 
@@ -787,7 +740,6 @@ class TestConfMaster(unittest.TestCase):
             ret = util.nic_add('eth1:arc', '127.0.0.100')
             self.assertTrue(ret, 'failed to add virtual network interface.')
 
-            util.set_remote_process_logfile_prefix(cluster, 'TestConfMaster_%s' % self._testMethodName)
             ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
 
@@ -824,7 +776,7 @@ class TestConfMaster(unittest.TestCase):
                 util.log('wait... %d' % i)
                 time.sleep(1)
 
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -864,17 +816,17 @@ class TestConfMaster(unittest.TestCase):
             gw_server['id'] = gw_id
             gw_server['gateway_port'] = 8230
 
-            ret = util.deploy_gateway(gw_id, gw_server['rpc'])
+            ret = util.deploy_gateway(gw_id)
             self.assertTrue(ret, '[ADD GW] deploy gateway fail. gw_id:%d' % gw_id)
 
-            ret = test_base.request_to_start_gateway(cluster['cluster_name'], gw_server, leader_cm)
+            ret = testbase.request_to_start_gateway(cluster['cluster_name'], gw_server, leader_cm)
             self.assertEqual(ret, 0, '[ADD GW] start gateway fail. gw_id:%d' % gw_id)
 
             for i in range(2):
                 util.log('wait... %d' % i)
                 time.sleep(1)
 
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5},{"affinity":"A4096N4096","gw_id":100}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -885,14 +837,14 @@ class TestConfMaster(unittest.TestCase):
             # Delete gateway and check affinity #
             #####################################
             util.log('Delete gateway and check gateway affinity')
-            ret = test_base.request_to_shutdown_gateway(cluster['cluster_name'], gw_server, leader_cm)
+            ret = testbase.request_to_shutdown_gateway(cluster['cluster_name'], gw_server, leader_cm)
             self.assertEqual(ret, 0, '[DELETE GW] shutdown gateway fail. gw_id:%d' % gw_id)
 
             for i in range(2):
                 util.log('wait... %d' % i)
                 time.sleep(1)
 
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -928,9 +880,9 @@ class TestConfMaster(unittest.TestCase):
 
             servers = [server1, server2]
 
-            ret = util.deploy_pgs(server1['id'], server1['rpc'])
+            ret = util.deploy_pgs(server1['id'])
             self.assertTrue(ret, '[ADD PG] deploy pgs fail. pgs_id:%d' % server1['id'])
-            ret = util.deploy_pgs(server2['id'], server2['rpc'])
+            ret = util.deploy_pgs(server2['id'])
             self.assertTrue(ret, '[ADD PG] deploy pgs fail. pgs_id:%d' % server2['id'])
 
             ret = util.pg_add(cluster, servers, leader_cm, start_gw=False)
@@ -981,7 +933,7 @@ class TestConfMaster(unittest.TestCase):
                 +-------+---------------------+--------+----------------+------+-----------+
             """
 
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = []
             expected_affinity.append(
                 sorted(
@@ -1038,7 +990,7 @@ class TestConfMaster(unittest.TestCase):
                 +-------+---------------------+--------+----------------+------+-----------+
             """
 
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity[0])
             self.assertTrue(ok, '[ROLE CHANGE] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
@@ -1050,9 +1002,9 @@ class TestConfMaster(unittest.TestCase):
             server = server2
 
             # shutdown
-            ret = test_base.request_to_shutdown_smr(server)
+            ret = testbase.request_to_shutdown_smr(server)
             self.assertEqual(ret, 0, '[MASTER PGS FAILOVER] failed to shutdown smr')
-            ret = test_base.request_to_shutdown_redis(server)
+            ret = testbase.request_to_shutdown_redis(server)
             self.assertEquals(ret, 0, '[MASTER PGS FAILOVER] failed to shutdown redis')
 
             max_try = 20
@@ -1094,7 +1046,7 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -1102,12 +1054,12 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
             # recovery
-            ret = test_base.request_to_start_smr(server)
+            ret = testbase.request_to_start_smr(server)
             self.assertEqual(ret, 0, '[MASTER PGS FAILOVER] failed to start smr')
-            ret = test_base.request_to_start_redis(server)
+            ret = testbase.request_to_start_redis(server)
             self.assertEqual(ret, 0, '[MASTER PGS FAILOVER] failed to start redis')
 
-            ret = test_base.wait_until_finished_to_set_up_role(server, max_try)
+            ret = testbase.wait_until_finished_to_set_up_role(server, max_try)
             self.assertEquals(ret, 0, '[MASTER PGS FAILOVER] failed to role change. smr_id:%d' % (server['id']))
             """ 
                 +-------+----------------+------+-------+
@@ -1138,7 +1090,7 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -1152,9 +1104,9 @@ class TestConfMaster(unittest.TestCase):
             server = server2
 
             # shutdown
-            ret = test_base.request_to_shutdown_smr(server)
+            ret = testbase.request_to_shutdown_smr(server)
             self.assertEqual(ret, 0, '[SLAVE PGS FAILOVER] failed to shutdown smr')
-            ret = test_base.request_to_shutdown_redis(server)
+            ret = testbase.request_to_shutdown_redis(server)
             self.assertEquals(ret, 0, '[SLAVE PGS FAILOVER] failed to shutdown redis')
 
             max_try = 20
@@ -1195,7 +1147,7 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -1205,12 +1157,12 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ok, '[SLAVE PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
             # recovery
-            ret = test_base.request_to_start_smr(server)
+            ret = testbase.request_to_start_smr(server)
             self.assertEqual(ret, 0, '[SLAVE PGS FAILOVER] failed to start smr')
-            ret = test_base.request_to_start_redis(server)
+            ret = testbase.request_to_start_redis(server)
             self.assertEqual(ret, 0, '[SLAVE PGS FAILOVER] failed to start redis')
 
-            ret = test_base.wait_until_finished_to_set_up_role(server, max_try)
+            ret = testbase.wait_until_finished_to_set_up_role(server, max_try)
             self.assertEquals(ret, 0, '[SLAVE PGS FAILOVER] failed to role change. smr_id:%d' % (server['id']))
             """ 
                 +-------+----------------+------+-------+
@@ -1241,7 +1193,7 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -1260,7 +1212,7 @@ class TestConfMaster(unittest.TestCase):
             ret = util.pg_del(cluster, servers, leader_cm, stop_gw=False)
             self.assertTrue(ret, '[DELETE PG] delete pg fail.')
 
-            affinity_data = util.get_gateway_affinity(leader_cm['rpc'], cluster['cluster_name'])
+            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
@@ -1295,7 +1247,6 @@ class TestConfMaster(unittest.TestCase):
                     cluster = config.clusters[0]
                     leader_cm = cluster['servers'][0]
 
-                    util.set_remote_process_logfile_prefix(cluster, 'TestConfMaster_%s' % test_name)
                     ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
                     self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
 
@@ -1551,7 +1502,6 @@ class TestConfMaster(unittest.TestCase):
     def test_worklog_no_after_mgmt_failover(self):
         util.print_frame()
         try:
-            util.set_remote_process_logfile_prefix( self.cluster, 'TestConfMaster_%s' % self._testMethodName )
             ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
             self.assertEquals( ret, 0, 'failed to TestConfMaster.initialize' )
 
@@ -1571,7 +1521,7 @@ class TestConfMaster(unittest.TestCase):
 
                 # Shutdown leader_cm in order to elect new leader.
                 util.log( 'Shutdown confmaster %s:%d' % (server['ip'], server['cm_port']) )
-                self.assertEquals( 0, test_base.request_to_shutdown_cm( server ),
+                self.assertEquals( 0, testbase.request_to_shutdown_cm( server ),
                                    'failed to request_to_shutdown_cm, server:%d' % server['id'] )
                 time.sleep( 20 )
 
@@ -1607,13 +1557,12 @@ class TestConfMaster(unittest.TestCase):
             leader_cm = cluster['servers'][0]
             gw_servers = map(lambda s: util.deepcopy_server(s), cluster['servers'])
 
-            util.set_remote_process_logfile_prefix(cluster, 'TestConfMaster_%s' % self._testMethodName)
             ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
 
             # Delete Affinity ZNODE
             util.log('Delete gateway affinity znode')
-            ret = leader_cm['rpc'].rpc_zk_cmd('rmr /RC/NOTIFICATION/CLUSTER/%s/AFFINITY' % cluster['cluster_name'])
+            ret = util.zk_cmd('rmr /RC/NOTIFICATION/CLUSTER/%s/AFFINITY' % cluster['cluster_name'])
             ret = ret['err']
             self.assertTrue(len(ret.strip()) == 0, 'failed to remove affinity znode. ret:%s' % ret)
             time.sleep(1)
@@ -1646,7 +1595,7 @@ class TestConfMaster(unittest.TestCase):
     def restart_gateway_with_virtual_network_info(self, cluster, leader_cm):
         # Shutdown gateways
         for s in cluster['servers']:
-            ret = test_base.request_to_shutdown_gateway(cluster['cluster_name'], s, leader_cm)
+            ret = testbase.request_to_shutdown_gateway(cluster['cluster_name'], s, leader_cm)
             self.assertEqual(ret, 0, 'failed to shutdown gateway. gw=%s:%d' % (s['ip'], s['gateway_port']))
 
         # Run gateways on 127.0.0.100
@@ -1669,7 +1618,7 @@ class TestConfMaster(unittest.TestCase):
 
         for i in xrange(0, 3):
             s = cluster['servers'][i]
-            ret = test_base.request_to_start_gateway(cluster['cluster_name'], s, leader_cm)
+            ret = testbase.request_to_start_gateway(cluster['cluster_name'], s, leader_cm)
             self.assertEqual(ret, 0, 'failed to start gateway. gw=%s:%d' % (s['ip'], s['gateway_port']))
 
         util.nic_del('eth1:arc0')
@@ -1694,7 +1643,7 @@ class TestConfMaster(unittest.TestCase):
 
         for i in xrange(3, 6):
             s = cluster['servers'][i]
-            ret = test_base.request_to_start_gateway(cluster['cluster_name'], s, leader_cm)
+            ret = testbase.request_to_start_gateway(cluster['cluster_name'], s, leader_cm)
             self.assertEqual(ret, 0, 'failed to start gateway. gw=%s:%d' % (s['ip'], s['gateway_port']))
 
         util.nic_del('eth1:arc1')
@@ -1708,7 +1657,6 @@ class TestConfMaster(unittest.TestCase):
             leader_cm = cluster['servers'][0]
             gw_servers = map(lambda s: util.deepcopy_server(s), cluster['servers'])
 
-            util.set_remote_process_logfile_prefix(cluster, 'TestConfMaster_%s' % self._testMethodName)
             ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
 

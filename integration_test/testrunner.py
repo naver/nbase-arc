@@ -1,9 +1,14 @@
 import unittest
 import sys
-import test_base
+import testbase
 import config
 import util
 import getopt
+import imp
+import sys
+import os
+import signal
+import default_cluster
 
 def print_list_and_input(list):
   while True:
@@ -59,7 +64,7 @@ def run_test_modules(module_list):
     suite = unittest.TestLoader().loadTestsFromModule(module)
     alltests.addTest(suite)
 
-  unittest.TextTestRunner(verbosity=2).run(alltests)
+  return unittest.TextTestRunner(verbosity=2).run(alltests)
     
 
 def run_test(module, testcase, method):
@@ -71,7 +76,7 @@ def run_test(module, testcase, method):
   else:
     suite = unittest.TestSuite()
     suite.addTest(getattr(module, testcase)(method))
-  unittest.TextTestRunner(verbosity=2).run(suite)
+  return unittest.TextTestRunner(verbosity=2).run(suite)
 
 
 def prepare_cases(test_module_list, cases):
@@ -133,10 +138,6 @@ def console(test_module_list):
         else:
           run_test(test_module, testcase, method)
 
-
-import imp
-import sys
-
 def __import__(name, globals=None, locals=None, fromlist=None):
   try:
     return sys.modules[name]
@@ -151,31 +152,165 @@ def __import__(name, globals=None, locals=None, fromlist=None):
     if fp:
       fp.close()
 
-if __name__ == '__main__':
-  if len(sys.argv) < 2:
-    print "you must specify test module name"
-    sys.exit(1)
+def signal_handler( *args ):
+  exit(-1)
 
+def cleanup_test_env(opt_skip_copy_binaries):
+  # Kill processes
+  if testbase.cleanup_processes() != 0:
+    util.log('failed to cleanup test environment')
+    return -1
+
+  # Cleanup pgs directories
+  srv_id_dict = {}
+  for cluster in config.clusters:
+    for server in cluster['servers']:
+      id = server['id']
+      if srv_id_dict.has_key(id):
+        continue
+
+      if testbase.cleanup_pgs_log_and_ckpt( cluster['cluster_name'], server ) is not 0:
+        util.log( 'failed to cleanup_pgs_data' )
+        return -1
+      srv_id_dict[id] = True
+
+  # Setup binaries
+  if testbase.setup_binaries( config.clusters, opt_skip_copy_binaries ) != 0:
+    util.log('failed to initialize testbase')
+    return -1
+  
+  return 0
+
+def load_test_modules(opt_32bit_binary_test):
   module_list = []
-  for i in range(1, len(sys.argv)):
-    if sys.argv[i][0] != '-':
-      module_list.append(__import__(sys.argv[i][-3:] == '.py' and sys.argv[i][:-3] or sys.argv[i]))
+  if 'all' in sys.argv:
+    for file_name in os.listdir('.'):
+      if file_name.startswith('test_'):
+        if opt_32bit_binary_test and file_name.endswith('32.py'):
+          module_list.append(__import__(file_name[:-3]))
+        elif opt_32bit_binary_test == False and file_name.endswith('.py') and file_name.endswith('32.py') == False:
+          module_list.append(__import__(file_name[:-3]))
+  else:
+    for i in range(1, len(sys.argv)):
+      file_name = sys.argv[i]
+      if file_name[0] != '-' and file_name.endswith('.py'):
+        module_list.append(__import__(file_name[-3:] == '.py' and file_name[:-3] or file_name))
 
-  try:
-    opts, args = getopt.getopt(sys.argv[2:], 's', ['skip-copy_binaries'])
-  except getopt.GetoptError:
-    print 'usage: tester_startup.py [-i] [-l <backup_log_dir>] [-s]'
-    sys.exit(3)
+  return module_list
 
+def test_modules(module_list, opt_non_interactive, opt_backup_log_dir):
+  if opt_non_interactive:
+    test_results = []
+    for module in module_list:
+      ret = run_test(module, None, None)
+      test_results.append(ret)
+
+    # Summary
+    print "\n\n### SUMMARY ###\n"
+    errors = 0
+    failures = 0
+    for ret in test_results:
+      errors += len(ret.errors)
+      failures += len(ret.failures)
+
+      for e in ret.errors:
+        util.log(e[0])
+        util.log(e[1])
+        util.log('')
+
+      for f in ret.failures:
+        util.log(f[0])
+        util.log(f[1])
+        util.log('')
+
+    util.log("Test done. failures:%d, errors:%d" % (failures, errors))
+
+    if errors > 0 or failures > 0:
+      if opt_backup_log_dir is not None:
+        util.backup_log( opt_backup_log_dir )
+      return -1
+    else:
+      util.log("No Error!")
+
+  else:
+    console(module_list)
+
+  return 0
+
+
+USAGE = """usage: 
+  python testrunner.py [options] [file ..  or all]
+
+  python testrunner.py test_confmaster.py
+  python testrunner.py -a
+  python testrunner.py -a -c
+
+option:
+  -i <init> : Without test, run only nBase-ARC processes.
+  -l <backup_log_dir> : Backup test-logs to the specified directory. 
+  -s <skip-copy-binareis> : Skip copying binaries. (It must be used when binaries already be deployed.)
+  -c <client-32bit-test> : test 32bit client api
+  -n <non-interactive> : Run specified tests without any interaction with a user.
+
+Read README file for more details.
+"""
+
+def main():
+  if len(sys.argv) < 2:
+    print USAGE
+    return -1
+
+  signal.signal( signal.SIGINT, signal_handler )
+
+  # Verify config
   config.verify_config()
 
-  skip_copy_binaries = False 
-  for opt, arg in opts:
-    if opt in ("-s", '--skip-copy-binareis'):
-      skip_copy_binaries  = True
+  # Init options
+  try:
+    opts, args = getopt.getopt(sys.argv[1:], 'inl:sb', ['init', 'non-interactive', 'backup_log_dir', 'skip-copy_binaries', '32bit-binary-test'])
+  except getopt.GetoptError as e:
+    print USAGE
+    print e
+    return -1
 
-  if 0 != test_base.initialize( config.physical_machines, config.clusters, skip_copy_binaries ):
-    util.log('failed to initialize test_base')
-    sys.exit(2)
+  opt_init = False
+  opt_backup_log_dir = None
+  opt_skip_copy_binaries = False
+  opt_32bit_binary_test = False
+  opt_non_interactive = False
+  for opt, arg in opts:
+    if opt in ("-i", '--init'):
+      opt_init = True
+    elif opt in ("-l", '--backup_log_dir'):
+      opt_backup_log_dir = arg
+    elif opt in ("-s", '--skip-copy-binareis'):
+      opt_skip_copy_binaries = True
+    elif opt in ("-b", '--32bit-binary-test'):
+      opt_32bit_binary_test = True
+    elif opt in ("-n", '--non-interactive'):
+      opt_non_interactive = True
+
+  # Clean up test environment
+  if cleanup_test_env(opt_skip_copy_binaries) != 0:
+    print 'Clean up test environment fail! Aborting...'
+    return -1
+
+  # When -i flag is on, it exits after setting up a cluster.
+  if opt_init is True:
+    if default_cluster.initialize_starting_up_smr_before_redis( config.clusters[0], verbose=2 ) is not 0:
+      util.log('failed setting up servers.')
+    else:
+      util.log('finished successfully setting up servers.' )
+    return 0
   
-  console(module_list)
+  # Load test modules
+  module_list = load_test_modules(opt_32bit_binary_test)
+  print "[module list]"
+  print module_list
+
+  # Run test
+  return test_modules(module_list, opt_non_interactive, opt_backup_log_dir)
+
+if __name__ == '__main__':
+  exit(main())
+

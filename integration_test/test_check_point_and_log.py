@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import gateway_mgmt
@@ -22,7 +22,7 @@ class TestCheckPointAndLog( unittest.TestCase ):
     return 0
 
   def setUp( self ):
-    util.set_remote_process_logfile_prefix( self.cluster, 'TestCheckPointAndLog_%s' % self._testMethodName )
+    util.set_process_logfile_prefix( 'TestCheckPointAndLog_%s' % self._testMethodName )
     ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
     if ret is not 0:
       default_cluster.finalize( self.cluster )
@@ -81,14 +81,14 @@ class TestCheckPointAndLog( unittest.TestCase ):
     self.assertTrue( bgsave_ret, 'failed to bgsave. pgs%d' % server['id'] )
 
     # shutdown
-    ret = test_base.request_to_shutdown_smr( server )
+    ret = testbase.request_to_shutdown_smr( server )
     self.assertEqual( ret, 0, 'failed to shutdown smr' )
-    ret = test_base.request_to_shutdown_redis( server )
+    ret = testbase.request_to_shutdown_redis( server )
     self.assertEqual( ret, 0, 'failed to shutdown redis' )
     util.log('succeeded : shutdown pgs%d' % (server['id']))
 
     # delete smr_logs
-    ret = server['rpc'].rpc_delete_smr_logs( server['id'] )
+    ret = util.delete_smr_logs( server['id'] )
     self.assertEqual( ret, 0, 'failed to delete smr log, id:%d' % server['id'] )
     util.log('succeeded : delete replication logs')
 
@@ -106,14 +106,14 @@ class TestCheckPointAndLog( unittest.TestCase ):
       self.assertNotEqual( response.find( '+OK' ), -1, 'failed to set key value through gateway' )
 
     # recovery
-    ret = test_base.request_to_start_smr( server )
+    ret = testbase.request_to_start_smr( server )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( server )
+    ret = testbase.request_to_start_redis( server )
     self.assertEqual( ret, 0, 'failed to start redis' )
     time.sleep( 5 )
 
-    ret = test_base.wait_until_finished_to_set_up_role( server )
+    ret = testbase.wait_until_finished_to_set_up_role( server )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server['id']) )
     util.log('succeeded : recover pgs%d' % server['id'])
 
@@ -180,7 +180,7 @@ class TestCheckPointAndLog( unittest.TestCase ):
     
     # shutdown
     util.log('shutdown target')
-    ret = test_base.request_to_shutdown_smr( target )
+    ret = testbase.request_to_shutdown_smr( target )
     self.assertEqual( ret, 0, 'failed to shutdown smr' )
 
     time.sleep( 5 )
@@ -198,14 +198,14 @@ class TestCheckPointAndLog( unittest.TestCase ):
 
     # recovery
     util.log('recovery target')
-    ret = test_base.request_to_start_smr( target )
+    ret = testbase.request_to_start_smr( target )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( target )
+    ret = testbase.request_to_start_redis( target )
     self.assertEqual( ret, 0, 'failed to start redis' )
     time.sleep( 5 )
 
-    ret = test_base.wait_until_finished_to_set_up_role( target)
+    ret = testbase.wait_until_finished_to_set_up_role( target)
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (target['id']) )
 
     # check value
@@ -246,7 +246,7 @@ class TestCheckPointAndLog( unittest.TestCase ):
 
     # delete a local checkpoint
     util.log('delete pgs%d`s check point.' % target['id'])
-    target['rpc'].rpc_del_dumprdb( target['id'] )
+    util.del_dumprdb( target['id'] )
 
     # generate a remote check point
     bgsave_ret = util.bgsave( master )
@@ -254,7 +254,7 @@ class TestCheckPointAndLog( unittest.TestCase ):
 
     # shutdown
     util.log('shutdown target')
-    ret = test_base.request_to_shutdown_smr( target )
+    ret = testbase.request_to_shutdown_smr( target )
     self.assertEqual( ret, 0, 'failed to shutdown smr' )
 
     time.sleep( 10 )
@@ -272,14 +272,14 @@ class TestCheckPointAndLog( unittest.TestCase ):
 
     # recovery
     util.log('recovery target')
-    ret = test_base.request_to_start_smr( target )
+    ret = testbase.request_to_start_smr( target )
     self.assertEqual( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( target )
+    ret = testbase.request_to_start_redis( target )
     self.assertEqual( ret, 0, 'failed to start redis' )
     time.sleep( 5 )
 
-    ret = test_base.wait_until_finished_to_set_up_role( target)
+    ret = testbase.wait_until_finished_to_set_up_role( target)
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (target['id']) )
 
     # check value
@@ -345,11 +345,11 @@ class TestCheckPointAndLog( unittest.TestCase ):
 
     self.bgsave(redis)
 
-    test_base.request_to_shutdown_redis(server)    
-    test_base.request_to_shutdown_smr(server)    
+    testbase.request_to_shutdown_redis(server)    
+    testbase.request_to_shutdown_smr(server)    
 
-    test_base.request_to_start_smr(server, log_delete_delay=1)
-    test_base.request_to_start_redis(server)
+    testbase.request_to_start_smr(server, log_delete_delay=1)
+    testbase.request_to_start_redis(server)
 
     time.sleep(30)
     loglist = [f for f in os.listdir('%s/log0' % util.smr_dir(0)) if '.log' in f]

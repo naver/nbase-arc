@@ -5,12 +5,16 @@ import sys
 opt_use_memlog = os.path.exists("/tmp/opt_use_memlog")
 sudoer = os.getenv("NBASE_ARC_TEST_SUDOER")
 
+zookeeper_info = [
+        {'id':0, 'bin_dir':'$HOME/bin/zk1/bin'},
+        {'id':1, 'bin_dir':'$HOME/bin/zk2/bin'},
+        {'id':2, 'bin_dir':'$HOME/bin/zk3/bin'},
+]
+
 physical_machines = [
   {
     'name' : 'localhost',
     'ip' : '127.0.0.1',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'real',
   },
 
@@ -18,16 +22,12 @@ physical_machines = [
     'name' : 'virtual_localhost',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.100',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   },
   {
     'name' : 'virtual_localhost1',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.101',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   },
 
@@ -35,8 +35,6 @@ physical_machines = [
     'name' : 'vm2',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.101',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   },
 
@@ -44,16 +42,8 @@ physical_machines = [
     'name' : 'vm3',
     'ip' : '127.0.0.1',
     'virtual_ip' :  '127.0.0.102',
-    'update_port' : 8000, 
-    'proxy_port' : 8004,
     'type' : 'virtual',
   }
-]
-
-zookeeper_info = [
-        {'id':0, 'bin_dir':'$HOME/bin/zk1/bin'},
-        {'id':1, 'bin_dir':'$HOME/bin/zk2/bin'},
-        {'id':2, 'bin_dir':'$HOME/bin/zk3/bin'},
 ]
 
 server1  = { 
@@ -69,7 +59,6 @@ server1  = {
   'gateway_mgmt_port' : 8201,
   'redis_port' : 8109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 server2 = { 
@@ -85,7 +74,6 @@ server2 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 server3 = { 
@@ -101,7 +89,6 @@ server3 = {
   'gateway_mgmt_port' : 10201,
   'redis_port' : 10109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 server4  = { 
@@ -117,7 +104,6 @@ server4  = {
   'gateway_mgmt_port' : 8211,
   'redis_port' : 8119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 server40  = { 
@@ -133,7 +119,6 @@ server40  = {
   'gateway_mgmt_port' : 8211,
   'redis_port' : 8119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 server5 = { 
@@ -149,7 +134,6 @@ server5 = {
   'gateway_mgmt_port' : 9211,
   'redis_port' : 9119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 
@@ -166,7 +150,6 @@ server6 = {
   'gateway_mgmt_port' : 10211,
   'redis_port' : 10119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server1 = { 
@@ -183,7 +166,6 @@ virtual_server1 = {
   'gateway_mgmt_port' : 8201,
   'redis_port' : 8109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server2 = { 
@@ -200,7 +182,6 @@ virtual_server2 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server21 = { 
@@ -217,7 +198,6 @@ virtual_server21 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server3 = { 
@@ -234,7 +214,6 @@ virtual_server3 = {
   'gateway_mgmt_port' : 10201,
   'redis_port' : 10109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server4 = { 
@@ -251,7 +230,6 @@ virtual_server4 = {
   'gateway_mgmt_port' : 8211,
   'redis_port' : 8119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server5 = { 
@@ -268,7 +246,6 @@ virtual_server5 = {
   'gateway_mgmt_port' : 9211,
   'redis_port' : 9119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 virtual_server6 = { 
@@ -285,7 +262,6 @@ virtual_server6 = {
   'gateway_mgmt_port' : 10211,
   'redis_port' : 10119,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 vm1 = { 
@@ -302,7 +278,6 @@ vm1 = {
   'gateway_mgmt_port' : 8201,
   'redis_port' : 8109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 vm2 = { 
@@ -319,7 +294,6 @@ vm2 = {
   'gateway_mgmt_port' : 9201,
   'redis_port' : 9109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 vm3 = { 
@@ -336,7 +310,6 @@ vm3 = {
   'gateway_mgmt_port' : 10201,
   'redis_port' : 10109,
   'zk_port' : 2181,
-  'rpc' : None,
 }
 
 clusters = [

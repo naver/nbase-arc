@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import random
@@ -21,7 +21,6 @@ class TestUpgrade( unittest.TestCase ):
 
   @classmethod
   def setUpClass( cls ):
-    util.set_remote_process_logfile_prefix( cls.cluster, 'TestUpgrade' )
     ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster, verbose=2 )
     if ret is not 0:
       util.log( 'failed to initialize_starting_up_smr_before_redis in TestUpgrade' ) 
@@ -34,6 +33,7 @@ class TestUpgrade( unittest.TestCase ):
     return 0
 
   def setUp( self ):
+    util.set_process_logfile_prefix( 'TestUpgrade_%s' % self._testMethodName )
     return 0
 
   def tearDown( self ):

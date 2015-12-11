@@ -4,12 +4,10 @@ import subprocess
 import config
 import default_cluster
 import util
-import proxyserver_skel
-import test_base
+import testbase
 import redis_mgmt
 import time
 import json
-import pdb
 import telnet
 
 
@@ -47,6 +45,7 @@ def unblock_network(cluster, mgmt_ip, mgmt_port, final_state):
 
 class TestNetworkIsolation(unittest.TestCase):
     def setUp(self):
+        util.set_process_logfile_prefix( 'TestNetworkIsolation_%s' % self._testMethodName )
         self.cleanup_iptables()
         return 0
 
@@ -97,23 +96,6 @@ class TestNetworkIsolation(unittest.TestCase):
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1', config.clusters)[0]
         util.log(util.json_to_str(cluster))
-
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
 
         # MGMT
         mgmt_ip = cluster['servers'][0]['real_ip']
@@ -241,23 +223,6 @@ class TestNetworkIsolation(unittest.TestCase):
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_2', config.clusters)[0]
         util.log(util.json_to_str(cluster))
 
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
-
         # MGMT
         mgmt_ip = cluster['servers'][0]['real_ip']
         mgmt_port = cluster['servers'][0]['cm_port']
@@ -377,23 +342,6 @@ class TestNetworkIsolation(unittest.TestCase):
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1_2copy', config.clusters)[0]
         util.log(util.json_to_str(cluster))
-
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
 
         # MGMT
         mgmt_ip = cluster['servers'][0]['ip']
@@ -516,23 +464,6 @@ class TestNetworkIsolation(unittest.TestCase):
 
         self.leader_cm = cluster['servers'][0]
 
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
-
         # MGMT
         mgmt_ip = cluster['servers'][0]['real_ip']
         mgmt_port = cluster['servers'][0]['cm_port']
@@ -609,9 +540,9 @@ class TestNetworkIsolation(unittest.TestCase):
             # Shutdown
             server = cluster['servers'][1]
             util.log( 'shutdown pgs%d while hanging.' % server['id'] )
-            ret = test_base.request_to_shutdown_smr( server )
+            ret = testbase.request_to_shutdown_smr( server )
             self.assertEqual( ret, 0, 'failed to shutdown smr. id:%d' % server['id'] )
-            ret = test_base.request_to_shutdown_redis( server )
+            ret = testbase.request_to_shutdown_redis( server )
             self.assertEqual( ret, 0, 'failed to shutdown redis. id:%d' % server['id'] )
 
             # Check state F
@@ -654,14 +585,14 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Recovery
             util.log( 'restart pgs%d.' % server['id'] )
-            ret = test_base.request_to_start_smr( server )
+            ret = testbase.request_to_start_smr( server )
             self.assertEqual( ret, 0, 'failed to start smr. id:%d' % server['id'] )
 
-            ret = test_base.request_to_start_redis( server )
+            ret = testbase.request_to_start_redis( server )
             self.assertEqual( ret, 0, 'failed to start redis. id:%d' % server['id'] )
 
             wait_count = 20
-            ret = test_base.wait_until_finished_to_set_up_role( server, wait_count )
+            ret = testbase.wait_until_finished_to_set_up_role( server, wait_count )
             self.assertEqual( ret, 0, 'failed to role change. smr_id:%d' % (server['id']) )
 
             redis = redis_mgmt.Redis( server['id'] )
@@ -728,23 +659,6 @@ class TestNetworkIsolation(unittest.TestCase):
 
         self.leader_cm = cluster['servers'][0]
 
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
-
         # MGMT
         mgmt_ip = cluster['servers'][0]['real_ip']
         mgmt_port = cluster['servers'][0]['cm_port']
@@ -797,9 +711,9 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Shutdown master
             util.log( 'shutdown pgs%d while hanging.' % master['id'] )
-            ret = test_base.request_to_shutdown_smr( master )
+            ret = testbase.request_to_shutdown_smr( master )
             self.assertEqual( ret, 0, 'failed to shutdown smr. id:%d' % master['id'] )
-            ret = test_base.request_to_shutdown_redis( master )
+            ret = testbase.request_to_shutdown_redis( master )
             self.assertEqual( ret, 0, 'failed to shutdown redis. id:%d' % master['id'] )
 
             # Check state F
@@ -842,14 +756,14 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Recovery
             util.log( 'restart pgs%d.' % master['id'] )
-            ret = test_base.request_to_start_smr( master )
+            ret = testbase.request_to_start_smr( master )
             self.assertEqual( ret, 0, 'failed to start smr. id:%d' % master['id'] )
 
-            ret = test_base.request_to_start_redis( master )
+            ret = testbase.request_to_start_redis( master )
             self.assertEqual( ret, 0, 'failed to start redis. id:%d' % master['id'] )
 
             wait_count = 20
-            ret = test_base.wait_until_finished_to_set_up_role( master, wait_count )
+            ret = testbase.wait_until_finished_to_set_up_role( master, wait_count )
             self.assertEqual( ret, 0, 'failed to role change. smr_id:%d' % (master['id']) )
 
             redis = redis_mgmt.Redis( master['id'] )
@@ -909,23 +823,6 @@ class TestNetworkIsolation(unittest.TestCase):
         util.log(util.json_to_str(cluster))
 
         self.leader_cm = cluster['servers'][0]
-
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
 
         # MGMT
         mgmt_ip = cluster['servers'][0]['real_ip']
@@ -1041,17 +938,6 @@ class TestNetworkIsolation(unittest.TestCase):
                     time.sleep(1)
             self.assertTrue(ok, 'failed to check cluster state')
 
-            # Reset SMR option (slave_idle_timeout)
-            t = telnet.Telnet('SMR%d' % server['id'])
-            self.assertEqual(t.connect(server['ip'], server['smr_mgmt_port']), 0, 
-                    'Failed to connect to smr. ADDR=%s:%d' % (server['ip'], server['smr_mgmt_port']))
-            cmd = 'confset slave_idle_timeout_msec 18000'
-            util.log('[%s:%d] >> %s' % (server['ip'], server['smr_mgmt_port'], cmd))
-            t.write('confset slave_idle_timeout_msec 18000\r\n')
-            reply = t.read_until('\r\n').strip()
-            util.log('[%s:%d] << %s' % (server['ip'], server['smr_mgmt_port'], reply))
-            self.assertEqual(reply, '+OK', 'Failed to set slave_idle_timeout, REPLY=%s' % reply)
-
         # Check state
         self.assertNotEqual(initial_state, None, 'initial_state is None')
         self.assertNotEqual(final_state, None, 'final_state is None')
@@ -1099,23 +985,6 @@ class TestNetworkIsolation(unittest.TestCase):
         util.log(util.json_to_str(cluster))
 
         self.leader_cm = cluster['servers'][0]
-
-        # Initialize RPC
-        skip_copy_binaries = True
-        ret = test_base.initialize( config.physical_machines, [cluster], skip_copy_binaries )
-        self.assertEqual(ret, 0, 'failed to initialize test_base')
-
-        for physical_machine in config.physical_machines:
-            rpc = test_base.connect_to_update_server( physical_machine )
-            physical_machine['rpc'] = rpc
-
-            for server in cluster['servers']:
-                self.assertEqual(0, test_base.setup_rpc( server ), 'failed to setup_rpc, server_id:%d' % server['id'])
-
-            if skip_copy_binaries is False:
-                ret = test_base.send_binaries_to_testmachine( rpc, server )
-                self.assertEqual(0, ret, 'failed to send_binaries_to_testmachine, ip:%s, id:%d' % (server['ip'], server['id']))
-        util.set_remote_process_logfile_prefix( cluster, 'TestNetworkIsolation_%s' % self._testMethodName )
 
         # MGMT
         mgmt_ip = cluster['servers'][0]['real_ip']

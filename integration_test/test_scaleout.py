@@ -1,7 +1,7 @@
 import subprocess
 import util
 import unittest
-import test_base
+import testbase
 import default_cluster
 import os
 import smr_mgmt
@@ -26,7 +26,7 @@ class TestScaleout(unittest.TestCase):
         return 0
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestScaleout' )
+        util.set_process_logfile_prefix( 'TestScaleout_%s' % self._testMethodName )
         conf = {'smr_log_delete_delay':60}
         if default_cluster.initialize_starting_up_smr_before_redis( self.cluster, conf=conf ) is not 0:
             util.log('failed to TestScaleout.initialize')
@@ -79,7 +79,7 @@ class TestScaleout(unittest.TestCase):
             #TODO Temporary
             #cluster = config.clusters[0]
             #for server in cluster['servers']:
-            #    if test_base.request_to_shutdown_hbc(server) is not 0:
+            #    if testbase.request_to_shutdown_hbc(server) is not 0:
             #        util.log('scale in : failed to request to shutdown hbc')
             #        self.assertFalse('scale in : failed to request to shutdown hbc')
             #time.sleep(5)
@@ -92,7 +92,7 @@ class TestScaleout(unittest.TestCase):
             #TODO Temporary
             #cluster = config.clusters[0]
             #for server in cluster['servers']:
-            #    if test_base.request_to_start_heartbeat_checker( server ) is not 0:
+            #    if testbase.request_to_start_heartbeat_checker( server ) is not 0:
             #        util.log('scale in : failed to start hbc')
             #        self.assertFalse('scale in : failed to start hbc')
             #time.sleep(5)
@@ -148,7 +148,7 @@ class TestScaleout(unittest.TestCase):
         for s in config.clusters[0]['servers']:
             parent_dir, log_dir = util.smr_log_dir(s['id']) 
             path = '%s/%s' % (parent_dir, log_dir)
-            old_logs[s['id']] = s['rpc'].rpc_ls(path) 
+            old_logs[s['id']] = util.ls(path) 
 
         # bgsave in order to make smrlogs deleted.
         for s in config.clusters[0]['servers']:
@@ -171,7 +171,7 @@ class TestScaleout(unittest.TestCase):
             for s in config.clusters[0]['servers']:
                 parent_dir, log_dir = util.smr_log_dir(s['id']) 
                 path = '%s/%s' % (parent_dir, log_dir)
-                cur_logs[s['id']] = s['rpc'].rpc_ls(path) 
+                cur_logs[s['id']] = util.ls(path) 
 
             # compare old and new
             temp_old_logs = copy.deepcopy(old_logs)

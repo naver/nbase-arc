@@ -19,7 +19,7 @@ class TestDumpUtil(unittest.TestCase):
     cluster = config.clusters[0]
 
     def setUp(self):
-        util.set_remote_process_logfile_prefix(self.cluster, 'TestDumpUtil')
+        util.set_process_logfile_prefix('TestDumpUtil_%s' % self._testMethodName)
         if default_cluster.initialize_starting_up_smr_before_redis(self.cluster) is not 0:
             util.log('failed to TestDumpUtil.initialize')
             return -1
@@ -63,7 +63,7 @@ class TestDumpUtil(unittest.TestCase):
             if lastsave_time > before_save_time: break
             time.sleep(0.1)
 
-    def test_base32hex_conversion(self):
+    def testbase32hex_conversion(self):
         util.print_frame()
     
         count = 100

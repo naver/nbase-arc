@@ -3,6 +3,13 @@
 #### Build nbase-arc with gcov option.
 ```
 $ make gcov
+
+$ cd api/arcci
+$ make gcov32
+
+$ cd -
+$ cd tools/local_proxy
+$ make gcov32
 ```
 
 #### Install zookeeper ensemble.
@@ -76,20 +83,18 @@ $ source ~/.bashrc
 ## Test Run
 #### Run all testcases
 ```
-$ python updater_startup.py
-$ python tester_startup.py
+$ python testrunner.py -n all
+$ python testrunner.py -n -b all
 ```
 
 #### Run nbase-arc processes without executing testcases.
 ```
-$ python updater_startup.py
-$ python tester_startup.py -i 
-(Press Ctrl-C if you want to quit tester_startup.py and kill nBase-ARC processes)
+$ python testrunner.py -i
+(Press Ctrl-C if you want to quit testrunner.py and kill nBase-ARC processes)
 ```
   
 #### Run a specific testcase.
 ```
-$ python updater_startup.py
 $ python testrunner.py <testcase file name>
 (Example "python testrunner.py test_restart_recovery.py")
 ```

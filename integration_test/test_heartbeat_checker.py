@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import gateway_mgmt
@@ -11,7 +11,6 @@ import load_generator
 import telnet
 import demjson
 import constant as c
-import xmlrpclib
 
 
 class TestHeartbeatChecker( unittest.TestCase ):
@@ -30,7 +29,7 @@ class TestHeartbeatChecker( unittest.TestCase ):
     return 0
 
   def setUp( self ):
-    util.set_remote_process_logfile_prefix( self.cluster, 'TestHeartbeatChecker_%s' % self._testMethodName )
+    util.set_process_logfile_prefix( 'TestHeartbeatChecker_%s' % self._testMethodName )
     ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
     if ret is not 0:
       default_cluster.finalize( self.cluster )
@@ -78,9 +77,9 @@ class TestHeartbeatChecker( unittest.TestCase ):
                        'server%d - state:%s, role:%s, expected:N' % (server['id'], state, role) )
 
     # shutdown
-    ret = test_base.request_to_shutdown_smr( server )
+    ret = testbase.request_to_shutdown_smr( server )
     self.assertEquals( ret, 0, 'failed to shutdown smr' )
-    ret = test_base.request_to_shutdown_redis( server )
+    ret = testbase.request_to_shutdown_redis( server )
     self.assertEquals( ret, 0, 'failed to shutdown redis' )
     time.sleep( 3 )
 
@@ -105,13 +104,13 @@ class TestHeartbeatChecker( unittest.TestCase ):
     gw.disconnect()
 
     # recovery
-    ret = test_base.request_to_start_smr( server )
+    ret = testbase.request_to_start_smr( server )
     self.assertEquals( ret, 0, 'failed to start smr' )
 
-    ret = test_base.request_to_start_redis( server )
+    ret = testbase.request_to_start_redis( server )
     self.assertEquals( ret, 0, 'failed to start redis' )
 
-    ret = test_base.wait_until_finished_to_set_up_role( server, 10 )
+    ret = testbase.wait_until_finished_to_set_up_role( server, 10 )
     self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (server['id']) )
     time.sleep( 5 )
 
@@ -188,9 +187,9 @@ class TestHeartbeatChecker( unittest.TestCase ):
       for s in servers:
         self.getseq_log(s)
 
-      ret = test_base.request_to_shutdown_smr( server )
+      ret = testbase.request_to_shutdown_smr( server )
       self.assertEqual( ret, 0, 'failed to shutdown smr, server:%d' % server['id'] )
-      ret = test_base.request_to_shutdown_redis( server )
+      ret = testbase.request_to_shutdown_redis( server )
       self.assertEquals( ret, 0, 'failed to shutdown redis' )
     time.sleep( 5 )
 
@@ -202,10 +201,10 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
     # recovery
     for server in servers:
-      ret = test_base.request_to_start_smr( server )
+      ret = testbase.request_to_start_smr( server )
       self.assertEqual( ret, 0, 'failed to start smr, server:%d' % server['id'] )
 
-      ret = test_base.request_to_start_redis( server, False )
+      ret = testbase.request_to_start_redis( server, False )
       self.assertEqual( ret, 0, 'failed to start redis, server:%d' % server['id']  )
 
       util.log('after restart pgs%d' % server['id'])
@@ -223,7 +222,7 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
     # check state
     for server in servers:
-      ret = test_base.wait_until_finished_to_set_up_role( server, wait_count )
+      ret = testbase.wait_until_finished_to_set_up_role( server, wait_count )
       self.assertEquals( ret, 0, 'failed to role change. server:%d' % (server['id']) )
         
       state = self.get_expected_smr_state( server, 'N' )
@@ -439,7 +438,7 @@ class TestHeartbeatChecker( unittest.TestCase ):
     for i in range( 0, len( self.cluster['servers'] ) - 1 ):
       util.log( 'loop %d' % i )
       server = self.cluster['servers'][i]
-      self.assertEquals( 0, test_base.request_to_shutdown_cm( server ),
+      self.assertEquals( 0, testbase.request_to_shutdown_cm( server ),
                          'failed to request_to_shutdown_cm, server:%d' % server['id'] )
       time.sleep( 20 )
       self.leader_cm = self.cluster['servers'][i+1]
@@ -454,14 +453,13 @@ class TestHeartbeatChecker( unittest.TestCase ):
       i = i + 1
       hbc_svr = {}
       hbc_svr['id'] = i
-      hbc_svr['rpc'] = server['rpc']
       hbc_svr['ip'] = server['ip']
       hbc_svr['zk_port'] = server['zk_port']
 
-      ret = test_base.send_cm( server['rpc'], i )
+      ret = testbase.setup_cm( i )
       self.assertEquals( 0, ret, 'failed to copy heartbeat checker, server:%d' % hbc_svr['id'] )
 
-      ret = test_base.request_to_start_cm( i, server['rpc'], i )
+      ret = testbase.request_to_start_cm( i, i )
       self.assertEquals( 0, ret,
                          'failed to request_to_start_cm, server:%d' % hbc_svr['id'] )
       self.state_transition()

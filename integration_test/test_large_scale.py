@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import time
 import random
@@ -12,9 +12,7 @@ import load_generator
 import telnet
 import constant
 import demjson
-import xmlrpclib
 import json
-import pdb
 import telnetlib
 import threading
 
@@ -121,45 +119,14 @@ class DeployPGSThread(threading.Thread):
     return self.success
 
   def run( self ):
-    smr = None
-    gw = None
-    redis = None
-    cluster_util = None
-
     try:
-      path = '../smr/replicator/%s' % constant.SMR
-      smr = open( path, 'rb' )
-    
-      path = '../gateway/%s' % constant.GW
-      gw = open( path, 'rb' )
-    
-      path = '../redis-2.8.8/src/%s' % constant.REDIS
-      redis = open( path, 'rb' )
-    
-      path = '../redis-2.8.8/src/%s' % constant.CLUSTER_UTIL
-      cluster_util = open( path, 'rb' )
-    
       id = self.server['id']
-      rpc = self.server['rpc']
-
-      smr.seek(0, 0)
-      gw.seek(0, 0)
-      redis.seek(0, 0)
-      cluster_util.seek(0, 0)
 
       util.log('copy binaries, server_id=%d' % id)
-      if rpc.rpc_copy_smrreplicator( xmlrpclib.Binary( smr.read() ), id ) is not 0:
-        util.log('failed to copy smr-replicator')
-        self.assertEqual(0, 1, 'failed to copy smr-replicator')
-      if rpc.rpc_copy_gw( xmlrpclib.Binary( gw.read() ), id ) is not 0:
-        util.log('failed to copy gateway')
-        self.assertEqual(0, 1, 'failed to copy gateway')
-      if rpc.rpc_copy_redis_server( xmlrpclib.Binary( redis.read() ), id ) is not 0:
-        util.log('failed to copy redis-arc')
-        self.assertEqual(0, 1, 'failed to copy redis-arc')
-      if rpc.rpc_copy_cluster_util( xmlrpclib.Binary( cluster_util.read() ), id ) is not 0:
-        util.log('failed to copy cluster-util')
-        self.assertEqual(0, 1, 'failed to copy cluster-util')
+      util.copy_smrreplicator( id )
+      util.copy_gw( id )
+      util.copy_redis_server( id )
+      util.copy_cluster_util( id )
       
     except IOError as e:
       util.log(e)
@@ -168,16 +135,6 @@ class DeployPGSThread(threading.Thread):
 
     except:
       util.log('Error: file open error.')
-
-    finally:
-      if smr != None:
-        smr.close()
-      if gw != None:
-        gw.close()
-      if redis != None:
-        redis.close()
-      if cluster_util != None:
-        cluster_util.close()
 
     self.success = True
 
@@ -194,7 +151,6 @@ class TestLargeScale( unittest.TestCase ):
     mgmt_ip = cls.leader_cm['ip']
     mgmt_port = cls.leader_cm['cm_port']
 
-    util.set_remote_process_logfile_prefix( config.clusters[0], 'TestLargeScale' )
     ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
     if ret is not 0:
       util.log( 'failed to initialize_starting_up_smr_before_redis in TestUpgrade' ) 
@@ -207,6 +163,7 @@ class TestLargeScale( unittest.TestCase ):
     return 0
 
   def setUp( self ):
+    util.set_process_logfile_prefix( 'TestLargeScale_%s' % self._testMethodName )
     return 0
 
   def tearDown( self ):
@@ -254,59 +211,22 @@ class TestLargeScale( unittest.TestCase ):
         server['gateway_port'] = gateway_port
         server['redis_port'] = redis_port
         server['zk_port'] = 2181
-        server['rpc'] = config.clusters[0]['servers'][0]['rpc']
 
         cluster['servers'].append(server)
 
     # send initialize commands to confmaster
-    test_base.initialize_cluster(cluster, self.leader_cm)
-
-#    deploy_threads = []
-#    for server in cluster['servers']:
-#      t = DeployPGSThread(server)
-#      deploy_threads.append(t)
-#      t.start()
-#
-#    for t in deploy_threads:
-#      t.join()
-#      self.assertTrue( t.is_success(), "Error: deploy PGS '%d' fail." % t.get_server()['id'] )
+    testbase.initialize_cluster(cluster, self.leader_cm)
 
     # set up pgs binaries
     try:
-      path = '../smr/replicator/%s' % constant.SMR
-      smr = open( path, 'rb' )
-    
-      path = '../gateway/%s' % constant.GW
-      gw = open( path, 'rb' )
-    
-      path = '../redis-2.8.8/src/%s' % constant.REDIS
-      redis = open( path, 'rb' )
-    
-      path = '../redis-2.8.8/src/%s' % constant.CLUSTER_UTIL
-      cluster_util = open( path, 'rb' )
-    
       for server in cluster['servers']:
         id = server['id']
-        rpc = server['rpc']
-
-        smr.seek(0, 0)
-        gw.seek(0, 0)
-        redis.seek(0, 0)
-        cluster_util.seek(0, 0)
 
         util.log('copy binaries, server_id=%d' % id)
-        if rpc.rpc_copy_smrreplicator( xmlrpclib.Binary( smr.read() ), id ) is not 0:
-          util.log('failed to copy smr-replicator')
-          self.assertEqual(0, 1, 'failed to copy smr-replicator')
-        if rpc.rpc_copy_gw( xmlrpclib.Binary( gw.read() ), id ) is not 0:
-          util.log('failed to copy gateway')
-          self.assertEqual(0, 1, 'failed to copy gateway')
-        if rpc.rpc_copy_redis_server( xmlrpclib.Binary( redis.read() ), id ) is not 0:
-          util.log('failed to copy redis-arc')
-          self.assertEqual(0, 1, 'failed to copy redis-arc')
-        if rpc.rpc_copy_cluster_util( xmlrpclib.Binary( cluster_util.read() ), id ) is not 0:
-          util.log('failed to copy cluster-util')
-          self.assertEqual(0, 1, 'failed to copy cluster-util')
+        util.copy_smrreplicator( id )
+        util.copy_gw( id )
+        util.copy_redis_server( id )
+        util.copy_cluster_util( id )
       
     except IOError as e:
       util.log(e)
@@ -315,38 +235,28 @@ class TestLargeScale( unittest.TestCase ):
 
     except:
       util.log('Error: file open error.')
-    
-    finally:
-      if smr != None:
-        smr.close()
-      if gw != None:
-        gw.close()
-      if redis != None:
-        redis.close()
-      if cluster_util != None:
-        cluster_util.close()
 
     # cleanup servers`s directories
     for server in cluster['servers']:
-      ret = test_base.cleanup_pgs_log_and_ckpt( cluster['cluster_name'], server )
+      ret = testbase.cleanup_pgs_log_and_ckpt( cluster['cluster_name'], server )
       self.assertEqual(ret, 0, 'failed to cleanup_test_environment, id=%d' % server['id'])
 
     # start pgs
     for server in cluster['servers']:
-      ret = test_base.request_to_start_smr( server ) 
+      ret = testbase.request_to_start_smr( server ) 
       self.assertEqual(ret, 0, 'failed to request_to_start_smr, id=%d' % server['id'])
   
     for server in cluster['servers']:
-      ret = test_base.request_to_start_redis( server, check=False )
+      ret = testbase.request_to_start_redis( server, check=False )
       self.assertEqual(ret, 0, 'failed to request_to_start_smr, id=%d' % server['id'])
 
     for server in cluster['servers']:
-      ret = test_base.wait_until_finished_to_set_up_role(server)
+      ret = testbase.wait_until_finished_to_set_up_role(server)
       self.assertEqual(ret, 0, 'failed to role set up, id=%d' % server['id'])
   
     for i in range(4):
       server = cluster['servers'][i]
-      ret = test_base.request_to_start_gateway( cluster['cluster_name'], server, self.leader_cm )
+      ret = testbase.request_to_start_gateway( cluster['cluster_name'], server, self.leader_cm )
       self.assertEqual(ret, 0, 'failed to request_to_start_gateway, id=%d' % server['id'])
 
     clusters = cluster_ls()

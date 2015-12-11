@@ -6,14 +6,13 @@ import default_cluster
 import util
 import subprocess
 import copy
-import pdb
 import time
 
 class TestFreeClient(unittest.TestCase):
     cluster = config.clusters[0]
     
     def setUp(self):
-        util.set_remote_process_logfile_prefix( self.cluster, 'TestFreeClient_%s' % self._testMethodName )
+        util.set_process_logfile_prefix( 'TestFreeClient_%s' % self._testMethodName )
         ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
         if ret is not 0:
             default_cluster.finalize( self.cluster )

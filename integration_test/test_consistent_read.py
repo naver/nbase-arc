@@ -1,5 +1,5 @@
 import unittest
-import test_base
+import testbase
 import util
 import gateway_mgmt
 import redis_mgmt
@@ -17,7 +17,6 @@ class TestConsistentRead( unittest.TestCase ):
 
   @classmethod
   def setUpClass( cls ):
-    util.set_remote_process_logfile_prefix( cls.cluster, 'TestConsistentRead' )
     ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
     if ret is not 0:
       default_cluster.finalize( cls.cluster )
@@ -39,6 +38,7 @@ class TestConsistentRead( unittest.TestCase ):
     default_cluster.finalize( cls.cluster )
 
   def setUp( self ):
+    util.set_process_logfile_prefix( 'TestConsistentRead_%s' % self._testMethodName )
     return 0
 
   def tearDown( self ):
