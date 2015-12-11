@@ -9,100 +9,100 @@ from arcci.arcci import *
 
 
 class LoadGenerator(threading.Thread):
-  quit = False
+    quit = False
 
-  def __init__( self, id, telnet_ip, telnet_port, timeout=3 ):
-    threading.Thread.__init__( self )
+    def __init__( self, id, telnet_ip, telnet_port, timeout=3 ):
+        threading.Thread.__init__( self )
 
-    self.timeout = timeout
+        self.timeout = timeout
 
-    self.ip = telnet_ip
-    self.port = telnet_port
+        self.ip = telnet_ip
+        self.port = telnet_port
 
-    self.key = 'load_generator_key_%d' % (id)
+        self.key = 'load_generator_key_%d' % (id)
 
-    self.server = telnet.Telnet( '0' )
-    self.server.connect( self.ip, self.port )
+        self.server = telnet.Telnet( '0' )
+        self.server.connect( self.ip, self.port )
 
-    cmd = 'set %s 0\r\n' % self.key
-    self.server.write(cmd)
-    self.server.read_until('\r\n', self.timeout)
-    self.value = 0
+        cmd = 'set %s 0\r\n' % self.key
+        self.server.write(cmd)
+        self.server.read_until('\r\n', self.timeout)
+        self.value = 0
 
-    self.consistency = True
+        self.consistency = True
 
-  def quit( self ):
-    self.quit = True
+    def quit( self ):
+        self.quit = True
 
-  def getKey( self ):
-    return self.key
+    def getKey( self ):
+        return self.key
 
-  def isConsistent( self ):
-    return self.consistency
+    def isConsistent( self ):
+        return self.consistency
 
-  def run( self ):
-    i = 0
-    pipelined_multikey_cmd = 'pipelined_multikey 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
-    pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
-    pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 '
-    pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 '
-    pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 '
-
-    pipelined_multikey_cmd += pipelined_multikey_cmd;
-    pipelined_multikey_cmd += pipelined_multikey_cmd;
-
-    pipelined_multikey_cmd = 'mset %s\r\n' % pipelined_multikey_cmd
-    pipelined_multikey_cmd += pipelined_multikey_cmd;
-    pipelined_multikey_cmd += pipelined_multikey_cmd;
-    pipelined_multikey_cmd += pipelined_multikey_cmd;
-
-    while self.quit is not True:
-      if i > 50000:
+    def run( self ):
         i = 0
-      i = i + 1
-      
-      try:
-        self.server.write( pipelined_multikey_cmd )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-        response = self.server.read_until( '\r\n', self.timeout )
-      except:
-        #util.log( 'Connection closed in LoadGenerator:%s' % pipelined_multikey_cmd )
-        self.consistency = False
-        return
-        
-      cmd = 'mset 1%s 1 2%s 2 3%s 3 4%s 4 5%s 5 6%s 6\r\n' % (self.key, self.key, self.key, self.key, self.key, self.key)
-      try:
-        self.server.write( cmd )
-        response = self.server.read_until( '\r\n', self.timeout )
-      except:
-        #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
-        self.consistency = False
-        return
-      
-      cmd = 'mget 1%s 2%s 3%s 4%s 5%s 6%s\r\n' % (self.key, self.key, self.key, self.key, self.key, self.key)
-      try:
-        self.server.write( cmd )
-        for read_loop in range(13):
-          response = self.server.read_until( '\r\n', self.timeout )
-      except:
-        #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
-        self.consistency = False
-        return
+        pipelined_multikey_cmd = 'pipelined_multikey 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
+        pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
+        pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 '
+        pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 '
+        pipelined_multikey_cmd += '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789 '
 
-      cmd = 'del 1%s 2%s 3%s 4%s 5%s 6%s\r\n' % (self.key, self.key, self.key, self.key, self.key, self.key)
-      try:
-        self.server.write( cmd )
-        response = self.server.read_until( '\r\n', self.timeout )
-      except:
-        #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
-        self.consistency = False
-        return
+        pipelined_multikey_cmd += pipelined_multikey_cmd;
+        pipelined_multikey_cmd += pipelined_multikey_cmd;
+
+        pipelined_multikey_cmd = 'mset %s\r\n' % pipelined_multikey_cmd
+        pipelined_multikey_cmd += pipelined_multikey_cmd;
+        pipelined_multikey_cmd += pipelined_multikey_cmd;
+        pipelined_multikey_cmd += pipelined_multikey_cmd;
+
+        while self.quit is not True:
+            if i > 50000:
+                i = 0
+            i = i + 1
+
+            try:
+                self.server.write( pipelined_multikey_cmd )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+                response = self.server.read_until( '\r\n', self.timeout )
+            except:
+                #util.log( 'Connection closed in LoadGenerator:%s' % pipelined_multikey_cmd )
+                self.consistency = False
+                return
+
+            cmd = 'mset 1%s 1 2%s 2 3%s 3 4%s 4 5%s 5 6%s 6\r\n' % (self.key, self.key, self.key, self.key, self.key, self.key)
+            try:
+                self.server.write( cmd )
+                response = self.server.read_until( '\r\n', self.timeout )
+            except:
+                #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
+                self.consistency = False
+                return
+
+            cmd = 'mget 1%s 2%s 3%s 4%s 5%s 6%s\r\n' % (self.key, self.key, self.key, self.key, self.key, self.key)
+            try:
+                self.server.write( cmd )
+                for read_loop in range(13):
+                    response = self.server.read_until( '\r\n', self.timeout )
+            except:
+                #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
+                self.consistency = False
+                return
+
+            cmd = 'del 1%s 2%s 3%s 4%s 5%s 6%s\r\n' % (self.key, self.key, self.key, self.key, self.key, self.key)
+            try:
+                self.server.write( cmd )
+                response = self.server.read_until( '\r\n', self.timeout )
+            except:
+                #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
+                self.consistency = False
+                return
 
 #      cmd = 'info all\r\ninfo all\r\ninfo all\r\n'
 #      try:
@@ -120,26 +120,26 @@ class LoadGenerator(threading.Thread):
 #        util.log( 'Connection closed in LoadGenerator:%s' % cmd )
 #        self.consistency = False
 #        return
-      
-      cmd = 'crc16 %s %d\r\n' % (self.key, i)
-      try:
-        self.server.write( cmd )
-        response = self.server.read_until( '\r\n', self.timeout )
-      except:
-        #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
-        self.consistency = False
-        return
 
-      
-      self.value = crc16.crc16_buff(str(i), self.value)
-      try:
-        if (int(response[1:-2]) != self.value):
-          if self.consistency:
-              self.consistency = False
-      except ValueError:
-        #util.log( 'Value Error in LoadGenerator, ret:%s' % response[:-2] )
-        self.consistency = False
-        return
+            cmd = 'crc16 %s %d\r\n' % (self.key, i)
+            try:
+                self.server.write( cmd )
+                response = self.server.read_until( '\r\n', self.timeout )
+            except:
+                #util.log( 'Connection closed in LoadGenerator:%s' % cmd )
+                self.consistency = False
+                return
+
+
+            self.value = crc16.crc16_buff(str(i), self.value)
+            try:
+                if (int(response[1:-2]) != self.value):
+                    if self.consistency:
+                        self.consistency = False
+            except ValueError:
+                #util.log( 'Value Error in LoadGenerator, ret:%s' % response[:-2] )
+                self.consistency = False
+                return
 
 
 def is_reply_ok(reply):
@@ -172,7 +172,7 @@ class LoadGenerator_ARCCI_FaultTolerance(threading.Thread):
         self.cont = True
 
     def quit(self):
-        self.cont = False 
+        self.cont = False
 
     def get_err_cnt(self):
         return self.err_cnt
@@ -281,7 +281,7 @@ class LoadGenerator_ARCCI(threading.Thread):
         try:
             if self.init_crc() == False:
                 return False
-                
+
             while self.cont:
                 loop_cnt += 1
                 if self.process() == False:
@@ -491,7 +491,7 @@ class LoadGenerator_ARCCI(threading.Thread):
             if reply[0] != ARC_REPLY_INTEGER:
                 self.consistency = False
                 return False
-            
+
             # CRC - Check consistency
             self.value = crc16.crc16_buff(str(self.i), self.value)
             try:
@@ -537,7 +537,7 @@ class LoadGenerator_ARCCI_Affinity(threading.Thread):
         self.op_rotate = 'write'       # 'write' | 'read' | 'both'
 
     def quit(self):
-        self.cont = False 
+        self.cont = False
 
     def get_err_cnt(self):
         return self.err_cnt

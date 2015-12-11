@@ -78,7 +78,7 @@ class TestGatewayMgmt(unittest.TestCase):
 
             print "<<< ITER = %d, PG%d -> PG%d, PG%d -> PG%d >>>" % (iter, n*2, (n+step)*2, n*2+1, (n+step)*2+1)
             gw = gw_list[0]
-            self.pgs_del_server(gw['mgmt'], servers[0], n) 
+            self.pgs_del_server(gw['mgmt'], servers[0], n)
             self.pgs_del_server(gw['mgmt'], servers[1], n)
             self.pgs_del_server(gw['mgmt'], servers[5], n)
 
@@ -114,10 +114,10 @@ class TestGatewayMgmt(unittest.TestCase):
             gw_list[0]['mgmt'].write("cluster_info\r\nping\r\n")
             print gw_list[0]['mgmt'].read_until("+PONG\r\n")
 
-            self.pgs_del_server(gw['mgmt'], servers[2], n) 
+            self.pgs_del_server(gw['mgmt'], servers[2], n)
             self.pgs_del_server(gw['mgmt'], servers[3], n)
             self.pgs_del_server(gw['mgmt'], servers[4], n)
-             
+
             self.pgs_add_server(gw['mgmt'], servers[2], n+step)
             self.pgs_add_server(gw['mgmt'], servers[3], n+step)
             self.pgs_add_server(gw['mgmt'], servers[4], n+step)
@@ -222,7 +222,7 @@ class TestGatewayMgmt(unittest.TestCase):
             gw.write("info all\r\n")
             gw.write("ping\r\n")
             ret = gw.read_until("+PONG\r\n")
-            
+
             if "cluster_name:testCluster0" not in ret:
                 util.log(ret)
                 self.assertFalse(True, "Incorrect result of info commands, cluster_name")
@@ -242,7 +242,7 @@ class TestGatewayMgmt(unittest.TestCase):
             if "redis_instances_available:6" not in ret:
                 util.log(ret)
                 self.assertFalse(True, "Incorrect result of info commands, redis_instances_unreachable")
-            
+
             if "gateway_disconnected_redis:0" not in ret:
                 util.log(ret)
                 self.assertFalse(True, "Incorrect result of info commands, inactive_connections")
@@ -277,4 +277,3 @@ class TestGatewayMgmt(unittest.TestCase):
 
         if "redis_instances_available:5" not in ret:
             self.assertFalse(True, "Disconnection of timed-out redis is not processed in gateway")
-

@@ -12,11 +12,11 @@ import telnet
 
 
 def block_network(cluster, mgmt_ip, mgmt_port):
-    # Block 
+    # Block
     out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
     if out.succeeded == False:
         util.log('add a bloking role to iptables fail. output:%s' % out)
-        return False 
+        return False
 
     for i in range(4):
         util.log('waiting... %d' % (i + 1))
@@ -59,7 +59,7 @@ class TestNetworkIsolation(unittest.TestCase):
             util.log(out)
             if out.succeeded == False:
                 break
-    
+
         while True:
             out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
             util.log(out)
@@ -102,7 +102,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         # Print initial state of cluster
@@ -114,7 +114,7 @@ class TestNetworkIsolation(unittest.TestCase):
         util.log('\n\n\n ### Set SMR option ###')
         for s in cluster['servers']:
             t = telnet.Telnet('SMR%d' % s['id'])
-            self.assertEqual(t.connect(s['ip'], s['smr_mgmt_port']), 0, 
+            self.assertEqual(t.connect(s['ip'], s['smr_mgmt_port']), 0,
                     'Failed to connect to smr. ADDR=%s:%d' % (s['ip'], s['smr_mgmt_port']))
             cmd = 'confset slave_idle_timeout_msec 18000'
             util.log('[%s:%d] >> %s' % (s['ip'], s['smr_mgmt_port'], cmd))
@@ -177,7 +177,7 @@ class TestNetworkIsolation(unittest.TestCase):
                 final_state = []
                 util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
 
-                state_consistency = True 
+                state_consistency = True
                 for s in final_state:
                     if s['active_role'] != s['mgmt_role']:
                         state_consistency = False
@@ -216,7 +216,7 @@ class TestNetworkIsolation(unittest.TestCase):
         # Add forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-    
+
         out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
 
@@ -228,7 +228,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         # Place master on virtual ip address in order to cause master election.
@@ -287,7 +287,7 @@ class TestNetworkIsolation(unittest.TestCase):
                 final_state = []
                 util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
 
-                state_consistency = True 
+                state_consistency = True
                 for s in final_state:
                     if s['pgs_id'] == 1:
                         continue
@@ -319,7 +319,7 @@ class TestNetworkIsolation(unittest.TestCase):
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-    
+
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
@@ -336,7 +336,7 @@ class TestNetworkIsolation(unittest.TestCase):
         # Add forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-    
+
         out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
 
@@ -348,7 +348,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         # Place master on real ip address
@@ -413,7 +413,7 @@ class TestNetworkIsolation(unittest.TestCase):
                     time.sleep(1)
                     continue
 
-                state_consistency = True 
+                state_consistency = True
                 for s in final_state:
                     if s['pgs_id'] == 1:
                         continue
@@ -445,7 +445,7 @@ class TestNetworkIsolation(unittest.TestCase):
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-    
+
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
@@ -469,7 +469,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port)
@@ -495,7 +495,7 @@ class TestNetworkIsolation(unittest.TestCase):
         util.log('\n\n\n ### Set SMR option ###')
         for s in cluster['servers']:
             t = telnet.Telnet('SMR%d' % s['id'])
-            self.assertEqual(t.connect(s['ip'], s['smr_mgmt_port']), 0, 
+            self.assertEqual(t.connect(s['ip'], s['smr_mgmt_port']), 0,
                     'Failed to connect to smr. ADDR=%s:%d' % (s['ip'], s['smr_mgmt_port']))
             cmd = 'confset slave_idle_timeout_msec 18000'
             util.log('[%s:%d] >> %s' % (s['ip'], s['smr_mgmt_port'], cmd))
@@ -569,7 +569,7 @@ class TestNetworkIsolation(unittest.TestCase):
                 final_state = []
                 util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
 
-                state_consistency = True 
+                state_consistency = True
                 for s in final_state:
                     if s['pgs_id'] == 1:
                         continue
@@ -610,7 +610,7 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Reset SMR option (slave_idle_timeout)
             t = telnet.Telnet('SMR%d' % server['id'])
-            self.assertEqual(t.connect(server['ip'], server['smr_mgmt_port']), 0, 
+            self.assertEqual(t.connect(server['ip'], server['smr_mgmt_port']), 0,
                     'Failed to connect to smr. ADDR=%s:%d' % (server['ip'], server['smr_mgmt_port']))
             cmd = 'confset slave_idle_timeout_msec 18000'
             util.log('[%s:%d] >> %s' % (server['ip'], server['smr_mgmt_port'], cmd))
@@ -650,7 +650,7 @@ class TestNetworkIsolation(unittest.TestCase):
         # Add forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-    
+
         out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
 
@@ -664,7 +664,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         # Print initial state of cluster
@@ -740,7 +740,7 @@ class TestNetworkIsolation(unittest.TestCase):
                 final_state = []
                 util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
 
-                state_consistency = True 
+                state_consistency = True
                 for s in final_state:
                     if s['pgs_id'] == master['id']:
                         continue
@@ -777,7 +777,7 @@ class TestNetworkIsolation(unittest.TestCase):
                     break
                 else:
                     time.sleep(1)
-            
+
             self.assertTrue(ok, 'failed to check cluster state')
 
         # Check state
@@ -805,7 +805,7 @@ class TestNetworkIsolation(unittest.TestCase):
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-    
+
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
@@ -829,7 +829,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         # Print initial state of cluster
@@ -841,7 +841,7 @@ class TestNetworkIsolation(unittest.TestCase):
         util.log('\n\n\n ### Set SMR option ###')
         for s in cluster['servers']:
             t = telnet.Telnet('SMR%d' % s['id'])
-            self.assertEqual(t.connect(s['ip'], s['smr_mgmt_port']), 0, 
+            self.assertEqual(t.connect(s['ip'], s['smr_mgmt_port']), 0,
                     'Failed to connect to smr. ADDR=%s:%d' % (s['ip'], s['smr_mgmt_port']))
             cmd = 'confset slave_idle_timeout_msec 18000'
             util.log('[%s:%d] >> %s' % (s['ip'], s['smr_mgmt_port'], cmd))
@@ -869,7 +869,7 @@ class TestNetworkIsolation(unittest.TestCase):
 
                 # 'role lconn'
                 util.log( 'role lconn pgs%d while hanging.' % s['id'] )
-                
+
                 ret = util.role_lconn_addr( s['real_ip'], s['smr_mgmt_port']  )
                 self.assertEqual( ret, '+OK\r\n', 'role lconn failed. reply="%s"' % (ret[:-2]) )
                 util.log( 'succeeded : cmd="role lconn", reply="%s"' % (ret[:-2]) )
@@ -915,7 +915,7 @@ class TestNetworkIsolation(unittest.TestCase):
                 final_state = []
                 util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
 
-                state_consistency = True 
+                state_consistency = True
                 for s in final_state:
                     if s['pgs_id'] == 1:
                         continue
@@ -991,7 +991,7 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster ) 
+        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
         self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
 
         # Print initial state of cluster
@@ -1056,7 +1056,7 @@ class TestNetworkIsolation(unittest.TestCase):
             self.assertTrue(cluster_state, 'failed to check cluster state')
 
             all_in_f = True
-            for s in cluster['servers']: 
+            for s in cluster['servers']:
                 if checkLastState(mgmt_ip, s['cm_port'], cluster_name, 0, 'F') == False:
                     all_in_f = False
                     break

@@ -11,7 +11,7 @@ zookeeper_info = [
         {'id':2, 'bin_dir':'$HOME/bin/zk3/bin'},
 ]
 
-physical_machines = [
+machines = [
   {
     'name' : 'localhost',
     'ip' : '127.0.0.1',
@@ -46,10 +46,10 @@ physical_machines = [
   }
 ]
 
-server1  = { 
+server1  = {
   'id' : 0,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1122,
   'pg_id' : 0,
@@ -61,10 +61,10 @@ server1  = {
   'zk_port' : 2181,
 }
 
-server2 = { 
+server2 = {
   'id' : 1,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1123,
   'pg_id' : 0,
@@ -76,10 +76,10 @@ server2 = {
   'zk_port' : 2181,
 }
 
-server3 = { 
+server3 = {
   'id' : 2,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1124,
   'pg_id' : 0,
@@ -91,10 +91,10 @@ server3 = {
   'zk_port' : 2181,
 }
 
-server4  = { 
+server4  = {
   'id' : 3,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1125,
   'pg_id' : 1,
@@ -106,10 +106,10 @@ server4  = {
   'zk_port' : 2181,
 }
 
-server40  = { 
+server40  = {
   'id' : 3,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1125,
   'pg_id' : 0,
@@ -121,10 +121,10 @@ server40  = {
   'zk_port' : 2181,
 }
 
-server5 = { 
+server5 = {
   'id' : 4,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1126,
   'pg_id' : 1,
@@ -137,10 +137,10 @@ server5 = {
 }
 
 
-server6 = { 
+server6 = {
   'id' : 5,
   'cluster_name' : 'testCluster0',
-  'ip' : '127.0.0.1', 
+  'ip' : '127.0.0.1',
   'pm_name' : 'localhost',
   'cm_port' : 1127,
   'pg_id' : 1,
@@ -152,11 +152,11 @@ server6 = {
   'zk_port' : 2181,
 }
 
-virtual_server1 = { 
+virtual_server1 = {
   'id' : 0,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1122,
   'pg_id' : 0,
@@ -168,11 +168,11 @@ virtual_server1 = {
   'zk_port' : 2181,
 }
 
-virtual_server2 = { 
+virtual_server2 = {
   'id' : 1,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1123,
   'pg_id' : 0,
@@ -184,11 +184,11 @@ virtual_server2 = {
   'zk_port' : 2181,
 }
 
-virtual_server21 = { 
+virtual_server21 = {
   'id' : 1,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1123,
   'pg_id' : 1,
@@ -200,11 +200,11 @@ virtual_server21 = {
   'zk_port' : 2181,
 }
 
-virtual_server3 = { 
+virtual_server3 = {
   'id' : 2,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1124,
   'pg_id' : 0,
@@ -216,11 +216,11 @@ virtual_server3 = {
   'zk_port' : 2181,
 }
 
-virtual_server4 = { 
+virtual_server4 = {
   'id' : 3,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost1',
   'cm_port' : 1125,
   'pg_id' : 1,
@@ -232,11 +232,11 @@ virtual_server4 = {
   'zk_port' : 2181,
 }
 
-virtual_server5 = { 
+virtual_server5 = {
   'id' : 4,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost1',
   'cm_port' : 1126,
   'pg_id' : 1,
@@ -248,11 +248,11 @@ virtual_server5 = {
   'zk_port' : 2181,
 }
 
-virtual_server6 = { 
+virtual_server6 = {
   'id' : 5,
   'cluster_name' : 'network_isolation_cluster',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost1',
   'cm_port' : 1127,
   'pg_id' : 1,
@@ -264,11 +264,11 @@ virtual_server6 = {
   'zk_port' : 2181,
 }
 
-vm1 = { 
+vm1 = {
   'id' : 0,
   'cluster_name' : 'no_opinion',
-  'ip' : '127.0.0.100', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.100',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'virtual_localhost',
   'cm_port' : 1122,
   'pg_id' : 0,
@@ -280,11 +280,11 @@ vm1 = {
   'zk_port' : 2181,
 }
 
-vm2 = { 
+vm2 = {
   'id' : 1,
   'cluster_name' : 'no_opinion',
-  'ip' : '127.0.0.101', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.101',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'vm2',
   'cm_port' : 1123,
   'pg_id' : 0,
@@ -296,11 +296,11 @@ vm2 = {
   'zk_port' : 2181,
 }
 
-vm3 = { 
+vm3 = {
   'id' : 2,
   'cluster_name' : 'no_opinion',
-  'ip' : '127.0.0.102', 
-  'real_ip' : '127.0.0.1', 
+  'ip' : '127.0.0.102',
+  'real_ip' : '127.0.0.1',
   'pm_name' : 'vm3',
   'cm_port' : 1124,
   'pg_id' : 0,
@@ -324,7 +324,7 @@ clusters = [
   },
 
   # 1
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -334,7 +334,7 @@ clusters = [
   },
 
   # 2
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -344,7 +344,7 @@ clusters = [
   },
 
   # 3
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -354,7 +354,7 @@ clusters = [
   },
 
   # 4
-  { 
+  {
     'cluster_name' : 'testCluster0',
     'keyspace_size' : 8192,
     'quorum_policy' : '0:1',
@@ -415,16 +415,15 @@ clusters = [
 ]
 
 def verify_config():
-  print "### Verify config ###"
-  if opt_use_memlog == None:
-    print "  Invalid opt_use_memlog."
-    sys.exit(-1)
-  else:
-    print "  opt_use_memlog : %s" % opt_use_memlog 
+    print "### Verify config ###"
+    if opt_use_memlog == None:
+        print "  Invalid opt_use_memlog."
+        sys.exit(-1)
+    else:
+        print "  opt_use_memlog : %s" % opt_use_memlog
 
-  if sudoer == None:
-    print "  Invalid sudoer. Check environmental variable, NBASE_ARC_TEST_SUDOER."
-    sys.exit(-1)
-  else:
-    print "  sudoer : %s" % sudoer
-
+    if sudoer == None:
+        print "  Invalid sudoer. Check environmental variable, NBASE_ARC_TEST_SUDOER."
+        sys.exit(-1)
+    else:
+        print "  sudoer : %s" % sudoer

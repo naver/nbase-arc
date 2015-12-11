@@ -70,7 +70,7 @@ class TestMaintenance(unittest.TestCase):
             ret = redis.connect( server_to_del['ip'], server_to_del['redis_port'] )
             self.assertEquals( ret, 0, 'failed : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
             util.log( 'succeeded : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
-  
+
             redis.write( 'info stats\r\n' )
             for i in range( 6 ):
                 redis.read_until( '\r\n' )
@@ -165,7 +165,7 @@ class TestMaintenance(unittest.TestCase):
                         break
                     time.sleep(0.1)
                 self.assertTrue(ok, 'redis state error.')
-            
+
             # Get new timestamp
             util.log_server_state( self.cluster )
             new_timestamp_list = []
@@ -216,7 +216,7 @@ class TestMaintenance(unittest.TestCase):
                         break
                     time.sleep(0.1)
                 self.assertTrue(ok, 'redis state error.')
-            
+
             # Get new timestamp
             util.log_server_state( self.cluster )
             new_timestamp_list = []
@@ -298,7 +298,7 @@ class TestMaintenance(unittest.TestCase):
             load_gen.start()
             self.load_gen_list[i] = load_gen
 
-        # Check quorum 
+        # Check quorum
         if master in hanging_servers:
             m, s1, s2 = util.get_mss(self.cluster)
             self.assertNotEqual(m, None, 'master is None.')
@@ -446,7 +446,7 @@ class TestMaintenance(unittest.TestCase):
                 new_ts = new_timestamps[s['id']]
                 self.assertNotEqual(old_ts, new_ts, 'Timestamp of a running server has not changed. %d->%d' % (old_ts, new_ts))
 
-            # Check quorum 
+            # Check quorum
             m = self.cluster['servers'][master_id]
             expected = 1
             ok = self.__check_quorum(m, expected)
@@ -468,7 +468,7 @@ class TestMaintenance(unittest.TestCase):
             util.log("States (after recovery)")
             util.log_server_state(self.cluster)
 
-            # Check quorum 
+            # Check quorum
             expected = 1
             ok = self.__check_quorum(m, expected)
             self.assertTrue(ok, 'unexpected quorum(after recovery). expected:%s' % (expected))
@@ -540,7 +540,7 @@ class TestMaintenance(unittest.TestCase):
             util.del_dumprdb(s['id'])
 
             ret = util.cluster_util_getdump(s['id'], m['ip'], m['redis_port'], 'dump.rdb', 0, 8191)
-            self.assertEqual(True, ret, 
+            self.assertEqual(True, ret,
                 'failed : util.cluster_util_getdump returns false, src=%s:%d dest_pgsid=%d' % (
                 m['ip'], m['redis_port'], s['id']))
 
@@ -581,4 +581,3 @@ class TestMaintenance(unittest.TestCase):
             self.load_gen_list[i].join()
             self.assertTrue(self.load_gen_list[i].isConsistent(), 'Inconsistent after migration')
             self.load_gen_list.pop(i, None)
-

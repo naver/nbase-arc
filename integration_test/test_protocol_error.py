@@ -13,7 +13,7 @@ class TestProtocolError(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         return 0
-       
+
     @classmethod
     def tearDownClass(cls):
         return 0

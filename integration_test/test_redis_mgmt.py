@@ -89,14 +89,14 @@ class TestRedisMgmt(unittest.TestCase):
             self.assertNotEqual(redis_server_time, int(ret.strip()))
             redis0.read_until('\r\n', 1)
             redis0.read_until('\r\n', 1)
-            
+
             util.log("%d ~ %d" % (redis_server_time, int(ret.strip())))
 
             # Bgsave
             redis0.write("bgsave\r\n")
             ret = redis0.read_until('\r\n', 1)
             self.assertEqual('+Background saving started\r\n', ret)
-            
+
             # Wait finishing bgsave
             while True:
                 redis0.write('lastsave\r\n')
@@ -106,8 +106,8 @@ class TestRedisMgmt(unittest.TestCase):
                 time.sleep(0.1)
 
             # Count the number of rdb backups
-            rdb_list = [name for name in os.listdir('.') 
-                if os.path.isfile(name) 
+            rdb_list = [name for name in os.listdir('.')
+                if os.path.isfile(name)
                     and name.startswith('dump') and name.endswith('.rdb')]
 
             util.log(rdb_list)
@@ -115,7 +115,7 @@ class TestRedisMgmt(unittest.TestCase):
 
             self.assertTrue(i+1 > 24 and len(rdb_list) == 25 or len(rdb_list) == i+1)
             self.assertTrue('dump.rdb' in rdb_list)
-            
+
 
         util.log("\nSet the number of rdb backups = 5")
         redis0.write("config set number-of-rdb-backups 5\r\n")
@@ -130,14 +130,14 @@ class TestRedisMgmt(unittest.TestCase):
             redis_server_time = int(ret.strip())
             redis0.read_until('\r\n', 1)
             redis0.read_until('\r\n', 1)
-            
+
             time.sleep(1.1)
 
             # Bgsave
             redis0.write("bgsave\r\n")
             ret = redis0.read_until('\r\n', 1)
             self.assertEqual('+Background saving started\r\n', ret)
-            
+
             # Wait finishing bgsave
             while True:
                 redis0.write('lastsave\r\n')
@@ -147,8 +147,8 @@ class TestRedisMgmt(unittest.TestCase):
                 time.sleep(0.1)
 
             # Count the number of rdb backups
-            rdb_list = [name for name in os.listdir('.') 
-                if os.path.isfile(name) 
+            rdb_list = [name for name in os.listdir('.')
+                if os.path.isfile(name)
                     and name.startswith('dump') and name.endswith('.rdb')]
 
             util.log(rdb_list)
@@ -156,7 +156,7 @@ class TestRedisMgmt(unittest.TestCase):
 
             self.assertTrue(len(rdb_list) == 6)
             self.assertTrue('dump.rdb' in rdb_list)
-            
+
 
         # check consistency of load_generator
         for i in range(len(self.load_gen_thrd_list)):
@@ -165,7 +165,7 @@ class TestRedisMgmt(unittest.TestCase):
             self.load_gen_thrd_list[i].join()
             self.assertTrue(self.load_gen_thrd_list[i].isConsistent(), 'Inconsistent after gateway_mgmt test')
         os.chdir(org_path)
-    
+
     def checkOOM(self, redis):
         redis.write("set oom_check value\r\n")
         ret = redis.read_until("\r\n");
@@ -196,7 +196,7 @@ class TestRedisMgmt(unittest.TestCase):
         redis0 = telnetlib.Telnet(server0['ip'], server0['redis_port'])
         redis1 = telnetlib.Telnet(server1['ip'], server1['redis_port'])
         redis2 = telnetlib.Telnet(server2['ip'], server2['redis_port'])
-        
+
         util.log("Set memory limit config")
         redis0.write("config set memory-limit-activation-percentage 50\r\n")
         redis0.read_until("+OK\r\n")
@@ -230,7 +230,7 @@ class TestRedisMgmt(unittest.TestCase):
         self.assertTrue(self.checkOOM(redis2))
         self.assertTrue(self.checkOOM(redis1))
         self.assertTrue(self.checkOOM(redis0))
-        
+
         self.start_load_generator(5)
         redis0.write("debug memory 1000000 499999 0 139999\r\n")
         redis0.read_until("+OK\r\n")
@@ -282,7 +282,7 @@ class TestRedisMgmt(unittest.TestCase):
         self.assertFalse(self.checkOOM(redis0))
         self.assertFalse(self.checkOOM(redis1))
         self.assertFalse(self.checkOOM(redis2))
-        
+
         util.log("Check digest value of each redis server")
         redis2.write("debug digest\r\n")
         redis1.write("debug digest\r\n")
@@ -296,7 +296,7 @@ class TestRedisMgmt(unittest.TestCase):
         pass
 #        TODO
 #        util.print_frame()
-#        
+#
 #        util.log("Set memory limit config")
 #        redis0.write("config set memory-limit-activation-percentage 50\r\n")
 #        redis0.read_until("+OK\r\n")
@@ -306,7 +306,7 @@ class TestRedisMgmt(unittest.TestCase):
 #        redis0.read_until("+OK\r\n")
 #
 #        self.start_load_generator(5)
-#        
+#
 #        ret = util.migration(self.cluster, 0 1, 4096, 8191, 40000)
 #        self.assertEqual(True, ret, 'Migration Fail')
 #
@@ -334,7 +334,7 @@ class TestRedisMgmt(unittest.TestCase):
         util.print_frame()
         server = self.cluster['servers'][0]
         redis = telnetlib.Telnet(server['ip'], server['redis_port'])
-        
+
         # Wrong arguments
         wrong_args = ['50', '-1', '0', 'xxx', '2147483648']
         for arg in wrong_args:

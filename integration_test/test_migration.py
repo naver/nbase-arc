@@ -82,7 +82,7 @@ class TestMigration(unittest.TestCase):
         redis.write(cmd)
         res = redis.read_until('\r\n')
         self.assertEquals( res, ':1\r\n' )
-        
+
     def getS3TTL(self, redis, key):
         util.log("get ttl s3 key %s" % key)
         cmd = 's3lttl ks %s svc key value\r\n' % key
@@ -231,7 +231,7 @@ class TestMigration(unittest.TestCase):
         leader_cm = self.cluster['servers'][0]
         src_master = util.get_server_by_role_and_pg(self.cluster['servers'], 'master', src_pg_id)
         dst_master = util.get_server_by_role_and_pg(self.cluster['servers'], 'master', dst_pg_id)
-  
+
         smr = smr_mgmt.SMR(src_master['id'])
         ret = smr.connect(src_master['ip'], src_master['smr_mgmt_port'])
         if ret != 0:
@@ -269,7 +269,7 @@ class TestMigration(unittest.TestCase):
 
         util.log(">>> migrate test with expire command start(%s), ts:%d" % (time.asctime(), ts))
 
-        ts = time.time() 
+        ts = time.time()
         self.setExpireKey(src_redis, 'beforeCheckpoint~afterCheckpoint:expired', 10)
         self.setExpireKey(src_redis, 'beforeCheckpoint~afterCheckpoint:persist', 20)
         self.setExpireS3Key(src_redis, 'S3:beforeCheckpoint~afterCheckpoint:expired', 10)
@@ -286,18 +286,18 @@ class TestMigration(unittest.TestCase):
         # remote partial checkpoint
         util.log(">>> start remote checkpoint and load (%s)" % time.asctime())
         cmd = "./cluster-util --getandplay %s %d %s %d %d-%d %d" % (
-                    src_master['ip'], src_master['redis_port'], 
+                    src_master['ip'], src_master['redis_port'],
                     dst_master['ip'], dst_master['redis_port'],
                     0, 8191, tps)
         p = util.exec_proc_async(util.cluster_util_dir(src_master['id']), cmd, True, None, subprocess.PIPE, None)
-        
+
         ret = p.wait()
         for line in p.stdout:
-          if line.find("Checkpoint Sequence Number:") != -1:
-            util.log("seqnumber : " + line[line.rfind(":")+1:])
-            seq = int(line[line.rfind(":")+1:])
-          util.log(">>>" + str(line.rstrip()))
-        
+            if line.find("Checkpoint Sequence Number:") != -1:
+                util.log("seqnumber : " + line[line.rfind(":")+1:])
+                seq = int(line[line.rfind(":")+1:])
+            util.log(">>>" + str(line.rstrip()))
+
         self.assertEqual(0, ret)
         util.log(">>> end remote checkpoint and load (%s)" % time.asctime())
 
@@ -313,7 +313,7 @@ class TestMigration(unittest.TestCase):
         self.assertEquals(res, ":1\r\n")
         res = self.persistS3Key(src_redis, 'S3:beforeCheckpoint~afterCheckpoint:expired')
         self.assertEquals(res, ":0\r\n")
-        
+
         # bgsave for testing later about recovery during migration
         util.log(">>> bgsave for testing later about recovery during migration (%s)" % time.asctime())
         cmd = 'bgsave\r\n'
@@ -321,7 +321,7 @@ class TestMigration(unittest.TestCase):
         res = dst_redis.read_until('\r\n')
         self.assertEquals( res, '+Background saving started\r\n' )
 
-        ts = time.time() 
+        ts = time.time()
         self.setExpireKey(src_redis, 'afterCheckpoint~afterCheckpoint:expired', 10)
         self.setExpireKey(src_redis, 'afterCheckpoint~afterCheckpoint:persist', 20)
         self.setExpireS3Key(src_redis, 'S3:afterCheckpoint~afterCheckpoint:expired', 10)
@@ -340,7 +340,7 @@ class TestMigration(unittest.TestCase):
         res = self.persistS3Key(src_redis, 'S3:afterCheckpoint~afterCheckpoint:expired')
         self.assertEquals(res, ":0\r\n")
 
-        ts = time.time() 
+        ts = time.time()
         self.setExpireKey(src_redis, 'afterCheckpoint~duringCatchup:expired', 10)
         self.setExpireKey(src_redis, 'afterCheckpoint~duringCatchup:persist', 100)
         self.setExpireS3Key(src_redis, 'S3:afterCheckpoint~duringCatchup:expired', 10)
@@ -353,7 +353,7 @@ class TestMigration(unittest.TestCase):
         dst_smr_port = dst_master['smr_base_port']
         rle = '1 8192'
         num_part = 8192
-        
+
         smr.write('migrate start %s %d %d %d %d %s\r\n' % (dst_host, dst_smr_port,
                                                      seq, tps, num_part, rle))
         response = smr.read_until('\r\n')
@@ -386,7 +386,7 @@ class TestMigration(unittest.TestCase):
         res = self.persistS3Key(src_redis, 'S3:afterCheckpoint~duringCatchup:expired')
         self.assertEquals(res, ":0\r\n")
 
-        ts = time.time() 
+        ts = time.time()
         self.setExpireKey(src_redis, 'duringCatchup~duringCatchup:expired', 10)
         self.setExpireKey(src_redis, 'duringCatchup~duringCatchup:persist', 20)
         self.setExpireS3Key(src_redis, 'S3:duringCatchup~duringCatchup:expired', 10)
@@ -405,7 +405,7 @@ class TestMigration(unittest.TestCase):
         res = self.persistS3Key(src_redis, 'S3:duringCatchup~duringCatchup:expired')
         self.assertEquals(res, ":0\r\n")
 
-        ts = time.time() 
+        ts = time.time()
         self.setExpireKey(src_redis, 'duringCatchup~afterMig2pc:expired', 10)
         self.setExpireKey(src_redis, 'duringCatchup~afterMig2pc:persist', 20)
         self.setExpireS3Key(src_redis, 'S3:duringCatchup~afterMig2pc:expired', 10)
@@ -416,14 +416,14 @@ class TestMigration(unittest.TestCase):
         # mig2pc
         util.log(">>> start mig2pc (%s)" % time.asctime())
 
-        cmd = 'mig2pc %s %d %d %d %d' % (self.cluster['cluster_name'], src_pg_id, dst_pg_id, 
+        cmd = 'mig2pc %s %d %d %d %d' % (self.cluster['cluster_name'], src_pg_id, dst_pg_id,
                                          0, 8191)
         result = util.cm_command(leader_cm['ip'], leader_cm['cm_port'], cmd)
         util.log('mig2pc result : ' + result)
         if not result.startswith('{"state":"success","msg":"+OK"}\r\n'):
-          util.log('failed to execute mig2pc command, result:%s' % result)
-          return False
-        
+            util.log('failed to execute mig2pc command, result:%s' % result)
+            return False
+
         util.log(">>> sleep until 15 sec pass")
         self.assertFalse(time.time() - ts >= 15)
         time.sleep(15 - (time.time() - ts))
@@ -437,7 +437,7 @@ class TestMigration(unittest.TestCase):
         res = self.persistS3Key(dst_redis, 'S3:duringCatchup~afterMig2pc:expired')
         self.assertEquals(res, ":0\r\n")
 
-        ts = time.time() 
+        ts = time.time()
         self.setExpireKey(dst_redis, 'afterMig2pc~migrateEnd:expired', 10)
         self.setExpireKey(dst_redis, 'afterMig2pc~migrateEnd:persist', 20)
         self.setExpireS3Key(dst_redis, 'S3:afterMig2pc~migrateEnd:expired', 10)
@@ -518,13 +518,13 @@ class TestMigration(unittest.TestCase):
         # remote partial checkpoint
         util.log(">>> start rangedel (%s)" % time.asctime())
         cmd = "./cluster-util --rangedel %s %d %d-%d %d" % (
-                    src_master['ip'], src_master['redis_port'], 
+                    src_master['ip'], src_master['redis_port'],
                     0, 8191, tps)
         p = util.exec_proc_async(util.cluster_util_dir(src_master['id']), cmd, True, None, subprocess.PIPE, None)
         ret = p.wait()
 
         for line in p.stdout:
-          util.log(">>>" + str(line.rstrip()))
+            util.log(">>>" + str(line.rstrip()))
 
         cmd = 'migconf clearend\r\n'
         src_redis.write(cmd)
@@ -541,7 +541,7 @@ class TestMigration(unittest.TestCase):
 
         # kill dst_redis and recover from bgsave
         util.log(">>> kill dst_redis and recover from bgsave (%s)" % time.asctime())
-        
+
         dst_redis.disconnect()
         ret = testbase.request_to_shutdown_redis(dst_master)
         self.assertEquals( ret, 0, 'failed to shutdown redis' )
@@ -549,9 +549,9 @@ class TestMigration(unittest.TestCase):
         self.assertEquals(ret, 0, 'failed to shutdown smr')
         time.sleep(5)
 
-	testbase.request_to_start_smr(dst_master)
-	self.assertEqual( ret, 0, 'failed to start smr, server:%d' % dst_master['id'] )
-        
+        testbase.request_to_start_smr(dst_master)
+        self.assertEqual( ret, 0, 'failed to start smr, server:%d' % dst_master['id'] )
+
         ret = testbase.request_to_start_redis(dst_master)
         self.assertEqual( ret, 0, 'failed to start redis, server:%d' % dst_master['id']  )
 
@@ -602,7 +602,7 @@ class TestMigration(unittest.TestCase):
         # kill dst_slave redis and recover without dump file
         util.log(">>> kill dst_redis and recover without dump file (%s)" % time.asctime())
         dst_slave = util.get_server_by_role_and_pg(self.cluster['servers'], 'slave', dst_pg_id)
-        
+
         ret = testbase.request_to_shutdown_redis(dst_slave)
         self.assertEquals( ret, 0, 'failed to shutdown redis' )
         ret = testbase.request_to_shutdown_smr(dst_slave)
@@ -611,7 +611,7 @@ class TestMigration(unittest.TestCase):
 
         testbase.request_to_start_smr(dst_slave)
         self.assertEqual( ret, 0, 'failed to start smr, server:%d' % dst_slave['id'] )
-        
+
         ret = testbase.request_to_start_redis(dst_slave)
         self.assertEqual( ret, 0, 'failed to start redis, server:%d' % dst_slave['id']  )
 

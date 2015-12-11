@@ -37,7 +37,7 @@ class CresteClusterThread(threading.Thread):
         # Make cluster configuration
         pgs_id = 10
         cluster = {
-                'cluster_name' : self.cluster_name, 
+                'cluster_name' : self.cluster_name,
                 'keyspace_size' : 8192,
                 'quorum_policy' : '0:1',
                 'slots' : [],
@@ -46,91 +46,91 @@ class CresteClusterThread(threading.Thread):
                 }
 
         for pg_id in range(self.pg_max):
-           cluster['pg_id_list'].append(pg_id)
-           cluster['slots'].append(8192 / self.pg_max * pg_id)
-           if pg_id == self.pg_max - 1:
-              cluster['slots'].append(8191)
-           else:
-              cluster['slots'].append(8192 / self.pg_max * (pg_id + 1) - 1)
+            cluster['pg_id_list'].append(pg_id)
+            cluster['slots'].append(8192 / self.pg_max * pg_id)
+            if pg_id == self.pg_max - 1:
+                cluster['slots'].append(8191)
+            else:
+                cluster['slots'].append(8192 / self.pg_max * (pg_id + 1) - 1)
 
-           for pgs in range(self.pgs_per_pg):
-              smr_base_port = 15000 + pgs_id * 20
-              smr_mgmt_port = smr_base_port + 3
-              gateway_port = smr_base_port + 10
-              redis_port = smr_base_port + 9
+            for pgs in range(self.pgs_per_pg):
+                smr_base_port = 15000 + pgs_id * 20
+                smr_mgmt_port = smr_base_port + 3
+                gateway_port = smr_base_port + 10
+                redis_port = smr_base_port + 9
 
-              server = {}
-              server['id'] = pgs_id
-              pgs_id = pgs_id + 1
-              server['cluster_name'] = self.cluster_name
-              server['ip'] = self.ip
-              server['pm_name'] = self.pm_name
-              server['cm_port'] = None
-              server['pg_id'] = pg_id
-              server['smr_base_port'] = smr_base_port
-              server['smr_mgmt_port'] = smr_mgmt_port
-              server['gateway_port'] = gateway_port
-              server['redis_port'] = redis_port
-              server['zk_port'] = 2181
+                server = {}
+                server['id'] = pgs_id
+                pgs_id = pgs_id + 1
+                server['cluster_name'] = self.cluster_name
+                server['ip'] = self.ip
+                server['pm_name'] = self.pm_name
+                server['cm_port'] = None
+                server['pg_id'] = pg_id
+                server['smr_base_port'] = smr_base_port
+                server['smr_mgmt_port'] = smr_mgmt_port
+                server['gateway_port'] = gateway_port
+                server['redis_port'] = redis_port
+                server['zk_port'] = 2181
 
-              cluster['servers'].append(server)
+                cluster['servers'].append(server)
 
         # Send cluster information to MGMT-CC
         testbase.initialize_cluster(cluster, self.leader_cm)
 
         # Set up pgs binaries
         try:
-           for server in cluster['servers']:
-              id = server['id']
-              util.log('copy binaries, server_id=%d' % id)
+            for server in cluster['servers']:
+                id = server['id']
+                util.log('copy binaries, server_id=%d' % id)
 
-              util.copy_smrreplicator(id)
-              util.copy_gw(id)
-              util.copy_redis_server(id)
-              util.copy_cluster_util(id)
-           
+                util.copy_smrreplicator(id)
+                util.copy_gw(id)
+                util.copy_redis_server(id)
+                util.copy_cluster_util(id)
+
         except IOError as e:
-           util.log(e)
-           util.log('Error: can not find file or read data')
-           return
+            util.log(e)
+            util.log('Error: can not find file or read data')
+            return
 
         except:
-           util.log('Error: file copy error.')
-           util.log(sys.exc_info()[0])
-           raise
+            util.log('Error: file copy error.')
+            util.log(sys.exc_info()[0])
+            raise
 
         # Cleanup servers`s directories
         for server in cluster['servers']:
-           if testbase.cleanup_pgs_log_and_ckpt(cluster['cluster_name'], server) != 0:
-              util.log('failed to cleanup_test_environment, id=%d' % server['id'])
-              return
+            if testbase.cleanup_pgs_log_and_ckpt(cluster['cluster_name'], server) != 0:
+                util.log('failed to cleanup_test_environment, id=%d' % server['id'])
+                return
 
         # Start pgs
         for server in cluster['servers']:
-           if testbase.request_to_start_smr(server) != 0:
-              util.log('failed to request_to_start_smr, id=%d' % server['id'])
-              return
+            if testbase.request_to_start_smr(server) != 0:
+                util.log('failed to request_to_start_smr, id=%d' % server['id'])
+                return
 
         for server in cluster['servers']:
-           if testbase.request_to_start_redis(server, check=False) != 0:
-              util.log('failed to request_to_start_redis, id=%d' % server['id'])
-              return
+            if testbase.request_to_start_redis(server, check=False) != 0:
+                util.log('failed to request_to_start_redis, id=%d' % server['id'])
+                return
 
         for server in cluster['servers']:
-           if testbase.wait_until_finished_to_set_up_role(server) != 0:
-              util.log('failed to role set up, id=%d' % server['id'])
-              return 
+            if testbase.wait_until_finished_to_set_up_role(server) != 0:
+                util.log('failed to role set up, id=%d' % server['id'])
+                return
 
         for i in range(self.pg_max):
-           server = cluster['servers'][i]
-           if testbase.request_to_start_gateway(cluster['cluster_name'], server, self.leader_cm) != 0:
-              util.log('failed to request_to_start_gateway, id=%d' % server['id'])
-              return
+            server = cluster['servers'][i]
+            if testbase.request_to_start_gateway(cluster['cluster_name'], server, self.leader_cm) != 0:
+                util.log('failed to request_to_start_gateway, id=%d' % server['id'])
+                return
 
         if util.check_cluster(self.cluster_name, self.leader_cm['ip'], self.leader_cm['cm_port']):
-           self.result = True
+            self.result = True
         else:
-           self.result = False
+            self.result = False
 
         self.cluster = cluster
 
@@ -220,7 +220,7 @@ class RestartSMRThread(threading.Thread):
         threading.Thread.__init__(self)
         self.cluster = cluster
         self.leader_cm = leader_cm
-        self.result = False 
+        self.result = False
         pass
 
     def run(self):
@@ -269,7 +269,7 @@ class TestConfMaster(unittest.TestCase):
             log_prefix = 'bin/log/arcci_log_%d' % i
 
             util.log('create arcci')
-            arcci = ARC_API(ZK_ADDR, cluster['cluster_name'], logFilePrefix = log_prefix, 
+            arcci = ARC_API(ZK_ADDR, cluster['cluster_name'], logFilePrefix = log_prefix,
                     so_path = constant.ARCCI_SO_PATH)
             load_gen = load_generator.LoadGenerator_ARCCI_Affinity(arcci, optype)
             load_gen.start()
@@ -300,41 +300,41 @@ class TestConfMaster(unittest.TestCase):
             # Cluster commands
             cmd = 'cluster_add %s %s' % (self.cluster['cluster_name'] , self.cluster['quorum_policy'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'cluster_ls'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
             self.assertEquals(json['data']['list'][0], self.cluster['cluster_name'], 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'cluster_info %s' % (self.cluster['cluster_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-             
+
             # Physical machine commands
-            cmd = 'pm_add %s %s' % (self.leader_cm['pm_name'], self.leader_cm['ip']) 
+            cmd = 'pm_add %s %s' % (self.leader_cm['pm_name'], self.leader_cm['ip'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'pm_ls'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
             self.assertEquals(json['data']['list'][0], self.leader_cm['pm_name'], 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'pm_info %s' % (self.leader_cm['pm_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-             
+
             # Partition group commands
-            cmd = 'pg_add %s %d' % (self.cluster['cluster_name'], self.leader_cm['id']) 
+            cmd = 'pg_add %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'slot_set_pg %s %d:%d %d' % (    self.cluster['cluster_name']
@@ -343,13 +343,13 @@ class TestConfMaster(unittest.TestCase):
                                                                                     , self.cluster['pg_id_list'][0])
             cmd = 'pg_ls %s' % (self.cluster['cluster_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
             self.assertEquals(json['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'pg_info %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Partition group server commands
@@ -363,32 +363,32 @@ class TestConfMaster(unittest.TestCase):
             # Ping command
             cmd = 'ping'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
             self.assertEquals(json['msg'], '+PONG', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Help command
             cmd = 'help'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd, 5)
-            self.assertTrue(res.find('Type help <command> for command specific information') is not -1, 
+            self.assertTrue(res.find('Type help <command> for command specific information') is not -1,
                                              'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Del partition group
             cmd = 'pg_del %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Del physical machine
             cmd = 'pm_del %s' % (self.leader_cm['pm_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Del cluster
             cmd = 'cluster_del %s' % (self.cluster['cluster_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res) 
+            json = demjson.decode(res)
             self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Leader election of Configuration master
@@ -415,7 +415,7 @@ class TestConfMaster(unittest.TestCase):
 
                 cmd = 'not_exist_cmd'
                 res = util.cm_command(follower['ip'], follower['cm_port'], cmd)
-                json = demjson.decode(res) 
+                json = demjson.decode(res)
                 if json['state'] == 'error':
                     there_is_a_leader = True
                     break
@@ -433,26 +433,26 @@ class TestConfMaster(unittest.TestCase):
                                                                                          , self.leader_cm['pm_name']
                                                                                          , self.leader_cm['ip']
                                                                                          , self.leader_cm['smr_base_port']
-                                                                                         , self.leader_cm['redis_port']) 
+                                                                                         , self.leader_cm['redis_port'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'pgs_ls %s' % (self.cluster['cluster_name'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         self.assertEquals(json['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'pgs_info %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-         
+
         cmd = 'pgs_del %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
@@ -461,26 +461,26 @@ class TestConfMaster(unittest.TestCase):
                                                                                  , self.leader_cm['id']
                                                                                  , self.leader_cm['pm_name']
                                                                                  , self.leader_cm['ip']
-                                                                                 , self.leader_cm['gateway_port']) 
+                                                                                 , self.leader_cm['gateway_port'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'gw_ls %s' % (self.cluster['cluster_name'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         self.assertEquals(json['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'gw_info %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-         
+
         cmd = 'gw_del %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res) 
+        json = demjson.decode(res)
         self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
@@ -502,7 +502,7 @@ class TestConfMaster(unittest.TestCase):
 
             try:
                 # Start default cluster
-                ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster) 
+                ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
                 self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
 
                 # Start ReadCommandThread
@@ -530,7 +530,7 @@ class TestConfMaster(unittest.TestCase):
                 read_cmd_thrd.start()
 
                 # Start WriteCommanndThread 1
-                write_cmds_1 = [] 
+                write_cmds_1 = []
                 write_cmds_1.append('cluster_add lock_test_write_thread 0:1')
                 write_cmds_1.append('pg_add lock_test_write_thread 0')
                 write_cmds_1.append('pg_add lock_test_write_thread 1')
@@ -570,8 +570,8 @@ class TestConfMaster(unittest.TestCase):
                 write_cmd_thrd.start()
 
                 # Test CresteClusterThread (additioal cluster)
-                create_cluster_thrd = CresteClusterThread(cluster_2_name, 
-                        self.cluster['servers'][0]['ip'], self.cluster['servers'][0]['pm_name'], 
+                create_cluster_thrd = CresteClusterThread(cluster_2_name,
+                        self.cluster['servers'][0]['ip'], self.cluster['servers'][0]['pm_name'],
                         cluster_2_pg_count, cluster_2_pgs_per_pg, self.leader_cm)
 
                 create_cluster_thrd.start()
@@ -666,7 +666,7 @@ class TestConfMaster(unittest.TestCase):
                 self.assertNotEqual( m, None, 'master is None.' )
                 self.assertNotEqual( s1, None, 'slave1 is None.' )
                 self.assertNotEqual( s2, None, 'slave2 is None.' )
-      
+
                 util.log( 'Loop:%d, role_change, master:%d' % (i, m['id']) )
                 self.role_change(m)
         finally:
@@ -677,7 +677,7 @@ class TestConfMaster(unittest.TestCase):
                 load_gen_list.pop(i, None)
 
             # shutdown cluster
-            ret = default_cluster.finalize( self.cluster ) 
+            ret = default_cluster.finalize( self.cluster )
             self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
 
     def role_change(self, target):
@@ -754,7 +754,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT | ROLE |
                 +-------+---------------------+--------+----------------+------+------+
@@ -860,7 +860,7 @@ class TestConfMaster(unittest.TestCase):
             server1['real_ip'] = '127.0.0.1'
             server1['pm_name'] = 'virtual_localhost'
             server1['pg_id'] = 2
-            server1['smr_base_port'] = 8120 
+            server1['smr_base_port'] = 8120
             server1['smr_mgmt_port'] = 8123
             server1['gateway_port'] = 8220
             server1['redis_port'] = 8129
@@ -872,7 +872,7 @@ class TestConfMaster(unittest.TestCase):
             server2['real_ip'] = '127.0.0.1'
             server2['pm_name'] = 'localhost'
             server2['pg_id'] = 2
-            server2['smr_base_port'] = 9120 
+            server2['smr_base_port'] = 9120
             server2['smr_mgmt_port'] = 9123
             server2['gateway_port'] = 9220
             server2['redis_port'] = 9129
@@ -900,7 +900,7 @@ class TestConfMaster(unittest.TestCase):
             ret = util.migration(cluster, 1, 2, 6096, 8191, 50000)
             self.assertTrue(ret, '[ADD PG] migration fail 1 -> 2')
 
-            """ 
+            """
                 +-------+----------------+------+-------+
                 | GW_ID |       IP       | PORT | STATE |
                 +-------+----------------+------+-------+
@@ -911,7 +911,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+-----------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
                 +-------+---------------------+--------+----------------+------+-----------+
@@ -937,11 +937,11 @@ class TestConfMaster(unittest.TestCase):
             expected_affinity = []
             expected_affinity.append(
                 sorted(
-                    demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]'), 
+                    demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]'),
                     key=lambda x: int(x['gw_id'])))
             expected_affinity.append(
                 sorted(
-                    demjson.decode('[{"affinity":"A2000R2096N2000R2096","gw_id":0},{"affinity":"A2000R2096N2000R2096","gw_id":1},{"affinity":"A2000R2096N2000R2096","gw_id":2},{"affinity":"N2000A6192","gw_id":3},{"affinity":"N2000A6192","gw_id":4},{"affinity":"N2000A6192","gw_id":5}]'), 
+                    demjson.decode('[{"affinity":"A2000R2096N2000R2096","gw_id":0},{"affinity":"A2000R2096N2000R2096","gw_id":1},{"affinity":"A2000R2096N2000R2096","gw_id":2},{"affinity":"N2000A6192","gw_id":3},{"affinity":"N2000A6192","gw_id":4},{"affinity":"N2000A6192","gw_id":5}]'),
                     key=lambda x: int(x['gw_id'])))
             real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity in expected_affinity)
@@ -957,7 +957,7 @@ class TestConfMaster(unittest.TestCase):
             else:
                 util.role_change(leader_cm, cluster['cluster_name'], server1['id'])
 
-            """ 
+            """
                 +-------+----------------+------+-------+
                 | GW_ID |       IP       | PORT | STATE |
                 +-------+----------------+------+-------+
@@ -968,7 +968,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+-----------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
                 +-------+---------------------+--------+----------------+------+-----------+
@@ -1017,7 +1017,7 @@ class TestConfMaster(unittest.TestCase):
             self.assertEquals( expected, state,
                                '[MASTER PGS FAILOVER] server%d - state:%s, expected:%s' % (server['id'], state, expected) )
 
-            """ 
+            """
                 +-------+----------------+------+-------+
                 | GW_ID |       IP       | PORT | STATE |
                 +-------+----------------+------+-------+
@@ -1028,7 +1028,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+-----------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
                 +-------+---------------------+--------+----------------+------+-----------+
@@ -1061,7 +1061,7 @@ class TestConfMaster(unittest.TestCase):
 
             ret = testbase.wait_until_finished_to_set_up_role(server, max_try)
             self.assertEquals(ret, 0, '[MASTER PGS FAILOVER] failed to role change. smr_id:%d' % (server['id']))
-            """ 
+            """
                 +-------+----------------+------+-------+
                 | GW_ID |       IP       | PORT | STATE |
                 +-------+----------------+------+-------+
@@ -1072,7 +1072,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+-----------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
                 +-------+---------------------+--------+----------------+------+-----------+
@@ -1118,7 +1118,7 @@ class TestConfMaster(unittest.TestCase):
                 time.sleep( 1 )
             self.assertEquals( expected, state,
                                '[SLAVE PGS FAILOVER] server%d - state:%s, expected:%s' % (server['id'], state, expected) )
-            """ 
+            """
                 +-------+----------------+------+-------+
                 | GW_ID |       IP       | PORT | STATE |
                 +-------+----------------+------+-------+
@@ -1129,7 +1129,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+-----------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
                 +-------+---------------------+--------+----------------+------+-----------+
@@ -1164,7 +1164,7 @@ class TestConfMaster(unittest.TestCase):
 
             ret = testbase.wait_until_finished_to_set_up_role(server, max_try)
             self.assertEquals(ret, 0, '[SLAVE PGS FAILOVER] failed to role change. smr_id:%d' % (server['id']))
-            """ 
+            """
                 +-------+----------------+------+-------+
                 | GW_ID |       IP       | PORT | STATE |
                 +-------+----------------+------+-------+
@@ -1175,7 +1175,7 @@ class TestConfMaster(unittest.TestCase):
                 |     4 |      127.0.0.1 | 9210 |  N(N) |
                 |     5 |      127.0.0.1 |10210 |  N(N) |
                 +-------+----------------+------+-------+
-                
+
                 +-------+---------------------+--------+----------------+------+-----------+
                 | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
                 +-------+---------------------+--------+----------------+------+-----------+
@@ -1233,7 +1233,7 @@ class TestConfMaster(unittest.TestCase):
             self.destroy_load_gens(load_gens)
 
             # shutdown cluster
-            #ret = default_cluster.finalize(cluster) 
+            #ret = default_cluster.finalize(cluster)
             #self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
 
             while len(cluster['servers']) > 6:
@@ -1280,7 +1280,7 @@ class TestConfMaster(unittest.TestCase):
 
                 finally:
                     # shutdown cluster
-                    ret = default_cluster.finalize(cluster) 
+                    ret = default_cluster.finalize(cluster)
                     self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
                     pass
             call._original = function
@@ -1320,12 +1320,12 @@ class TestConfMaster(unittest.TestCase):
                     cur_fds = {s['id']: util.cm_get_socket_cnt(s, dst_ports) for s in cluster['servers']}
                     for id, cur_fd in cur_fds.items():
                         expected_fd = init_fds[id]
-                        util.log('File descriptor of CM%d : %d %s %d' % 
-                                (id, expected_fd, '==' if expected_fd == cur_fd else '!=', cur_fd)) 
+                        util.log('File descriptor of CM%d : %d %s %d' %
+                                (id, expected_fd, '==' if expected_fd == cur_fd else '!=', cur_fd))
                         if id == leader_cm['id']:
                             expected_fd = 15
                         else:
-                            expected_fd = 9 
+                            expected_fd = 9
 
                         if expected_fd < cur_fd:
                             ok = False
@@ -1375,8 +1375,8 @@ class TestConfMaster(unittest.TestCase):
                         else:
                             # 3(hb smr) + 3(hb redis) + 3(command gw)
                             expected_fd = 9
-                        util.log('File descriptor of CM%d : %d -> %d' % (id, init_fd, cur_fd)) 
-                        
+                        util.log('File descriptor of CM%d : %d -> %d' % (id, init_fd, cur_fd))
+
                         if expected_fd < cur_fd:
                             ok = False
 
@@ -1412,7 +1412,7 @@ class TestConfMaster(unittest.TestCase):
             util.log('')
             util.log(' ### LOOP %d ###' % i)
             for s in cluster['servers']:
-                # PGS Failover 
+                # PGS Failover
                 ret = util.failover(s, leader_cm)
                 self.assertTrue(ret, 'Failed to failover smr %d (%s:%d)' % (s['id'], s['ip'], s['smr_base_port']))
                 time.sleep(3)
@@ -1424,8 +1424,8 @@ class TestConfMaster(unittest.TestCase):
                     cur_fds = {s['id']: util.cm_get_socket_cnt(s, dst_ports) for s in cluster['servers']}
                     for id, cur_fd in cur_fds.items():
                         init_fd = init_fds[id]
-                        util.log('File descriptor of CM%d : %d -> %d' % (id, init_fd, cur_fd)) 
-                        
+                        util.log('File descriptor of CM%d : %d -> %d' % (id, init_fd, cur_fd))
+
                         if id == leader_cm['id']:
                             # 3(command smr) + 3(hb smr) + 3(command redis) + 3(hb redis) + 3(hb gw) + 3(command gw)
                             # smr commands : 'role master', 'role slave', 'role lconn', 'setquorum' and etc.
@@ -1434,7 +1434,7 @@ class TestConfMaster(unittest.TestCase):
                             expected_fd = 18
                         else:
                             # 3(hb smr) + 3(hb redis) + 3(hb gw)
-                            expected_fd = 9 
+                            expected_fd = 9
 
                         if expected_fd < cur_fd:
                             ok = False
@@ -1473,7 +1473,7 @@ class TestConfMaster(unittest.TestCase):
             util.log('[FD COUNT]')
             for id, cur_fd in cur_fds.items():
                 init_fd = init_fds[id]
-                util.log('File descriptor of CM%d : %d -> %d' % (id, init_fd, cur_fd)) 
+                util.log('File descriptor of CM%d : %d -> %d' % (id, init_fd, cur_fd))
 
                 if 0 != cur_fd:
                     ok = False
@@ -1512,11 +1512,11 @@ class TestConfMaster(unittest.TestCase):
                 # Check last worklog number.
                 leader_cm = self.cluster['servers'][i]
                 sno, eno = util.worklog_info( leader_cm )
-                self.assertGreaterEqual( sno, 1, 
-                    "Start number of worklog(%d) must be larger than or equal to 1" % 
+                self.assertGreaterEqual( sno, 1,
+                    "Start number of worklog(%d) must be larger than or equal to 1" %
                         sno )
                 self.assertGreaterEqual( eno, sno,
-                    "End number of worklog(%d) must be larger than or equal to start number of worklog(%d)" % 
+                    "End number of worklog(%d) must be larger than or equal to start number of worklog(%d)" %
                         (eno, sno) )
 
                 # Shutdown leader_cm in order to elect new leader.
@@ -1533,19 +1533,19 @@ class TestConfMaster(unittest.TestCase):
 
                 # Check laster worklog number after failover.
                 n_sno, n_eno = util.worklog_info( leader_cm )
-                self.assertGreaterEqual( n_sno, 1, 
-                    "New start number of worklog(%d) must be larger than or equal to 1" % 
+                self.assertGreaterEqual( n_sno, 1,
+                    "New start number of worklog(%d) must be larger than or equal to 1" %
                         n_sno )
-                self.assertGreaterEqual( n_eno, n_sno, 
-                    "New end number of worklog(%d) must be larger than or equal to new start number of worklog(%d)" % 
+                self.assertGreaterEqual( n_eno, n_sno,
+                    "New end number of worklog(%d) must be larger than or equal to new start number of worklog(%d)" %
                         (n_eno, n_sno) )
-                self.assertGreaterEqual( n_eno, eno, 
-                    "New End number of worklog(%d) must be larger than or equal to old end number of worklog(%d)" % 
+                self.assertGreaterEqual( n_eno, eno,
+                    "New End number of worklog(%d) must be larger than or equal to old end number of worklog(%d)" %
                         (n_eno, eno) )
 
         finally:
             # shutdown cluster
-            ret = default_cluster.finalize(self.cluster) 
+            ret = default_cluster.finalize(self.cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
 
     def test_no_gw_affinity_znode(self):
@@ -1589,7 +1589,7 @@ class TestConfMaster(unittest.TestCase):
             self.destroy_load_gens(load_gens)
 
             # shutdown cluster
-            ret = default_cluster.finalize(cluster) 
+            ret = default_cluster.finalize(cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
 
     def restart_gateway_with_virtual_network_info(self, cluster, leader_cm):
@@ -1697,6 +1697,5 @@ class TestConfMaster(unittest.TestCase):
             self.destroy_load_gens(load_gens)
 
             # shutdown cluster
-            ret = default_cluster.finalize(cluster) 
+            ret = default_cluster.finalize(cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
-

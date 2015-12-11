@@ -62,7 +62,7 @@ class TestScaleout(unittest.TestCase):
             cluster = config.clusters[0]
             ret = util.pg_add(cluster, servers, leader_cm)
             self.assertEqual(True, ret, 'Scale out fail. util.pg_add returns false')
-            
+
             time.sleep(5)
             # pg0 -> pg1
             cluster = config.clusters[1]
@@ -136,7 +136,7 @@ class TestScaleout(unittest.TestCase):
         cluster = config.clusters[0]
         ret = util.pg_add(cluster, servers, leader_cm)
         self.assertEqual(True, ret, 'Scale out fail. util.pg_add returns false')
-        
+
         time.sleep(5)
         # pg0 -> pg1
         cluster = config.clusters[1]
@@ -146,9 +146,9 @@ class TestScaleout(unittest.TestCase):
         # get log file
         old_logs = {}
         for s in config.clusters[0]['servers']:
-            parent_dir, log_dir = util.smr_log_dir(s['id']) 
+            parent_dir, log_dir = util.smr_log_dir(s['id'])
             path = '%s/%s' % (parent_dir, log_dir)
-            old_logs[s['id']] = util.ls(path) 
+            old_logs[s['id']] = util.ls(path)
 
         # bgsave in order to make smrlogs deleted.
         for s in config.clusters[0]['servers']:
@@ -159,7 +159,7 @@ class TestScaleout(unittest.TestCase):
         # check consistency
         ok = True
         for j in range(len(self.load_gen_thrd_list)):
-            self.assertTrue(self.load_gen_thrd_list[j].isConsistent(), 
+            self.assertTrue(self.load_gen_thrd_list[j].isConsistent(),
                     'Inconsistent after migration')
 
         # is smr-replicator delete smrlogs?
@@ -169,9 +169,9 @@ class TestScaleout(unittest.TestCase):
             # get current log files
             cur_logs = {}
             for s in config.clusters[0]['servers']:
-                parent_dir, log_dir = util.smr_log_dir(s['id']) 
+                parent_dir, log_dir = util.smr_log_dir(s['id'])
                 path = '%s/%s' % (parent_dir, log_dir)
-                cur_logs[s['id']] = util.ls(path) 
+                cur_logs[s['id']] = util.ls(path)
 
             # compare old and new
             temp_old_logs = copy.deepcopy(old_logs)
@@ -205,4 +205,3 @@ class TestScaleout(unittest.TestCase):
         for i in range(len(self.load_gen_thrd_list)):
             self.load_gen_thrd_list[i].join()
             self.assertTrue(self.load_gen_thrd_list[i].isConsistent(), 'Inconsistent after migration')
-

@@ -16,7 +16,7 @@ class TestBasicOp(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         return 0
-       
+
     @classmethod
     def tearDownClass(cls):
         return 0
@@ -36,7 +36,7 @@ class TestBasicOp(unittest.TestCase):
     def test_basic_op(self):
         util.print_frame()
         f = open("%s/test_basicop_output_redis" % constant.logdir, 'w')
-        p = util.exec_proc_async("../redis-2.8.8", 
+        p = util.exec_proc_async("../redis-2.8.8",
                             "./runtest --accurate",
                             True, None, f, None)
 
@@ -47,7 +47,7 @@ class TestBasicOp(unittest.TestCase):
     def test_basic_op_smr(self):
         util.print_frame()
         f = open("%s/test_basicop_output_smr" % constant.logdir, 'w')
-        p = util.exec_proc_async("../redis-2.8.8", 
+        p = util.exec_proc_async("../redis-2.8.8",
                             "./runtest_smr --accurate",
                             True, None, f, None)
 
@@ -59,7 +59,7 @@ class TestBasicOp(unittest.TestCase):
         util.print_frame()
         ip, port = util.get_rand_gateway(self.cluster)
         f = open("%s/test_basicop_output_gw" % constant.logdir, 'w')
-        p = util.exec_proc_async("../redis-2.8.8", 
+        p = util.exec_proc_async("../redis-2.8.8",
                             "./runtest_gw --accurate --gw-port "+str(port),
                             True, None, f, None)
 
@@ -95,7 +95,7 @@ zk_session_timeout_millis 10000
         else:
             cmd = "./%s capi_server.conf" % constant.CAPI_TEST_SERVER
 
-        capi_server = util.exec_proc_async(util.capi_dir(0), 
+        capi_server = util.exec_proc_async(util.capi_dir(0),
                             cmd, True, None, subprocess.PIPE, None)
 
         # ping check
@@ -106,7 +106,7 @@ zk_session_timeout_millis 10000
             except:
                 time.sleep(1)
                 continue
-        
+
         t.write("ping\r\n")
         t.read_until('+PONG\r\n')
         t.close()
@@ -122,7 +122,7 @@ zk_session_timeout_millis 10000
         capi_server = self.run_capi_server(arch)
 
         f = open("%s/test_basicop_output_capi%d" % (constant.logdir, arch), 'w')
-        p = util.exec_proc_async("../redis-2.8.8", 
+        p = util.exec_proc_async("../redis-2.8.8",
                             "./runtest_gw --accurate --gw-port 6200",
                             True, None, f, None)
 
@@ -135,7 +135,7 @@ zk_session_timeout_millis 10000
     def test_basic_op_capi64(self):
         util.print_frame()
         self.__test_basic_op_capi(64)
-    
+
     def test_basic_op_capi32(self):
         util.print_frame()
         self.__test_basic_op_capi(32)

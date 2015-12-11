@@ -45,8 +45,8 @@ class TestLocalProxy(unittest.TestCase):
         util.print_frame()
 
         # Clean server log file
-        p = util.exec_proc_async(util.capi_dir(0), 
-                'rm capi_server-*', 
+        p = util.exec_proc_async(util.capi_dir(0),
+                'rm capi_server-*',
                 True, None, subprocess.PIPE, None)
 
         p.wait()
@@ -78,7 +78,7 @@ zk_session_timeout_millis 10000
         else:
             cmd = "./%s capi_server.conf" % constant.CAPI_TEST_SERVER
 
-        capi_server = util.exec_proc_async(util.capi_dir(0), 
+        capi_server = util.exec_proc_async(util.capi_dir(0),
                             cmd, True, None, subprocess.PIPE, None)
 
         # ping check
@@ -89,7 +89,7 @@ zk_session_timeout_millis 10000
             except:
                 time.sleep(1)
                 continue
-        
+
         t.write("ping\r\n")
         t.read_until('+PONG\r\n')
         t.close()
@@ -103,8 +103,8 @@ zk_session_timeout_millis 10000
         time.sleep(5)
 
         # Check reconfiguration by SIGHUP
-        p = util.exec_proc_async(util.capi_dir(0), 
-                'grep "Connected to the zookeeper" capi_server-* | wc -l', 
+        p = util.exec_proc_async(util.capi_dir(0),
+                'grep "Connected to the zookeeper" capi_server-* | wc -l',
                 True, None, subprocess.PIPE, None)
 
         p.wait()
@@ -115,8 +115,8 @@ zk_session_timeout_millis 10000
         capi_server.send_signal(signal.SIGHUP)
         time.sleep(5)
 
-        p = util.exec_proc_async(util.capi_dir(0), 
-                'grep "Connected to the zookeeper" capi_server-* | wc -l', 
+        p = util.exec_proc_async(util.capi_dir(0),
+                'grep "Connected to the zookeeper" capi_server-* | wc -l',
                 True, None, subprocess.PIPE, None)
 
         p.wait()
@@ -124,8 +124,8 @@ zk_session_timeout_millis 10000
         print 'grep "Connected to the zookeeper" result : ' + wc
         self.assertEquals(wc.strip(), '2')
 
-        p = util.exec_proc_async(util.capi_dir(0), 
-                'grep "Graceful shutdown caused by API" capi_server-* | wc -l', 
+        p = util.exec_proc_async(util.capi_dir(0),
+                'grep "Graceful shutdown caused by API" capi_server-* | wc -l',
                 True, None, subprocess.PIPE, None)
 
         p.wait()
@@ -137,7 +137,7 @@ zk_session_timeout_millis 10000
         for i in range(50):
             capi_server.send_signal(signal.SIGHUP)
             time.sleep(0.1)
-            
+
         # check consistency of load_generator
         for i in range(len(load_gen_thrd_list)):
             load_gen_thrd_list[i].quit()

@@ -42,4 +42,3 @@ def crc16_buff(buff, seed=0):
 def crc16_floating(next_byte, seed):
     return ((seed << 8) ^ crc16tab[(seed >> 8) ^ (ord(next_byte) & 0x00FF)])\
         & 0xFFFF
-
