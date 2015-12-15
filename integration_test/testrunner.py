@@ -155,7 +155,7 @@ def __import__(name, globals=None, locals=None, fromlist=None):
 def signal_handler( *args ):
     exit(-1)
 
-def cleanup_test_env(opt_skip_copy_binaries):
+def cleanup_test_env(opt_skip_copy_binaries, opt_32bit_binary_test):
     # Kill processes
     if testbase.cleanup_processes() != 0:
         util.log('failed to cleanup test environment')
@@ -175,7 +175,7 @@ def cleanup_test_env(opt_skip_copy_binaries):
             srv_id_dict[id] = True
 
     # Setup binaries
-    if testbase.setup_binaries( config.clusters, opt_skip_copy_binaries ) != 0:
+    if testbase.setup_binaries( config.clusters, opt_skip_copy_binaries, opt_32bit_binary_test ) != 0:
         util.log('failed to initialize testbase')
         return -1
 
@@ -291,7 +291,7 @@ def main():
             opt_non_interactive = True
 
     # Clean up test environment
-    if cleanup_test_env(opt_skip_copy_binaries) != 0:
+    if cleanup_test_env(opt_skip_copy_binaries, opt_32bit_binary_test) != 0:
         print 'Clean up test environment fail! Aborting...'
         return -1
 

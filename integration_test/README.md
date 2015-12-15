@@ -1,5 +1,13 @@
 ## Test Setup
 
+#### Requirements
+We only checked these test cases on specific environment. Result of test on different environment is not guaranteed.
+
+* Physical Machine (Xeon L5640 @ 2.27 X 2 socket, 48 GB Memory)
+* CentOS 6.3 & CentOS 6.6
+* python 2.7
+* tcl 8.5+ required
+
 #### Build nbase-arc with gcov option.
 ```
 $ make gcov
@@ -13,8 +21,11 @@ $ make gcov32
 ```
 
 #### Install zookeeper ensemble.
-* Install three copies of zookeeper in ~/bin/zk1, ~/bin/zk2, and ~/bin/zk3
+* Install three copies of zookeeper in ~/bin/zk1, ~/bin/zk2, and ~/bin/zk3  
+  For integration test, these zookeeper paths are fixed in test case for zookeeper failure.
+
 * Set up zookeeper config.
+
 ```
 $ mv ~/bin/zk1/conf/zoo_sample.cfg ~/bin/zk1/conf/zoo.cfg
 $ vi ~/bin/zk1/conf/zoo.cfg
