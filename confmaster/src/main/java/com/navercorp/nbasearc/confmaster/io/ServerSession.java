@@ -1,7 +1,6 @@
 package com.navercorp.nbasearc.confmaster.io;
 
 import java.io.IOException;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
@@ -33,11 +32,11 @@ public final class ServerSession extends Session {
         }
     }
     
-    public void bind(InetAddress bindAddr, int port) throws IOException {
+    public void bind(String ip, int port) throws IOException {
         try {
-            channel.socket().bind(new InetSocketAddress(bindAddr, port));
+            channel.socket().bind(new InetSocketAddress(ip, port));
         } catch (IOException e) {
-            Logger.error("Bind listen socket fail. ip: {}, port: {}", bindAddr, port, e);
+            Logger.error("Bind listen socket fail. ip: {}, port: {}", ip, port, e);
             throw e;
         }
     }

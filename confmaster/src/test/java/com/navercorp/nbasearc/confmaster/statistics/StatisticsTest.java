@@ -27,8 +27,7 @@ public class StatisticsTest {
         boolean find = false;
         for (Log log : logs) {
             int index = log.toString().indexOf(
-                    "CC [SLOW_CLIENT] HOST:192.168.0.10:10000, " + 
-                    "ELAPSED_REPLY_TIME:2000, CMD:ping, REPLY(LEN:4, MEG:\"pong\")");
+                    "CC Slow cmd. 192.168.0.10:10000, elapsed: 2000ms, request: \"ping\", reply: \"pong\"");
             if (index != -1) {
                 find = true;
                 break;

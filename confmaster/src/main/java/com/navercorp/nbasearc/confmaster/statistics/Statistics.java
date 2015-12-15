@@ -123,7 +123,7 @@ public class Statistics {
     }
     
     public static void updateElapsedTimeForCommands(String ip, int port,
-            String request, String reply, long elapsedTime, long slowCommand) {
+            String request, String reply, long elapsedTime, long timeout) {
         totalTimeOfReplyToClient += elapsedTime;
         countOfCommands++;
 
@@ -135,25 +135,19 @@ public class Statistics {
         
         if (maxElapsedTimeForCommand < elapsedTime) {
             maxElapsedTimeForCommand = elapsedTime;
-            if (elapsedTime > slowCommand) {
-                String shortReply;
-                if (reply.length() > 200) {
-                    shortReply = reply.substring(0, 200) + "...";
-                } else {
-                    shortReply = reply; 
-                }
-                
-                Logger.info("[SLOW_CLIENT] HOST:"
-                        + ip + ":" + port
-                        + ", ELAPSED_REPLY_TIME:"
-                        + elapsedTime
-                        + ", CMD:"
-                        + request 
-                        + ", REPLY(LEN:"
-                        + reply.length()
-                        + ", MEG:\""
-                        + shortReply + "\")");
+        }
+        
+        if (elapsedTime > timeout) {
+            String shortReply;
+            if (reply.length() > 200) {
+                shortReply = reply.substring(0, 200) + "...";
+            } else {
+                shortReply = reply; 
             }
+            
+            Logger.info(
+                    "Slow cmd. {}:{}, elapsed: {}ms, request: \"{}\", reply: \"{}\"",
+                    new Object[] { ip, port, elapsedTime, request, shortReply });
         }
     }
     
