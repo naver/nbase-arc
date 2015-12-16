@@ -28,7 +28,7 @@ nbase-arc (n-base-ARC) is an open source distributed memory store based on Redis
   - [Java API](api/java/README.md)
 * Tools
   - [Administration Guide](doc/admin/AdminGuide.md)
-  - CLI
+  - [CLI](doc/arc-cli.md)
 * More 
   - [Migration](doc/migration.md)
   - [Failure detection and fail-over](doc/failure-detection-and-failover.md)
