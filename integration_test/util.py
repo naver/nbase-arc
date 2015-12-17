@@ -242,29 +242,15 @@ def kill_proc( popen ):
 
 
 def _killps_y( name ):
-    return shell_cmd_sync( '%s %s'
-      % ("""
-        function my_ps()
-        {
-          ps $@ -u $USER -o pid,%cpu,%mem,bsdtime,command;
-        }
+    pids = [pid for pid in os.listdir('/proc') if pid.isdigit()]
 
-        function killps_y()
-        {
-          local pid pname
-          if [ $# -lt 1 ]; then
-            echo "Usage: killps pattern"
-            return
-          fi
-
-          for pid in $(my_ps|awk '!/awk/ && $0~pat { print $1 }' pat=${!#} ); do
-            pname=$(my_ps | awk '$1~var { print $5 }' var=$pid )
-            kill -9 $pid
-          done
-        }
-
-        killps_y""", name), 0 )
-
+    for pid in pids:
+        try:
+            cmdline = open(os.path.join('/proc', pid, 'cmdline'), 'rb').read()
+            if name in cmdline:
+                os.kill(int(pid), signal.SIGKILL)
+        except IOError:
+            continue
 
 def write_executable_file( data, dir, file_name ):
     if not os.path.exists( dir ):

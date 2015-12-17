@@ -45,7 +45,14 @@ class TestProtocolError(unittest.TestCase):
         self.server_connect(server_mgmt, host, port)
 
     def send_command_and_expect(self, server, cmd, expect):
-        server.write(cmd)
+        try:
+            server.write(cmd)
+        except:
+            # When test sends a very big bulk string to the server, sometimes, write command may throw
+            # exception, "Connection reset by peer". This is because redis closes connection as soon as
+            # it notices that received data exceeds protocol limit, even if sending data is not finished yet.
+            pass
+
         ret = server.read_until(expect)
         self.assertEquals(ret, expect, "Server didn't respond properly. expect:%s, ret:%s" % (expect, ret))
 

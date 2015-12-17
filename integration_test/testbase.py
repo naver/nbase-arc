@@ -18,7 +18,7 @@ resource_files = (
 )
 
 
-def setup_binaries( clusters, skip_copy_binaries ):
+def setup_binaries( clusters, skip_copy_binaries, opt_32bit_binary_test ):
     if not os.path.exists( c.homedir ):
         os.mkdir( c.homedir )
     if not os.path.exists( c.logdir ):
@@ -34,7 +34,7 @@ def setup_binaries( clusters, skip_copy_binaries ):
                     continue
                 server_id_dict[id] = True
 
-                if copy_binaries(id) is not 0:
+                if copy_binaries(id, opt_32bit_binary_test) is not 0:
                     util.log('failed to copy_binaries, server_id: %d' % server['id'])
                     return -1
     util.log('initialize done')
@@ -420,7 +420,7 @@ def setup_cm( id ):
     return 0
 
 
-def copy_binaries( id ):
+def copy_binaries( id, opt_32bit_binary_test ):
     try:
         util.copy_smrreplicator( id )
         util.copy_gw( id )
@@ -430,10 +430,12 @@ def copy_binaries( id ):
         util.copy_dump_util_plugin( id )
         util.copy_log_util( id )
         util.copy_capi_so_file( id )
-        util.copy_capi32_so_file( id )
         util.copy_capi_test_server( id )
-        util.copy_capi32_test_server( id )
         util.copy_cm( id )
+
+        if opt_32bit_binary_test:
+            util.copy_capi32_so_file( id )
+            util.copy_capi32_test_server( id )
 
     except IOError as e:
         print e
