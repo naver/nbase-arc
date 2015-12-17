@@ -1,0 +1,13 @@
+.*.swp
+*.o
+*.log
+*.pyc
+*.gcda
+*.gcno
+*.gcov
+local_proxy/.obj32/
+local_proxy/.obj64
+local_proxy/release/
+local_proxy/release32/
+nbase-arc-cli/arc-cli
+nbase-arc-cli/arc-cli-admin

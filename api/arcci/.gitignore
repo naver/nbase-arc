@@ -6,8 +6,10 @@
 .obj64
 .obj32
 release
+release32
 zk
 zk-3.4.6/.lib64
+zk-3.4.6/.lib32
 zk-3.4.6/c/.deps
 zk-3.4.6/c/.libs
 zk-3.4.6/c/cli_mt
