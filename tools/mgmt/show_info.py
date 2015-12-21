@@ -10,10 +10,11 @@ from fabric.colors import *
 from fabric.contrib.console import *
 from fabric.contrib.files import *
 from gw_cmd import *
-import config
 import remote
 import util
 import cm
+
+config = None
 
 CLUSTER_PARTITION = '+--------------------+'
 CLUSTER_COLUMN =    '|    CLUSTER NAME    |'
@@ -35,6 +36,10 @@ PGS_PARTITION = '+--------+------+----------------+-------+------+--------+'
 PGS_COLUMN =    '| PGS_ID | MGEN |       IP       |  PORT | ROLE | QUORUM |'
 PGS_FORMAT =    '| %(pgs_id)6d | %(master_Gen)4s |%(ip)15s |%(smr_base_port)6d | %(active_role)s(%(smr_role)s) | %(quorum)6s |'
 PGS_HEADER = PGS_PARTITION + '\n' + PGS_COLUMN  + '\n' + PGS_PARTITION
+
+def set_config(config_module):
+    global config
+    config = config_module
 
 def main(args):
     args = args.encode('ascii').split(' ')
@@ -220,7 +225,7 @@ def show_gw_list(cluster_name):
         gw_data['active_state'] = util.get_gw_state(gw_data['pm_IP'], gw_data['port'], verbose=False)
 
         try:
-            with GwCmd(gw_data['pm_IP'], gw_data['port'], config.NEW_VERSION) as gw_cmd:
+            with GwCmd(gw_data['pm_IP'], gw_data['port']) as gw_cmd:
                 gw_data['clnt_conn'] = gw_cmd.info_num_of_clients()
         except:
             gw_data['clnt_conn'] = 0
