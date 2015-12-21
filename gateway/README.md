@@ -1,6 +1,6 @@
 ## nbase-arc gateway
 Gateway is located between clients and Redis processes and provides a transparent query routing functionality.
-See [gateway](doc/gateway.md) for more information.
+See [gateway](/doc/gateway.md) for more information.
 
 ### Installation
 1. Copy gateway binary.

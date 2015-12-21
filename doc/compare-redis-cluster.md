@@ -36,7 +36,7 @@ Clients in RC directly connect to Redis nodes of the cluster. Because all operat
 In nbase-arc, clients connect to any gateways to perform operation and there is no redirection. Clients also can be hinted about the cluster configuration by the configuration master for the request to be routed to the most proper gateway.
 
 See [gateway](/doc/gateway.md) for a more information about gateway
-See [C API](/doc/c-api.md) for a more information about C API
+See [C API](/api/arcci/README.md) for a more information about C API
 
 #### Migration
 In RC, Migration of a slot is performed by MIGRATE command  key by key.
