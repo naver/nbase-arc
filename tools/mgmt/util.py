@@ -8,7 +8,6 @@ import random
 import tempfile
 import traceback
 import sys
-import pdb
 import os
 import json
 from fabric.api import *
@@ -16,11 +15,14 @@ from fabric.colors import *
 from fabric.contrib.console import *
 from gw_cmd import *
 from redis_cmd import *
-import config
-import config_redis
-import config_cluster
 import remote
 import cm
+
+config = None
+
+def set_config(config_module):
+    global config
+    config = config_module
 
 class Output:
     def __init__(self):
@@ -220,13 +222,13 @@ def get_gw_state(ip, port, verbose=True):
             warn(red('get_gw_state fail, IP:%s, PORT:%d, CMD:"%s"' % (ip, port, cmd)))
         return 'F'
 
-def get_gw_info(ip, port, version, verbose=True):
+def get_gw_info(ip, port, verbose=True):
     out = Output()
     out.inactive_connections = -1
     out.gateway_connected_clients = -1
 
     try:
-        with GwCmd(ip, port, version) as gw_cmd:
+        with GwCmd(ip, port) as gw_cmd:
             out.inactive_connections = gw_cmd.info_redis_discoons()
             out.gateway_connected_clients = gw_cmd.info_num_of_clients()
             out.gateway_total_commands_processed = gw_cmd.info_total_commands_processed()
@@ -239,9 +241,9 @@ def get_gw_info(ip, port, version, verbose=True):
         warn(red(e))
         return out
 
-def get_gw_inactive_connections(ip, port, version, verbose=True):
+def get_gw_inactive_connections(ip, port, verbose=True):
     try:
-        with GwCmd(ip, port, version) as gw_cmd:
+        with GwCmd(ip, port) as gw_cmd:
             return gw_cmd.info_redis_discoons()
 
     except IOError as e:
@@ -255,16 +257,15 @@ def get_gw_inactive_connections(ip, port, version, verbose=True):
 class GwInactiveConnectionChecker(threading.Thread):
     inact_con = -1
 
-    def __init__(self, gw_id, ip, port, version):
+    def __init__(self, gw_id, ip, port):
         threading.Thread.__init__(self)
         self.gw_id = gw_id
         self.ip = ip
         self.port = port
-        self.version = version
 
     def run(self):
         # Check Redis client connection
-        self.inact_con = get_gw_inactive_connections(self.ip, self.port, self.version)
+        self.inact_con = get_gw_inactive_connections(self.ip, self.port)
 
 """
 Returns:
@@ -272,7 +273,7 @@ Returns:
     total_con: sum of gw_inactive_connections
     dict: {'id' : gw_id, 'ip' : gw_ip, 'port' : gw_port, 'inact_con' : inact_con }
 """
-def get_gws_inactive_cons(gw_list, version):
+def get_gws_inactive_cons(gw_list):
     thrs = []
     inact_cons = {} 
     for gw_id, gw_data in gw_list.items():
@@ -281,7 +282,7 @@ def get_gws_inactive_cons(gw_list, version):
 
         inact_cons[gw_id] = {'id' : gw_id, 'ip' : gw_ip, 'port' : gw_port}
 
-        thr = GwInactiveConnectionChecker(gw_id, gw_ip, gw_port, version)
+        thr = GwInactiveConnectionChecker(gw_id, gw_ip, gw_port)
         thr.start()
         thrs.append(thr)
 
@@ -300,13 +301,13 @@ def get_gws_inactive_cons(gw_list, version):
         
     return ok, total_inact_con, inact_cons
 
-def check_gw_inactive_connections_par(gw_list, version):
+def check_gw_inactive_connections_par(gw_list):
     print magenta("\nGateway inactive connection test.")
     print magenta("Gateways:%s" % " ".join("%d(%s:%s)" % (id, data['ip'], data['port']) for id, data in gw_list.items()))
 
     # Check Redis client connection
     while True:
-        ok, total_con, inact_cons = get_gws_inactive_cons(gw_list, version)
+        ok, total_con, inact_cons = get_gws_inactive_cons(gw_list)
         print yellow("Gateway inactive connections. total:%d\n%s" % 
                 (total_con, " ".join("%(id)d(%(inact_con)d)" % data for id, data in inact_cons.items())))
 
@@ -315,7 +316,7 @@ def check_gw_inactive_connections_par(gw_list, version):
             done = True 
             for i in range(5):
 
-                ok, total_con, inact_cons = get_gws_inactive_cons(gw_list, version)
+                ok, total_con, inact_cons = get_gws_inactive_cons(gw_list)
                 print yellow("Gateway inactive connections. total:%d\n%s" % 
                         (total_con, " ".join("%(id)d(%(inact_con)d)" % data for id, data in inact_cons.items())))
                 if ok == False:
@@ -331,19 +332,19 @@ def check_gw_inactive_connections_par(gw_list, version):
     print green("Gateways:%s\n" % " ".join("%d(%s:%s)" % (id, data['ip'], data['port']) for id, data in gw_list.items()))
     return True
 
-def check_gw_inactive_connections(ip, port, version, verbose=False):
+def check_gw_inactive_connections(ip, port, verbose=False):
     print magenta("\n[%s:%d] Gateway inactive connection test" % (ip, port))
     
     # Check Redis client connection
     while True:
-        num_connected = get_gw_inactive_connections(ip, port, version)
+        num_connected = get_gw_inactive_connections(ip, port)
         print yellow("[%s:%d] Gateway inactive connections:%d" % (ip, port, num_connected))
 
         if (num_connected == 0): 
             # Check consistency of inactive connections while 1 seconds
             ok = True 
             for i in range(5):
-                cnt = get_gw_inactive_connections(ip, port, version)
+                cnt = get_gw_inactive_connections(ip, port)
                 print yellow("[%s:%d] >> gateway inactive connections:%d" % (ip, port, cnt))
                 if cnt != 0:
                     ok = False
@@ -596,94 +597,6 @@ def print_script(cluster_name, quorum_policy, pg_list, pgs_list, gw_list):
         print "%s %d %d %s %s %d" % (cluster_name, pgs['pgs_id'], pgs['pg_id'], pgs['pm'][0], pgs['pm'][1], pgs['port'])
     print ''
 
-def get_cluster_conf(cluster_name):
-    conf = filter(lambda x: x['cluster_name'] == cluster_name and x['version'] == config.NEW_VERSION, config_cluster.CLUSTER_CONFIG)
-    if len(conf) > 1:
-        warn(red('Too many configurations for %s' % cluster_name))
-        return None
-    elif len(conf) == 0:
-        return None
-    return conf[0]
-
-def get_gw_additional_option(version):
-    for gw_conf in config.GW_ADDITIONAL_OPTION:
-        if gw_conf["version"] == version:
-            return gw_conf["opt"]
-    return ""
-
-# make redis configuartion
-# return : conf = {"redis_config_key" : "redis_config_value", ...}
-def make_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_hour, cronsave_min, cronsave_num=1):
-    try:
-        conf = {}
-        for e in config_redis.REDIS_CONFIG:
-            if not config.NEW_VERSION in e[0]:
-                continue 
-
-            if e[1] == 'cronsave':
-                base = cronsave_hour * 60 + cronsave_min + (smr_base_port - config.PGS_BASE_PORT)
-                intv = (24 * 60) / cronsave_num  
-                save = []
-                for i in range(cronsave_num):
-                    t = base + intv * i
-                    h = (t / 60) % 24
-                    m = (t % 60) % 60
-                    save.append([m,h])
-                conf["cronsave"] = save
-            elif e[1] == "smr-local-port":
-                conf[e[1]] = str(smr_base_port)
-            elif e[1] == "port":
-                conf[e[1]] = str(redis_port)
-            else:
-                conf[e[1]] = e[2]
-
-        cluster_conf = get_cluster_conf(cluster_name)
-        if cluster_conf != None:
-            for k, v in cluster_conf['redis'].iteritems():
-                if k == "client-output-buffer-limit":
-                    for confv in conf[k]:
-                        find = False
-                        for i in range(len(confv)):
-                            if confv[i].split(" ")[0] == v.split(" ")[0]:
-                                confv[i] = v
-                                find = True
-                        if find == False:
-                            confv.append(v)
-                else:
-                    conf[k] = v
-    except:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        traceback.print_exception(exc_type, exc_value, exc_traceback, limit=3, file=sys.stdout)
-        return None
-
-    return conf
-
-# redis configuration to file
-# parameter : conf = {"redis_config_key" : "redis_config_value", ...}
-# return : path of temporary-redis-config-file
-def make_redis_conf_file(conf):
-    try:
-        (fd, filename) = tempfile.mkstemp()
-        tfile = os.fdopen(fd, "w")
-        for e in sorted(conf.iteritems(), key=lambda (k,v): (k)):
-            k = e[0]
-            v = e[1]
-            if k == "cronsave":
-                for save in v:
-                    tfile.write("%s %d %d" % (k, save[0], save[1]) + os.linesep)
-            elif k == "client-output-buffer-limit":
-                for o in v:
-                    tfile.write("%s %s" % (k, o) + os.linesep)
-            else:
-                tfile.write("%s %s" % (k, v) + os.linesep)
-        tfile.close()
-    except:
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        traceback.print_exception(exc_type, exc_value, exc_traceback, limit=3, file=sys.stdout)
-        return None
-
-    return filename
-
 def cont():
     if config.confirm_mode and not confirm(cyan('Continue?')):
         return False
@@ -728,6 +641,4 @@ def prepare_suppl_pgsinfo(cluster_name, pg_id, pm_name, pm_ip):
                 (host, pgs_id, pm_name, pm_ip))
 
     return {"pgs_id" : pgs_id, "smr_base_port" : port, "redis_port" : port + 9}
-
-    
 

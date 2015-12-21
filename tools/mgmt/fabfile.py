@@ -1,3 +1,4 @@
+import importlib
 import telnetlib
 import json
 import time
@@ -16,84 +17,32 @@ from fabric.colors import *
 from fabric.contrib.console import *
 from fabric.contrib.files import *
 from redis_cmd import *
-import config
 import remote
-import util
 import cm
 import show_info
+import util
 from gw_cmd import *
 from error import *
-import pdb
 
-def check_config():
-    # Check environment variables
-    env_vars= ["NBASE_ARC_HOME"] 
-
-    ok = True
-    for env_var in env_vars:
-        if os.environ.get(env_var) == None:
-            print "Environment variable, %s, must be defined." % magenta(env_var)
-            ok = False
-
-    if ok == False:
-        return False
-
-    # Check attributes
-    attrs = ["CONF_MASTER_IP", 
-             "CONF_MASTER_PORT", 
-             "OLD_VERSION",
-             "NEW_VERSION",
-             "USERNAME", 
-             "NBASE_ARC_VERSION", 
-             "SMR_VERSION", 
-             "LOCAL_BINARY_PATH", 
-             "REMOTE_BIN_DIR", 
-             "REMOTE_PGS_DIR", 
-             "REMOTE_GW_DIR",
-             "REDIS_CONFIG_FILE",
-             "NUM_WORKERS_PER_GATEWAY",
-             "NUM_CM",
-             "NUM_CLNT_MIN",
-             "CLIENT_TIMEOUT"] 
-
-    ok = True
-    for attr in attrs:
-        if hasattr(config, attr) == False:
-            print "%s is not defined in config.py." % magenta(attr)
-            ok = False
-
-    # Check version
-    if float(config.NBASE_ARC_VERSION[:3]) != config.NEW_VERSION:
-        print "Version mismatch, check %s" % magenta("NEW_VERSION, NBASE_ARC_VERSION")
-        ok = False
-
-    if float(config.NBASE_GW_VERSION[:3]) != config.NEW_VERSION:
-        print "Version mismatch, check %s" % magenta("NEW_VERSION, NBASE_GW_VERSION")
-        ok = False
-
-    if float(config.SMR_VERSION[:3]) != config.NEW_VERSION:
-        print "Version mismatch, check %s" % magenta("NEW_VERSION, SMR_VERSION")
-        ok = False
-
-    return ok
+config = None
 
 def check_local_binary_exist(bins=None):
     print magenta("\n[localhost] Check Local Binary")
     if bins == None:
         with settings(warn_only=True):
-            if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.NBASE_ARC_VERSION)).failed: return False
-            if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.NBASE_ARC_VERSION)).failed: return False
-            if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.NBASE_GW_VERSION)).failed: return False
+            if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
+            if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
+            if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.GW_VERSION)).failed: return False
             if local('test -e %s/smr-replicator-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
             if local('test -e %s/smr-logutil-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
     else:
         for bin in bins:
             if bin == 'redis':
-                if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.NBASE_ARC_VERSION)).failed: return False
+                if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
             elif bin == 'cluster-util':
-                if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.NBASE_ARC_VERSION)).failed: return False
+                if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
             elif bin == 'gateway':
-                if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.NBASE_GW_VERSION)).failed: return False
+                if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.GW_VERSION)).failed: return False
             elif bin == 'smr':
                 if local('test -e %s/smr-replicator-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
                 if local('test -e %s/smr-logutil-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
@@ -150,7 +99,7 @@ def copy_checkpoint_from_master(cluster_name, pg_id, pm_ip, smr_base_port):
     # Get master PGS
     master = cm.get_master_pgs(cluster_name, pg_id)
     if master == None:
-        warn(red("[%s] Get master PGS fail. CLUSTER_NAME:%s, PG_ID:%d" % (cluster_name, pg_id)))
+        warn(red("[%s] Get master PGS fail. CLUSTER_NAME:%s, PG_ID:%d" % (host, cluster_name, pg_id)))
         return False
     
     if config.confirm_mode and not confirm(cyan('[%s] Master PGS has IP:%s, PORT:%s, SMR_ROLE:%s. Continue?' % (host, master['ip'], master['smr_base_port'], master['smr_role']))):
@@ -239,7 +188,7 @@ def deploy_pgs_binary(cluster_name, pgs_id, pm_ip, smr_base_port, redis_port, cr
 
     # Deploy redis conf
     if execute(remote.deploy_redis_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
-        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (cluster_name, smr_base_port, redis_port)))
+        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
         return False
 
     return True
@@ -595,12 +544,12 @@ def install_gw(cluster_name, gw_id, pm_name, pm_ip, port):
         return False
 
     # Check gateway connection to redis
-    if util.check_gw_inactive_connections(pm_ip, port, config.NEW_VERSION) == False:
+    if util.check_gw_inactive_connections(pm_ip, port) == False:
         warn("[%s:%d] Gateway check inactive connections fail" % (pm_ip, port))
         return False
 
     # Configure GW information to mgmt-cc
-    if cm.gw_add(cluster_name, gw_id, pm_name, pm_ip, port, config.NEW_VERSION) != True:
+    if cm.gw_add(cluster_name, gw_id, pm_name, pm_ip, port) != True:
         warn(red("[%s] GW Add fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return False
 
@@ -672,7 +621,7 @@ def uninstall_gw(cluster_name, gw_id):
         return False
 
     # Delete GW information in mgmt-cc
-    if cm.gw_del(cluster_name, gw_id, pm_ip, port, config.OLD_VERSION) != True:
+    if cm.gw_del(cluster_name, gw_id, pm_ip, port) != True:
         warn(red("[%s] GW Del fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return
 
@@ -877,13 +826,12 @@ def supplement_pgs(cluster_name, pg_id, pm_name, pm_ip, redis_port, cronsave_num
                 suppl_pgs['pgs_id'] += 1
                 continue
             else:
-                pdb.set_trace()
                 print warn(red('[%s] Failed to add pgs. ERROR:%d PGSID:%d IP:%s Port:%d #### \n' % 
                         (suppl_pm_ip, ret, suppl_pgs['pgs_id'], suppl_pm_ip, suppl_pgs['smr_base_port'])))
                 return False, None
 
     # Check all connections from gateway has done.
-    if util.check_gw_inactive_connections_par(gw_list, config.NEW_VERSION) == False:
+    if util.check_gw_inactive_connections_par(gw_list) == False:
         warn("[%s:%d] Check gateway's inactive connections fail" % (pm_ip, port))
         return False, None
 
@@ -1028,7 +976,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
 
         # Role change
         if util.change_master(cluster_name, pg_id, host) != True:
-            warn(red("[%s] Change master fail. PGS:%d, PG:%d" % (pgs_id, pg_id)))
+            warn(red("[%s] Change master fail. PGS:%d, PG:%d" % (host, pgs_id, pg_id)))
             return False
 
         # Temporary code. send replication ping to all redis in the PG to escape hang
@@ -1086,7 +1034,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
 
     # Deploy redis conf
     if execute(remote.deploy_redis_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
-        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (cluster_name, smr_base_port, redis_port)))
+        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
         return False
 
     # Start Redis process
@@ -1105,7 +1053,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
         return False
 
     # Check all connections from gateway has done.
-    if util.check_gw_inactive_connections_par(gw_list, config.NEW_VERSION) == False:
+    if util.check_gw_inactive_connections_par(gw_list) == False:
         warn("[%s:%d] Check gateway's inactive connections fail" % (ip, port))
         return False
 
@@ -1115,7 +1063,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
 
         # Role change
         if util.change_master(cluster_name, pg_id, host) != True:
-            warn(red("[%s] Change master fail. PGS:%d, PG:%d" % (suppl_pgs['pgs_id'], pg_id)))
+            warn(red("[%s] Change master fail. PGS:%d, PG:%d" % (host, suppl_pgs['pgs_id'], pg_id)))
             return False
 
         # Uninstall PGS
@@ -1255,14 +1203,8 @@ def upgrade_gw(cluster_name, gw_id):
         warn(red("[%s] '%s' doesn't exist." % (host, path)))
         return False
 
-    # Check version
-    with GwCmd(ip, port, config.OLD_VERSION) as gw_cmd:
-        if gw_cmd.is_valid() == False:
-            warn(red("[%s] Gateway version mismatch." % (host)))
-            return False
-
     # GW Del
-    if cm.gw_del(cluster_name, gw_id, ip, port, config.OLD_VERSION) != True:
+    if cm.gw_del(cluster_name, gw_id, ip, port) != True:
         warn(red("[%s] GW Del fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return False
 
@@ -1277,12 +1219,12 @@ def upgrade_gw(cluster_name, gw_id):
         return False
 
     # Check gateway connection to redis
-    if util.check_gw_inactive_connections(ip, port, config.NEW_VERSION) == False:
+    if util.check_gw_inactive_connections(ip, port) == False:
         warn("[%s:%d] Gateway check inactive connections fail" % (ip, port))
         return False
 
     # Configure GW information to mgmt-cc
-    if cm.gw_add(cluster_name, gw_id, pm_name, ip, port, config.NEW_VERSION, additional_clnt=config.NUM_CLNT_MIN) != True:
+    if cm.gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=config.NUM_CLNT_MIN) != True:
         warn(red("[%s] GW Add fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return False
 
@@ -1613,7 +1555,7 @@ def execute_gw(cluster_name, gw_id, pm_ip, port):
         return False
 
     # Check gateway connection to redis
-    if util.check_gw_inactive_connections(pm_ip, port, config.NEW_VERSION) == False:
+    if util.check_gw_inactive_connections(pm_ip, port) == False:
         warn("[%s:%d] Gateway check inactive connections fail" % (pm_ip, port))
         return False
 
@@ -2424,13 +2366,25 @@ def menu_deploy_bash_profile():
 
     return True
 
-def main():
+def main(config_path="config"):
+    global config
+
+    # Load config
+    sys.path.insert(0, '.')
+    config = importlib.import_module(config_path)
+
     env.shell = config.SHELL
 
     # Check config
-    if check_config() == False: 
+    if config.check_config() == False: 
         warn(red("Configuration is not correct."))
         return
+
+    # Init modules
+    cm.set_config(config)
+    util.set_config(config)
+    remote.set_config(config)
+    show_info.set_config(config)
 
     if cm.init() == False: return
 

@@ -1,11 +1,9 @@
-
 from fabric.api import *
 from fabric.colors import *
 from fabric.contrib.console import *
 import sys
 import traceback
 import telnetlib
-import pdb
 
 class RedisCmd():
     ip = None
