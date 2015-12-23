@@ -421,21 +421,13 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
                     break 
 
     # Stop redis process
-    if execute(remote.stop_redis_process, ip, redis_port, redis_pid)[host] != True:
+    if execute(remote.stop_redis_process, ip, redis_port, redis_pid, smr_base_port)[host] != True:
         warn(red("[%s] Stop Redis fail, PGS_ID:%d, IP:%s, PORT:%d" % (host, pgs_id, ip, redis_port)))
-        return False
-
-    if execute(remote.is_redis_process_exist, smr_base_port)[host] == True:
-        warn(red("[%s] Stop redis process fail, Aborting..." % host))
         return False
 
     # Stop SMR process
     if execute(remote.stop_smr_process, smr_base_port)[host] != True:
         warn(red("[%s] Stop SMR fail, PGS_ID:%d, IP:%s, PORT:%d" % (host, pgs_id, ip, smr_base_port)))
-        return False
-
-    if execute(remote.is_smr_process_exist, smr_base_port)[host] == True:
-        warn(red("[%s] Stop smr process fail, Aborting..." % host))
         return False
 
     if remain_mgmt_conf == False:
@@ -1018,7 +1010,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
         return False
 
     # Stop redis process
-    if execute(remote.stop_redis_process, ip, redis_port, redis_pid)[host] != True:
+    if execute(remote.stop_redis_process, ip, redis_port, redis_pid, smr_base_port)[host] != True:
         warn(red("[%s] Stop Redis fail, PGS_ID:%d, IP:%s, PORT:%d" % (host, pgs_id, ip, redis_port)))
         return False
 
@@ -1916,7 +1908,7 @@ def uninstall_cluster(cluster_name):
     for pg in cluster_json_data['pg_list']:
         for pgs_id in pg['pg_data']['pgs_ID_List']:
             if uninstall_pgs(cluster_name, pgs_id, False, False) == False:
-                warn(red("Uninstall PGS '%d' fail. Aborting..." % gw_id))
+                warn(red("Uninstall PGS '%d' fail. Aborting..." % pgs_id))
                 return False
 
     # Delete PG configuration
