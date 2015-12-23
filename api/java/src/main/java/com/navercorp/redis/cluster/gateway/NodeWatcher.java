@@ -19,11 +19,11 @@ package com.navercorp.redis.cluster.gateway;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-import com.navercorp.redis.cluster.json.JsonArray;
-import com.navercorp.redis.cluster.json.JsonObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -31,7 +31,6 @@ import org.apache.zookeeper.ZooKeeper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.navercorp.redis.cluster.json.JsonValue;
 
 /**
  * @author seongminwoo
@@ -53,6 +52,8 @@ public class NodeWatcher implements Watcher {
     private ZooKeeper zk;
     private GatewayConfig config;
     private GatewayServerData gatewayServerData;
+    private ObjectMapper objectMapper = new ObjectMapper();
+
 
     public NodeWatcher(GatewayServerData gatewayServerData) {
         this.gatewayServerData = gatewayServerData;
@@ -95,10 +96,14 @@ public class NodeWatcher implements Watcher {
             log.debug("[NodeWatcher] Gateway info from CM. {path={}, data={}}", path, new String(data));
 
             try {
-                final JsonObject jsonObject = JsonObject.readFrom(new String(data));
-                String ip = jsonObject.get(KEY_IP).asString();
-                int port = jsonObject.get(KEY_PORT).asInt();
-                addresses.add(new GatewayAddress(id, ip + ":" + port));
+                Map keyMap = objectMapper.readValue(data, Map.class);
+                if(keyMap.get(KEY_IP) != null && keyMap.get(KEY_PORT) != null) {
+                    String ip = (String) keyMap.get(KEY_IP);
+                    int port = (Integer)keyMap.get(KEY_PORT);
+                    addresses.add(new GatewayAddress(id, ip + ":" + port));
+                } else {
+                    log.error("[NodeWatcher] Invalid gateway address. data={}", new String(data));
+                }
             } catch (Exception e) {
                 log.error("[NodeWatcher] Invalid gateway address format. data={}", new String(data));
             }
@@ -122,11 +127,11 @@ public class NodeWatcher implements Watcher {
         log.debug("[NodeWatcher] Gateway affinity from CM. {path={}, data={}}", path, new String(data));
 
         try {
-            final JsonArray jsonArray = JsonArray.readFrom(new String(data));
-            for (JsonValue value : jsonArray) {
-                JsonObject jsonObject = value.asObject();
-                final int id = jsonObject.get(KEY_GW_ID).asInt();
-                final String affinity = jsonObject.get(KEY_AFFINITY).asString();
+            List list = objectMapper.readValue(data, List.class);
+            for (Object value : list) {
+                Map jsonObject = (Map) value;
+                final int id = (Integer) jsonObject.get(KEY_GW_ID);
+                final String affinity = (String) jsonObject.get(KEY_AFFINITY);
                 gatewayAffinity.put(id, affinity);
             }
         } catch (Exception e) {
