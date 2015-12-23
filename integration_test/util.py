@@ -15,7 +15,6 @@ import time
 import datetime
 import telnet
 import json
-import demjson
 import inspect
 import testbase
 import load_generator
@@ -285,7 +284,7 @@ def cm_command( ip, port, cmd, line=1 ):
 def cluster_info(mgmt_ip, mgmt_port, cluster_name):
     reply = cm_command(mgmt_ip, mgmt_port, 'cluster_info %s' % cluster_name)
     log('cluster_info ret : %s' % reply)
-    ret = demjson.decode(reply)
+    ret = json.loads(reply)
     if ret == None:
         log('cluster_info fail, cluster_name:%s' % cluster_name)
         return None
@@ -299,14 +298,14 @@ def cluster_info(mgmt_ip, mgmt_port, cluster_name):
 
 def get_pgs_info(mgmt_ip, mgmt_port, cluster_name, pgs_id):
     reply = cm_command(mgmt_ip, mgmt_port, 'pgs_info %s %s\r\n' % (cluster_name, pgs_id))
-    ret = demjson.decode(reply)
+    ret = json.loads(reply)
     pgs_info = ret['data']
     return pgs_info
 
 
 def get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id):
     reply = cm_command(mgmt_ip, mgmt_port, 'pgs_info_all %s %s\r\n' % (cluster_name, pgs_id))
-    ret = demjson.decode(reply)
+    ret = json.loads(reply)
     pgs_info = ret['data']
     return pgs_info
 
@@ -353,7 +352,7 @@ def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=Fal
             expected_slave_count = 2
 
         if check_quorum:
-            qp = demjson.decode(cluster['cluster_info']['Quorum_Policy'])
+            qp = json.loads(cluster['cluster_info']['Quorum_Policy'])
             if len(qp) >= master_count + slave_count:
                 expected_quorum = int(qp[master_count + slave_count - 1])
             else:
@@ -408,7 +407,7 @@ def check_quorum( cluster_name, mgmt_ip, mgmt_port ):
         if len(pgs_id_list) == 3:
             expected_slave_count = 2
 
-        qp = demjson.decode(cluster['cluster_info']['Quorum_Policy'])
+        qp = json.loads(cluster['cluster_info']['Quorum_Policy'])
         if len(qp) >= master_count + slave_count:
             expected_quorum = int(qp[master_count + slave_count - 1])
         else:
@@ -465,15 +464,15 @@ def check_gateway_state( cluster_name, leader_cm, server ):
         return False
 
     try:
-        json = demjson.decode(reply)
-        if json['state'] != 'success':
+        jobj = json.loads(reply)
+        if jobj['state'] != 'success':
             log('Check gateway state : unexpected return from confmaster, cmd="%s", ret="%s"' % (cmd, reply))
             return False
     except:
         log('Check gateway state : unexpected return from confmaster, cmd="%s", ret="%s"' % (cmd, reply))
         return False
 
-    if json['data']['state'] == 'F':
+    if jobj['data']['state'] == 'F':
         log('Check gateway state : gateway state is \'F\'.')
         return False
 
@@ -488,10 +487,10 @@ def get_cm_by_role( servers, target_role ):
     for server in servers:
         cmd = 'not_existing_cmd'
         res = cm_command( server['ip'], server['cm_port'], cmd )
-        json = demjson.decode( res )
-        if target_role == c.CC_LEADER and json['state'] == 'error':
+        jobj = json.loads( res )
+        if target_role == c.CC_LEADER and jobj['state'] == 'error':
             return server
-        elif target_role == c.CC_FOLLOWER and json['state'] == 'redirect':
+        elif target_role == c.CC_FOLLOWER and jobj['state'] == 'redirect':
             return server
     return None
 
@@ -530,15 +529,15 @@ def role_change( cc, cluster_name, pgs_id ):
     cmd = 'role_change %s %d' % ( cluster_name, pgs_id )
     reply = cm_command( cc['ip'], cc['cm_port'], cmd )
     log('cmd: "%s", reply: "%s"' % (cmd, reply))
-    json = demjson.decode(reply)
-    if json['state'] != 'success':
+    jobj = json.loads(reply)
+    if jobj['state'] != 'success':
         log( 'Change role fail. CMD:%s, REPLY:%s' % ( cmd, reply[:-1] ) )
         return -1
 
-    if json.get( 'data' ) == None:
+    if jobj.get( 'data' ) == None:
         return pgs_id
     else:
-        return int(json['data']['master'])
+        return int(jobj['data']['master'])
 
 
 def check_if_smr_is_running_properly( ip, mgmt_port, timeout=1 ):
@@ -681,8 +680,8 @@ def check_ops(servers, type, condition):
 def pm_add(name, ip, mgmt_ip, mgmt_port):
     cmd = 'pm_add %s %s' % (name, ip)
     result = cm_command( mgmt_ip, mgmt_port, cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return False
     return True
@@ -696,8 +695,8 @@ def pg_del(cluster, servers, leader_cm, stop_gw=True):
 
     cmd = 'pg_del %s %d' % (cluster['cluster_name'], servers[0]['pg_id'])
     result = cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return False
 
@@ -734,8 +733,8 @@ def pg_add(cluster, servers, leader_cm, start_gw=True):
 
     cmd = 'pg_add %s %d' % (cluster['cluster_name'], servers[0]['pg_id'])
     result = cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return False
 
@@ -962,12 +961,12 @@ def _get_smr_state( id, cluster_name, mgmt_ip, mgmt_port ):
         log( 'error, response from pgs:%d is None.' % id )
         return None
 
-    json = demjson.decode( response )
-    if json['state'] != 'success':
+    jobj = json.loads( response )
+    if jobj['state'] != 'success':
         log( 'error, response of pgs_info, id:%d, res:%s' % (id, response) )
         return None
 
-    return json['data']['state']
+    return jobj['data']['state']
 
 
 def get_smr_role_of_cm( server, leader_cm ):
@@ -983,12 +982,12 @@ def get_smr_role_of_cm( server, leader_cm ):
         log( 'error, response from pgs:%d is None.' % server['id'] )
         return None
 
-    json = demjson.decode( response )
-    if json['state'] != 'success':
+    jobj = json.loads( response )
+    if jobj['state'] != 'success':
         log( 'error, response of pgs_info, id:%d' % server['id'] )
         return None
 
-    return json['data']['smr_Role']
+    return jobj['data']['smr_Role']
 
 
 def get_role_of_server( server ):
@@ -1079,12 +1078,12 @@ def get_smr_info( server, leader_cm ):
         log( 'error, response from pgs:%d is None.' % server['id'] )
         return None
 
-    json = demjson.decode( response )
-    if json['state'] != 'success':
+    jobj = json.loads( response )
+    if jobj['state'] != 'success':
         log( 'error, response of pgs_info, id:%d' % server['id'] )
         return None
 
-    return json['data']
+    return jobj['data']
 
 
 def get_quorum( master ):
@@ -1462,9 +1461,9 @@ def appdata_set(cluster_name, type, id, daemon_id, period, base_time, holding_pe
 
     cmd = 'appdata_set %s %s %d %d %s %s %d %d %s %s' % (cluster_name, type, id, daemon_id, period, base_time, holding_period, net_limit, output_format, service_url)
     out.reply = cm_command(cmd)
-    json = demjson.decode(out.reply)
+    jobj = json.loads(out.reply)
 
-    if json['state'] != 'success':
+    if jobj['state'] != 'success':
         out.success = False
         return out
     out.success = True
@@ -1476,9 +1475,9 @@ def appdata_get(cluster_name, type, id):
 
     cmd = 'appdata_get %s %s %d' % (cluster_name, type, id)
     out.reply = cm_command(cmd)
-    json = demjson.decode(out.reply)
+    jobj = json.loads(out.reply)
 
-    if json['state'] != 'success':
+    if jobj['state'] != 'success':
         out.success = False
         return out
     out.success = True
@@ -1751,8 +1750,8 @@ def upgrade_pgs(upgrade_server, leader_cm, cluster):
     # detach pgs from cluster
     cmd = 'pgs_leave %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
     ret = cm_command(leader_cm['ip'], leader_cm['cm_port'], cmd)
-    json = demjson.decode(ret)
-    if json['msg'] != '+OK':
+    jobj = json.loads(ret)
+    if jobj['msg'] != '+OK':
         log('failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]))
         return False
     log('succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]))
@@ -1786,8 +1785,8 @@ def upgrade_pgs(upgrade_server, leader_cm, cluster):
     # change state of pgs to lconn
     cmd = 'pgs_lconn %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
     ret = cm_command(leader_cm['ip'], leader_cm['cm_port'], cmd)
-    json = demjson.decode(ret)
-    if json['msg'] != '+OK':
+    jobj = json.loads(ret)
+    if jobj['msg'] != '+OK':
         log('failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]))
         return False
     log('succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]))
@@ -1824,8 +1823,8 @@ def upgrade_pgs(upgrade_server, leader_cm, cluster):
     # attach pgs to cluster
     cmd = 'pgs_join %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
     ret = cm_command(leader_cm['ip'], leader_cm['cm_port'], cmd)
-    json = demjson.decode(ret)
-    if json['msg'] != '+OK':
+    jobj = json.loads(ret)
+    if jobj['msg'] != '+OK':
         log('failed : cmd="%s", reply="%s"' % (cmd[:-2], ret))
         return False
     log('succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]))
@@ -1950,7 +1949,7 @@ def worklog_info( leader_cm ):
     reply = cm_command( leader_cm['ip'], leader_cm['cm_port'], 'worklog_info')
     # worklog_info
     # {"state":"success","data":{"start":<int>,"end":<int>}}
-    jobj = demjson.decode(reply)
+    jobj = json.loads(reply)
 
     sno = jobj['data']['start']
     eno = jobj['data']['end']
@@ -1965,7 +1964,7 @@ Returns true if successful or false otherwise
 """
 def is_leader_cm( cc ):
     reply = cm_command( cc['ip'], cc['cm_port'], 'cluster_ls')
-    jobj = demjson.decode(reply)
+    jobj = json.loads(reply)
 
     if jobj['state'] == 'success':
         return True

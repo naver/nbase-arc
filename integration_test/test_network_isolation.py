@@ -7,7 +7,6 @@ import util
 import testbase
 import redis_mgmt
 import time
-import json
 import telnet
 
 

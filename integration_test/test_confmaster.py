@@ -4,7 +4,7 @@ import util
 import gateway_mgmt
 import config
 import default_cluster
-import demjson
+import json
 import random
 import threading
 import telnetlib
@@ -185,8 +185,8 @@ class CommandThread(threading.Thread):
 
             try:
                 reply = self.cm_conn.read_until('\r\n', 3)
-                json = demjson.decode(reply)
-                if json['state'] != "success":
+                jobj = json.loads(reply)
+                if jobj['state'] != "success":
                     self.set_error(cmd, reply)
                 else:
                     self.total_resp += 1
@@ -300,42 +300,42 @@ class TestConfMaster(unittest.TestCase):
             # Cluster commands
             cmd = 'cluster_add %s %s' % (self.cluster['cluster_name'] , self.cluster['quorum_policy'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'cluster_ls'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-            self.assertEquals(json['data']['list'][0], self.cluster['cluster_name'], 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            self.assertEquals(jobj['data']['list'][0], self.cluster['cluster_name'], 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'cluster_info %s' % (self.cluster['cluster_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Physical machine commands
             cmd = 'pm_add %s %s' % (self.leader_cm['pm_name'], self.leader_cm['ip'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'pm_ls'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-            self.assertEquals(json['data']['list'][0], self.leader_cm['pm_name'], 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            self.assertEquals(jobj['data']['list'][0], self.leader_cm['pm_name'], 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'pm_info %s' % (self.leader_cm['pm_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Partition group commands
             cmd = 'pg_add %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'slot_set_pg %s %d:%d %d' % (    self.cluster['cluster_name']
                                                                                     , self.cluster['slots'][0]
@@ -343,14 +343,14 @@ class TestConfMaster(unittest.TestCase):
                                                                                     , self.cluster['pg_id_list'][0])
             cmd = 'pg_ls %s' % (self.cluster['cluster_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-            self.assertEquals(json['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            self.assertEquals(jobj['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             cmd = 'pg_info %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Partition group server commands
             for i in range(5):
@@ -363,9 +363,9 @@ class TestConfMaster(unittest.TestCase):
             # Ping command
             cmd = 'ping'
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-            self.assertEquals(json['msg'], '+PONG', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            self.assertEquals(jobj['msg'], '+PONG', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Help command
             cmd = 'help'
@@ -376,20 +376,20 @@ class TestConfMaster(unittest.TestCase):
             # Del partition group
             cmd = 'pg_del %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Del physical machine
             cmd = 'pm_del %s' % (self.leader_cm['pm_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Del cluster
             cmd = 'cluster_del %s' % (self.cluster['cluster_name'])
             res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(res)
-            self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+            jobj = json.loads(res)
+            self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
             # Leader election of Configuration master
             util.log('Leader election test')
@@ -415,8 +415,8 @@ class TestConfMaster(unittest.TestCase):
 
                 cmd = 'not_exist_cmd'
                 res = util.cm_command(follower['ip'], follower['cm_port'], cmd)
-                json = demjson.decode(res)
-                if json['state'] == 'error':
+                jobj = json.loads(res)
+                if jobj['state'] == 'error':
                     there_is_a_leader = True
                     break
                 time.sleep(1)
@@ -435,25 +435,25 @@ class TestConfMaster(unittest.TestCase):
                                                                                          , self.leader_cm['smr_base_port']
                                                                                          , self.leader_cm['redis_port'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'pgs_ls %s' % (self.cluster['cluster_name'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-        self.assertEquals(json['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        self.assertEquals(jobj['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'pgs_info %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'pgs_del %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
     def commands_about_gateway(self):
@@ -463,25 +463,25 @@ class TestConfMaster(unittest.TestCase):
                                                                                  , self.leader_cm['ip']
                                                                                  , self.leader_cm['gateway_port'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'gw_ls %s' % (self.cluster['cluster_name'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
-        self.assertEquals(json['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        self.assertEquals(jobj['data']['list'][0], '0', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'gw_info %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
 
         cmd = 'gw_del %s %d' % (self.cluster['cluster_name'], self.leader_cm['id'])
         res = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-        json = demjson.decode(res)
-        self.assertEquals(json['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
+        jobj = json.loads(res)
+        self.assertEquals(jobj['state'], 'success', 'failed to execute the cmd:%s\r\nres:%s' % (cmd, res))
         util.log('success : cmd:%s\r\nres:%s' % (cmd, res))
 
     def test_check_deadlock(self):
@@ -777,9 +777,9 @@ class TestConfMaster(unittest.TestCase):
                 time.sleep(1)
 
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[INITIALIZATION] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -827,9 +827,9 @@ class TestConfMaster(unittest.TestCase):
                 time.sleep(1)
 
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5},{"affinity":"A4096N4096","gw_id":100}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5},{"affinity":"A4096N4096","gw_id":100}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[ADD GATEWAY] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -845,9 +845,9 @@ class TestConfMaster(unittest.TestCase):
                 time.sleep(1)
 
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[DELETE GATEWAY] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -937,13 +937,13 @@ class TestConfMaster(unittest.TestCase):
             expected_affinity = []
             expected_affinity.append(
                 sorted(
-                    demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]'),
+                    json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]'),
                     key=lambda x: int(x['gw_id'])))
             expected_affinity.append(
                 sorted(
-                    demjson.decode('[{"affinity":"A2000R2096N2000R2096","gw_id":0},{"affinity":"A2000R2096N2000R2096","gw_id":1},{"affinity":"A2000R2096N2000R2096","gw_id":2},{"affinity":"N2000A6192","gw_id":3},{"affinity":"N2000A6192","gw_id":4},{"affinity":"N2000A6192","gw_id":5}]'),
+                    json.loads('[{"affinity":"A2000R2096N2000R2096","gw_id":0},{"affinity":"A2000R2096N2000R2096","gw_id":1},{"affinity":"A2000R2096N2000R2096","gw_id":2},{"affinity":"N2000A6192","gw_id":3},{"affinity":"N2000A6192","gw_id":4},{"affinity":"N2000A6192","gw_id":5}]'),
                     key=lambda x: int(x['gw_id'])))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity in expected_affinity)
             self.assertTrue(ok, '[ADD PG] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
             expected_affinity.remove(real_affinity)
@@ -991,7 +991,7 @@ class TestConfMaster(unittest.TestCase):
             """
 
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity[0])
             self.assertTrue(ok, '[ROLE CHANGE] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -1047,9 +1047,9 @@ class TestConfMaster(unittest.TestCase):
 
             # check affinity
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -1091,9 +1091,9 @@ class TestConfMaster(unittest.TestCase):
 
             # check affinity
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -1148,9 +1148,9 @@ class TestConfMaster(unittest.TestCase):
 
             # check affinity
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             util.log("expected_affinity:%s" % expected_affinity)
             util.log("real_affinity:%s" % real_affinity)
@@ -1194,9 +1194,9 @@ class TestConfMaster(unittest.TestCase):
 
             # check affinity
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[SLAVE PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 
@@ -1213,9 +1213,9 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ret, '[DELETE PG] delete pg fail.')
 
             affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            expected_affinity = demjson.decode('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
+            expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(demjson.decode(affinity_data), key=lambda x: int(x['gw_id']))
+            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
             ok = (real_affinity == expected_affinity)
             self.assertTrue(ok, '[DELETE PG] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
 

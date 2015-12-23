@@ -4,18 +4,7 @@ import time
 import os
 import util
 import smr_mgmt
-import demjson
-
-
-resource_files = (
-  'util.py',
-  'constant.py',
-  'process_mgmt.py',
-  'smr_mgmt.py',
-  'telnet.py',
-  'redis_mgmt.py',
-  'demjson.py'
-)
+import json
 
 
 def setup_binaries( clusters, skip_copy_binaries, opt_32bit_binary_test ):
@@ -116,8 +105,8 @@ def initialize_cluster( cluster, leader_cm=None ):
 
     cmd = 'cluster_add %s %s' % (cluster['cluster_name'], cluster['quorum_policy'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd  )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
 
@@ -125,16 +114,16 @@ def initialize_cluster( cluster, leader_cm=None ):
     for pg_id in cluster['pg_id_list']:
         cmd = 'pg_add %s %d' % (cluster['cluster_name'], pg_id)
         result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-        json = demjson.decode(result)
-        if json['state'] != 'success':
+        jobj = json.loads(result)
+        if jobj['state'] != 'success':
             util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
             return -1
 
         if cluster['slots'][slot_no] != -1:
             cmd = 'slot_set_pg %s %d:%d %d' % (cluster['cluster_name'], cluster['slots'][slot_no], cluster['slots'][slot_no+1], pg_id)
             result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-            json = demjson.decode(result)
-            if json['state'] != 'success':
+            jobj = json.loads(result)
+            if jobj['state'] != 'success':
                 util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
                 return -1
 
@@ -152,19 +141,19 @@ def initialize_info_of_cm_about_pgs( cluster, server, leader_cm, pg_id=None ):
 
     cmd = 'pgs_add %s %d %d %s %s %d %d' % (cluster['cluster_name'], server['id'], pg_id, server['pm_name'], server['ip'], server['smr_base_port'], server['redis_port'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
 
     cmd = 'pgs_join %s %d' % (cluster['cluster_name'], server['id'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
     try:
-        json = demjson.decode(result)
-        if json['state'] != 'success':
+        jobj = json.loads(result)
+        if jobj['state'] != 'success':
             util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
             return -1
-    except demjson.JSONDecodeError:
+    except json.ValueError:
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
     return 0
@@ -173,16 +162,16 @@ def initialize_info_of_cm_about_pgs( cluster, server, leader_cm, pg_id=None ):
 def finalize_info_of_cm_about_pgs( cluster, server, leader_cm ):
     cmd = 'pgs_leave %s %d' % (cluster['cluster_name'], server['id'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
     time.sleep( 3 )
 
     cmd = 'pgs_del %s %d' % (cluster['cluster_name'], server['id'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
     time.sleep( 3 )
@@ -199,8 +188,8 @@ def initialize_physical_machine_znodes( ip, port, pm_list ):
         cmd = 'pm_add %s %s' % (pm['name'], pm_ip)
         util.log('ip:%s, port:%d, cmd:%s' % (ip, port, cmd))
         result = util.cm_command( ip, port, cmd )
-        json = demjson.decode(result)
-        if json['state'] != 'success':
+        jobj = json.loads(result)
+        if jobj['state'] != 'success':
             util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
             return -1
     return 0
@@ -209,8 +198,8 @@ def initialize_physical_machine_znodes( ip, port, pm_list ):
 def add_physical_machine_to_mgmt( mgmt_ip, mgmt_port, pm_name, pm_ip ):
     cmd = 'pm_add %s %s' % (pm_name, pm_ip)
     result = util.cm_command( mgmt_ip, mgmt_port, cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
     return 0
@@ -232,8 +221,8 @@ def request_to_start_gateway( cluster_name, server, leader_cm, check_state=True 
     # add gateway configuration to confmaster
     cmd = 'gw_add %s %d %s %s %d' % (cluster_name, server['id'], server['pm_name'], server['ip'], server['gateway_port'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
 
@@ -351,8 +340,8 @@ def request_to_shutdown_gateway( cluster_name, server, leader_cm, check=False ):
     # delete gateway configuration from confmaster
     cmd = 'gw_del %s %d' % (cluster_name, id)
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
-    json = demjson.decode(result)
-    if json['state'] != 'success':
+    jobj = json.loads(result)
+    if jobj['state'] != 'success':
         util.log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return -1
 

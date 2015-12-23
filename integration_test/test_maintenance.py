@@ -10,7 +10,7 @@ import time
 import random
 import load_generator
 import config
-import demjson
+import json
 import gateway_mgmt
 
 class TestMaintenance(unittest.TestCase):
@@ -59,8 +59,8 @@ class TestMaintenance(unittest.TestCase):
         # detach pgs from cluster
         cmd = 'pgs_leave %s %d\r\n' % (server_to_del['cluster_name'], server_to_del['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
-        json = demjson.decode(ret)
-        self.assertEqual( json['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
+        jobj = json.loads(ret)
+        self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
         # check if pgs is removed
@@ -89,8 +89,8 @@ class TestMaintenance(unittest.TestCase):
         # change state of pgs to lconn
         cmd = 'pgs_lconn %s %d\r\n' % (server_to_del['cluster_name'], server_to_del['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
-        json = demjson.decode(ret)
-        self.assertEqual( json['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
+        jobj = json.loads(ret)
+        self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
         # shutdown
@@ -103,8 +103,8 @@ class TestMaintenance(unittest.TestCase):
         # delete pgs from cluster
         cmd = 'pgs_del %s %d\r\n' % (server_to_del['cluster_name'], server_to_del['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
-        json = demjson.decode(ret)
-        self.assertEqual( json['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
+        jobj = json.loads(ret)
+        self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
     def __check_quorum(self, m, expected):
