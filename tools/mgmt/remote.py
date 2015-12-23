@@ -194,23 +194,38 @@ def copy_binary():
 
 def is_redis_process_exist(smr_base_port):
     print magenta("\n[%s] Is redis exist?" % env.host_string)
-    with settings(warn_only=True):
-        out = run('ps -ef | grep redis-arc | grep " %s\." | grep -v grep' % smr_base_port)
-
-    if out == '':
-        return False
-    else:
-        return True
+    return is_exist('ps -ef | grep redis-arc | grep " %s\." | grep -v grep' % smr_base_port)
 
 def is_smr_process_exist(smr_base_port):
     print magenta("\n[%s] Is SMR exist?" % env.host_string)
+    return is_exist('ps -ef | grep smr-replicator | grep " -b %s" | grep -v grep' % smr_base_port)
+
+def is_gw_process_exist(cluster_name, port):
+    print magenta("\n[%s] Is GW exist?" % env.host_string)
+    return is_exist('ps -ef | grep redis-gateway | grep "%s" | grep " -p %s" | grep -v grep' % (cluster_name, port))
+
+def is_exist(cmd):
     with settings(warn_only=True):
-        out = run('ps -ef | grep smr-replicator | grep " -b %s" | grep -v grep' % smr_base_port)
+        out = run(cmd)
 
     if out == '':
         return False
     else:
         return True
+
+def check_process_stopped(max_auto_retry, f, *args):
+    i = 0
+    while True:
+        i += 1
+
+        if f(*args) == False:
+            return True
+
+        if i > max_auto_retry:
+            if confirm(cyan("Process is running yet. Wait more until process goes down(Y) or abort(n).")) == False:
+                return False
+
+        time.sleep(0.5)
 
 # return -1 if failed, otherwise return cronsave num.
 def get_cronsave_num(smr_base_port):
@@ -228,17 +243,7 @@ def get_cronsave_num(smr_base_port):
     idx = toks.index('-x')
     return int(86400 / int(toks[idx + 1]))
 
-def is_gw_process_exist(cluster_name, port):
-    print magenta("\n[%s] Is GW exist?" % env.host_string)
-    with settings(warn_only=True):
-        out = run('ps -ef | grep redis-gateway | grep "%s" | grep " -p %s" | grep -v grep' % (cluster_name, port))
-
-    if out == '':
-        return False
-    else:
-        return True
-
-def stop_redis_process(ip, port, pid):
+def stop_redis_process(ip, port, pid, smr_base_port):
     print magenta("\n[%s] Stop Redis" % env.host_string)
     run('ps -ef | grep %d | grep redis-arc | grep -v grep' % pid)
 
@@ -251,6 +256,10 @@ def stop_redis_process(ip, port, pid):
         if run('kill %d' % pid).failed:
             conn.close()
             return False
+
+    if check_process_stopped(10, is_redis_process_exist, smr_base_port) == False:
+        print warn(red('[%s] Stop Redis fail' % env.host_string))
+        return False
 
     print green('[%s] Stop Redis success' % env.host_string)
     return True
@@ -267,6 +276,10 @@ def stop_smr_process(port):
     with settings(warn_only=True):
         if run('kill %d' % pid).failed:
             return False
+
+    if check_process_stopped(10, is_smr_process_exist, port) == False:
+        print warn(red('[%s] Stop SMR fail' % env.host_string))
+        return False
 
     print green('[%s] Stop SMR success' % env.host_string)
     return True
@@ -637,6 +650,10 @@ def stop_gateway(cluster_name, ip, port):
             return False
 
     time.sleep(1)
+
+    if check_process_stopped(10, is_gw_process_exist, cluster_name, port) == False:
+        print warn(red('[%s] Stop Gateway fail' % env.host_string))
+        return False
 
     print green('[%s] Stop Gateway success' % env.host_string)
     return True
