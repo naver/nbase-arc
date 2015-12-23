@@ -11,7 +11,7 @@ import config
 import load_generator
 import telnet
 import constant as c
-import demjson
+import json
 
 
 class TestGateway( unittest.TestCase ):
@@ -78,8 +78,8 @@ class TestGateway( unittest.TestCase ):
         # detach pgs from cluster
         cmd = 'pgs_leave %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
-        json = demjson.decode(ret)
-        self.assertEqual( json['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
+        jobj = json.loads(ret)
+        self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
         # set new values
@@ -95,8 +95,8 @@ class TestGateway( unittest.TestCase ):
         # attach pgs from cluster
         cmd = 'pgs_join %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
-        json = demjson.decode(ret)
-        self.assertEqual( json['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret) )
+        jobj = json.loads(ret)
+        self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         time.sleep( 3 )
 

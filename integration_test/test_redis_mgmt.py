@@ -9,7 +9,6 @@ import redis_mgmt
 import time
 import load_generator
 import config
-import demjson
 import telnetlib
 import random
 

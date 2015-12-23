@@ -11,7 +11,7 @@ import default_cluster
 import smr_mgmt
 import constant as c
 import load_generator
-import demjson
+import json
 
 class TestQuorumPolicy( unittest.TestCase ):
     cluster = config.clusters[0]
@@ -216,8 +216,8 @@ class TestQuorumPolicy( unittest.TestCase ):
         # detach pgs from cluster
         cmd = 'pgs_leave %s %d\r\n' % (m['cluster_name'], m['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
-        json = demjson.decode(ret)
-        self.assertEqual( json['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
+        jobj = json.loads(ret)
+        self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
         # check if pgs is removed

@@ -10,7 +10,6 @@ import redis_mgmt
 import time
 import config
 import random
-import json
 import constant
 import ast
 import copy

@@ -11,7 +11,6 @@ import config
 import load_generator
 import telnet
 import constant as c
-import demjson
 
 
 class TestUpgrade( unittest.TestCase ):

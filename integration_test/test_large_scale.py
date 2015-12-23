@@ -11,7 +11,6 @@ import config
 import load_generator
 import telnet
 import constant
-import demjson
 import json
 import telnetlib
 import threading

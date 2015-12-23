@@ -9,7 +9,7 @@ import default_cluster
 import config
 import load_generator
 import telnet
-import demjson
+import json
 import constant as c
 
 
@@ -289,8 +289,8 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
             cmd = 'pgs_leave %s %d' % (self.cluster['cluster_name'], server['id'])
             ret = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(ret)
-            self.assertEqual( json['state'], 'success', 'failed : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
+            jobj = json.loads(ret)
+            self.assertEqual( jobj['state'], 'success', 'failed : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
             util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
 
             # check redis
@@ -322,8 +322,8 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
             cmd = 'gw_del %s %d' % (self.cluster['cluster_name'], server['id'])
             ret = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
-            json = demjson.decode(ret)
-            self.assertEqual( json['state'], 'success', 'failed : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
+            jobj = json.loads(ret)
+            self.assertEqual( jobj['state'], 'success', 'failed : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
             util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
 
             success = False
