@@ -18,7 +18,7 @@ default: all
 release: all
 	mkdir -p $(RELEASE_DIR)/bin
 	mkdir -p $(RELEASE_DIR)/confmaster
-	mkdir -p $(RELEASE_DIR)/mgmt
+	mkdir -p $(RELEASE_DIR)/mgmt/config
 	mkdir -p $(RELEASE_DIR)/api/c
 	mkdir -p $(RELEASE_DIR)/api/java
 	# Redis
@@ -36,6 +36,8 @@ release: all
 	cp -rf smr/replicator/smr-replicator $(RELEASE_DIR)/bin/smr-replicator-$(VERSION)
 	# Tools
 	cp -rf tools/mgmt/*.py $(RELEASE_DIR)/mgmt/
+	cp -rf tools/mgmt/config/*.py $(RELEASE_DIR)/mgmt/config
+	cp -rf tools/mgmt/bash.nbase-arc $(RELEASE_DIR)/mgmt/
 	cp -rf tools/local_proxy/release/local_proxy $(RELEASE_DIR)/bin/local_proxy-$(VERSION)
 	cp -rf tools/nbase-arc-cli/arc-cli $(RELEASE_DIR)/bin/arc-cli-$(VERSION)
 	cp -rf tools/nbase-arc-cli/arc-cli-admin $(RELEASE_DIR)/bin/arc-cli-admin-$(VERSION)
