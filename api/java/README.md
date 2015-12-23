@@ -27,8 +27,7 @@ To use it just:
     String name = client.get("name");
 
     client.destroy();
- }
-~~~
+ ~~~
 
 Configure RedisClusterTemplate:
 ~~~
@@ -44,7 +43,6 @@ Configure RedisClusterTemplate:
     <bean id="redisTemplate" class="com.nhncorp.redis.cluster.spring.StringRedisClusterTemplate">
         <property name="connectionFactory" ref="redisCulsterConnectionFactory"/>
     </bean>
-</beans>
 ~~~
 
 
