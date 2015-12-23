@@ -8,9 +8,9 @@
 You can upgrade PGS with the administrative script. Please follow the procedure below:
 *	Copy the upgrade binary file to $NBASE_ARC_HOME/bin in the machine where the administrative 
 script has been installed, and go to the directory where the script is located.
-*	Open the config.py file, and change the values of NBASE_ARC_VERSION and SMR_VERSION to the upgrade binary's version.
+*	Open the `mgmt/config/conf_dnode.py` file, and change the values of REDIS_VERSION and SMR_VERSION to the upgrade binary's version.
 ```
-NBASE_ARC_VERSION = <Version of nbase-arc>
+REDIS_VERSION = <Version of nbase-arc>
 SMR_VERSION = <Version of nbase-arc>
 ```
 *	Run the script.
@@ -28,9 +28,9 @@ upgraded PGSes. Each PG should contain one master PGS and several slave PGSes.
 You can upgrade gateways with the administrative script. Please follow the procedure below:
 *	Copy the upgrade binary file to $NBASE_ARC_HOME/bin in the machine where the administrative script has been installed, 
 and go to the directory where the script is located.
-*	Open the config.py file, and change the value of NBASE_GW_VERSION to the upgrade binary's version.
+*	Open the `mgmt/config/conf_dnode.py` file, and change the value of GW_VERSION to the upgrade binary's version.
 ```
-NBASE_GW_VERSION = <Version of nbase-arc>
+GW_VERSION = <Version of nbase-arc>
 ```
 *	Run the script.
 ```

@@ -117,26 +117,28 @@ The administrative script is used to create and delete a cluster, replace machin
 ##### Install Python and Required Libraries
 * python 2.7 (http://www.python.org/)
 * pip (http://www.pip-installer.org/en/latest/installing.html)
-* Fabric 1.8+ (http://docs.fabfile.org/)
+* Fabric 1.10 (http://docs.fabfile.org/)
 
 ##### Set Up Environment for Administrative Script  
-The administrative script is in `$NBASE_ARC_HOME/mgmt` directory, if the package has been installed in the management node. Open the `$NBASE_ARC_HOME/mgmt/config.py` file to edit the configuration information.
+The administrative script is in `$NBASE_ARC_HOME/mgmt` directory, if the package has been installed in the management node. Open the `$NBASE_ARC_HOME/mgmt/config/conf_mnode.py` file to edit the configuration information.
 
 ```
 CONF_MASTER_IP = <IP address of the management node>
 CONF_MASTER_PORT = <Client listen port of confmaster>
-
-NBASE_ARC_VERSION = <Version of nbase-arc>
-NBASE_GW_VERSION = <Version of nbase-arc>
-SMR_VERSION = <Version of nbase-arc>
-
 USERNAME = <Account name of nbase-arc>
+```
+
+In addition, edit the `$NBASE_ARC_HOME/mgmt/config/conf_dnode.py` file to specify binaries' version. Nbase-arc's binaries are postfixed with version, like `redis-arc-<version>`.
+```
+REDIS_VERSION = <Version of nbase-arc>
+GW_VERSION = <Version of nbase-arc>
+SMR_VERSION = <Version of nbase-arc>
 ```
 
 You should edit the values in the code above.  
 * CONF_MASTER_IP  
   Enter the IP address of one of the nbase-arc management nodes.
-* NBASE_ARC_VERSION, NBASE_GW_VERSION, SMR_VERSION  
+* REDIS_VERSION, GW_VERSION, SMR_VERSION
   Enter the version of nbase-arc to install.
 * USERNAME  
   Enter the account name for which nbase-arc is installed. As described in [Preparation Before Setup](#preparation-before-setup) the management node and the data node should use the same account name.
