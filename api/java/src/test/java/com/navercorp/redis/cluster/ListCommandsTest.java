@@ -158,21 +158,21 @@ public class ListCommandsTest extends RedisClusterTestBase {
         bexpected.add(bC);
 
         List<byte[]> brange = redis.lrange(REDIS_BKEY_0, 0, 2);
-        Assert.assertEquals(bexpected, brange);
+        assertEquals(bexpected, brange);
 
         brange = redis.lrange(REDIS_BKEY_0, 0, 20);
-        Assert.assertEquals(bexpected, brange);
+        assertEquals(bexpected, brange);
 
         bexpected = new ArrayList<byte[]>();
         bexpected.add(bB);
         bexpected.add(bC);
 
         brange = redis.lrange(REDIS_BKEY_0, 1, 2);
-        Assert.assertEquals(bexpected, brange);
+        assertEquals(bexpected, brange);
 
         bexpected = new ArrayList<byte[]>();
         brange = redis.lrange(REDIS_BKEY_0, 2, 1);
-        Assert.assertEquals(bexpected, brange);
+        assertEquals(bexpected, brange);
 
     }
 
@@ -465,7 +465,7 @@ public class ListCommandsTest extends RedisClusterTestBase {
         bexpected.add(bA);
         bexpected.add(bB);
 
-        Assert.assertEquals(bexpected, bactual);
+        assertEquals(bexpected, bactual);
 
         bstatus = redis.linsert(REDIS_BKEY_0, Client.LIST_POSITION.BEFORE, REDIS_BVALUE_0, REDIS_BVALUE_1);
         assertEquals(-1, bstatus);
