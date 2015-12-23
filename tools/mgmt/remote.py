@@ -5,13 +5,17 @@ import socket
 import glob
 import traceback
 import sys
-import pdb
 from fabric.api import *
 from fabric.colors import *
 from fabric.contrib.console import *
 from fabric.contrib.files import *
 import util
-import config
+
+config = util.config
+
+def set_config(config_module):
+    global config
+    config = config_module
 
 def check_shell():
     ret = run('echo $SHELL')
@@ -81,15 +85,15 @@ def deploy_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_num=1):
         cronsave_hour = cronsave_hour % 24
 
     # Make redis configuration
-    redis_conf = util.make_redis_conf(
+    redis_conf = config.make_redis_conf(
             cluster_name, smr_base_port, redis_port, config.CRONSAVE_BASE_HOUR, config.CRONSAVE_BASE_MIN, cronsave_num)
     if redis_conf == None:
-        warn("[%s:%d] Make redis config fail." % (host, smr_base_port))
+        warn("[%s:%d] Make redis config fail." % (env.host_string, smr_base_port))
         return False
 
-    conf_file_path = util.make_redis_conf_file(redis_conf)
+    conf_file_path = config.make_redis_conf_file(redis_conf)
     if conf_file_path == None:
-        warn("[%s:%d] Make redis config file fail." % (host, smr_base_port))
+        warn("[%s:%d] Make redis config file fail." % (env.host_string, smr_base_port))
         return False
 
     # Copy redis config to remote host
@@ -106,10 +110,17 @@ def deploy_arc_bash_profile(ip):
 
         config.confirm_mode = False
         
+        # Make ARC_BASH_PROFILE
+        bash_profile_path = config.make_bash_profile_file(config.REMOTE_NBASE_ARC)
+        if bash_profile_path  == None:
+            warn("[%s:%d] Make bash profile fail." % host)
+            return False
+
         # Copy ARC_BASH_PROFILE to remote machine
-        if copy(config.ARC_BASH_PROFILE, '~/.%s' % config.ARC_BASH_PROFILE) == False:
+        if copy(bash_profile_path, '~/.%s' % config.ARC_BASH_PROFILE) == False:
             warn(red('[%s] Failed to write ARC_BASH_PROFILE. Aborting...' % host))
             return False
+        local('rm -f %s' % bash_profile_path)
 
         # Have .bash_profile contain ARC_BASH_PROFILE
         with settings(warn_only=True):
@@ -144,8 +155,8 @@ def copy(local_path, remote_path):
     return True
 
 def copy_binary():
-    local_redis_path = config.LOCAL_BINARY_PATH + '/*-' + config.NBASE_ARC_VERSION
-    local_gw_path = config.LOCAL_BINARY_PATH + '/*-' + config.NBASE_GW_VERSION
+    local_redis_path = config.LOCAL_BINARY_PATH + '/*-' + config.REDIS_VERSION
+    local_gw_path = config.LOCAL_BINARY_PATH + '/*-' + config.GW_VERSION
     local_smr_path = config.LOCAL_BINARY_PATH + '/*-' + config.SMR_VERSION
     remote_path = config.REMOTE_BIN_DIR
 
@@ -155,17 +166,17 @@ def copy_binary():
             return False
         run('mkdir -p %s' % remote_path)
 
-    if exists(remote_path + '/redis-gateway-' + config.NBASE_GW_VERSION) == False:
+    if exists(remote_path + '/redis-gateway-' + config.GW_VERSION) == False:
         run('ls %s' % remote_path)
-        if config.confirm_mode and not confirm('Copy NBase-ARC-GW ' + cyan(config.NBASE_GW_VERSION) + ' to [%s]%s. Continue?' % (env.host, remote_path)):
+        if config.confirm_mode and not confirm('Copy NBase-ARC-GW ' + cyan(config.GW_VERSION) + ' to [%s]%s. Continue?' % (env.host, remote_path)):
             warn("Aborting at user request.")
             return False
         put(local_gw_path, remote_path)
         run('chmod +x %s/*' % remote_path)
 
-    if exists(remote_path + '/redis-arc-' + config.NBASE_ARC_VERSION) == False:
+    if exists(remote_path + '/redis-arc-' + config.REDIS_VERSION) == False:
         run('ls %s' % remote_path)
-        if config.confirm_mode and not confirm('Copy NBase-ARC ' + cyan(config.NBASE_ARC_VERSION) + ' to [%s]%s. Continue?' % (env.host, remote_path)):
+        if config.confirm_mode and not confirm('Copy NBase-ARC ' + cyan(config.REDIS_VERSION) + ' to [%s]%s. Continue?' % (env.host, remote_path)):
             warn("Aborting at user request.")
             return False
         put(local_redis_path, remote_path)
@@ -262,7 +273,7 @@ def stop_smr_process(port):
 
 def get_checkpoint(src_ip, src_port, file_name, pn_pg_map, smr_base_port):
     path = config.REMOTE_PGS_DIR + '/' + str(smr_base_port) + '/redis'
-    exec_str = "cluster-util-%s --getdump %s %d %s %s" % (config.NBASE_ARC_VERSION, src_ip, src_port, file_name, pn_pg_map)
+    exec_str = "cluster-util-%s --getdump %s %d %s %s" % (config.REDIS_VERSION, src_ip, src_port, file_name, pn_pg_map)
 
     if config.confirm_mode and not confirm(cyan('[%s] Get checkpoint from %s:%d. Continue?' % (env.host_string, src_ip, src_port))):
         warn("Aborting at user request.")
@@ -289,7 +300,7 @@ def get_checkpoint(src_ip, src_port, file_name, pn_pg_map, smr_base_port):
 
 def checkpoint_and_play(src_ip, src_port, dst_ip, dst_port, range_from, range_to, tps):
     seq = -1
-    exec_str = "cluster-util-%s --getandplay %s %d %s %d %d-%d %d" % (config.NBASE_ARC_VERSION, src_ip, src_port, dst_ip, dst_port, range_from, range_to, tps)
+    exec_str = "cluster-util-%s --getandplay %s %d %s %d %d-%d %d" % (config.REDIS_VERSION, src_ip, src_port, dst_ip, dst_port, range_from, range_to, tps)
     print cyan(exec_str)
     if config.confirm_mode and not confirm(cyan('[%s] Copy checkpoint from [%s:%d] to [%s:%d]. Continue?' % (env.host_string, src_ip, src_port, dst_ip, dst_port))):
         warn("Aborting at user request.")
@@ -307,7 +318,7 @@ def checkpoint_and_play(src_ip, src_port, dst_ip, dst_port, range_from, range_to
     return True, seq
 
 def rangedel(src_ip, src_port, range_from, range_to, tps):
-    exec_str = "cluster-util-%s --rangedel %s %d %d-%d %d" % (config.NBASE_ARC_VERSION, src_ip, src_port, range_from, range_to, tps)
+    exec_str = "cluster-util-%s --rangedel %s %d %d-%d %d" % (config.REDIS_VERSION, src_ip, src_port, range_from, range_to, tps)
     print cyan(exec_str)
     if config.confirm_mode and not confirm(cyan('[%s] Rangedel, PGS:%s:%d, RANGE:%d-%d, Continue?' % (env.host_string, src_ip, src_port, range_from, range_to))):
         warn("Aborting at user request.")
@@ -355,7 +366,7 @@ def start_smr_process(ip, smr_base_port, log_delete_delay=86400):
 def start_redis_process(ip, smr_base_port, redis_port, cluster_name, expected_pongs=['+OK 1']):
     print magenta("\n[%s] Start Redis" % env.host_string)
     path = config.REMOTE_PGS_DIR + '/' + str(smr_base_port) + '/redis'
-    exec_str = 'redis-arc-%s %d.%s.conf' % (config.NBASE_ARC_VERSION, smr_base_port, cluster_name)
+    exec_str = 'redis-arc-%s %d.%s.conf' % (config.REDIS_VERSION, smr_base_port, cluster_name)
     run('ls -al %s' % path)
 
     if config.confirm_mode and not confirm(cyan('[%s] Start Redis. %s:%d. Continue?' % (env.host_string, env.host, redis_port))):
@@ -401,7 +412,7 @@ def redis_ping_check(ip, redis_port, num_gateway):
             num_connected = util.get_redis_client_connection_count(ip, redis_port)
             print yellow("redis '%s:%d' client connection count:%d" % (ip, redis_port, num_connected))
 
-            if (num_connected == num_gateway * config.NUM_WORKERS_PER_GATEWAY + config.NUM_CM): 
+            if (num_connected == num_gateway * config.NUM_WORKERS_PER_GATEWAY + config.CONF_MASTER_MGMT_CONS): 
                 # Check consistency of num_connected while 1 seconds
                 ok = True 
                 for i in range(5):
@@ -585,8 +596,8 @@ def iostat():
 def start_gateway(cluster_name, ip, port, cmip, cmport):
     print magenta("\n[%s] Start Gateway" % env.host_string)
     path = config.REMOTE_GW_DIR + '/' + str(port)
-    add_opt = util.get_gw_additional_option(config.NEW_VERSION)
-    exec_str = 'redis-gateway-%s -D -l gwlog -c %s -w %d -p %d -n %s %s' % (config.NBASE_GW_VERSION, cmip, config.NUM_WORKERS_PER_GATEWAY, port, cluster_name, add_opt)
+    add_opt = config.get_gw_additional_option()
+    exec_str = 'redis-gateway-%s -D -l gwlog -c %s -b %d -w %d -p %d -n %s %s' % (config.GW_VERSION, cmip, cmport, config.NUM_WORKERS_PER_GATEWAY, port, cluster_name, add_opt)
     run('ls -al %s' % path)
 
     if config.confirm_mode and not confirm(cyan('[%s] Start Gateway. %s:%d. Continue?' % (env.host_string, env.host, port))):

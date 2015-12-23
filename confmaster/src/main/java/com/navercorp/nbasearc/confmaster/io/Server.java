@@ -12,12 +12,15 @@ public class Server {
     private final SessionFactory sessionFactory;
     private final EventSelector eventSelector;
     
+    private final String ip;
     private final int port;
     private final int maxSessionCnxns;
     private final long maxSessionTimeout; 
     
-    public Server(int port, int maxSessionCnxns, long maxSessionTimeout,
-            SessionFactory sessionFactory) throws IOException {
+    public Server(String ip, int port, int maxSessionCnxns, 
+            long maxSessionTimeout, SessionFactory sessionFactory) 
+        throws IOException {
+        this.ip = ip;
         this.port = port;
         this.maxSessionCnxns = maxSessionCnxns;
         this.maxSessionTimeout = maxSessionTimeout;
@@ -30,7 +33,7 @@ public class Server {
         this.session.setHandler(handler);
         this.session.createChannel();
         this.session.setSelector(this.eventSelector.getSelector());
-        this.session.bind(null, this.port);
+        this.session.bind(ip, port);
         this.eventSelector.register(this.session, SelectionKey.OP_ACCEPT);
     }
     

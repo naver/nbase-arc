@@ -1,0 +1,25 @@
+*.o
+*.lo
+*.a
+*.la
+*.so
+.obj64
+.obj32
+release
+release32
+zk
+zk-3.4.6/.lib64
+zk-3.4.6/.lib32
+zk-3.4.6/c/.deps
+zk-3.4.6/c/.libs
+zk-3.4.6/c/cli_mt
+zk-3.4.6/c/cli_st
+zk-3.4.6/c/load_gen
+
+# temporary files during build
+zk-3.4.6/c/Makefile
+zk-3.4.6/c/config.h
+zk-3.4.6/c/config.log
+zk-3.4.6/c/config.status
+zk-3.4.6/c/libtool
+zk-3.4.6/c/stamp-h1

@@ -37,6 +37,7 @@ public class ClusterContollerServer {
     public void initialize() throws IOException {
         try {
             server = new Server(
+                        config.getIp(),
                         config.getPort(), 
                         config.getServerClientMax(),
                         config.getServerClientTimeout(), 

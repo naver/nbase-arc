@@ -9,27 +9,27 @@ http://zookeeper.apache.org/doc/r3.4.6/zookeeperStarted.html
 
 ### Set and Execute Configuration Master
 Access each and every management node, change the configuration of Configuration master and execute it.
-1. Edit the cc.properties file in $NBASE_ARC_HOME/confmaster directory, as follows.
+* Edit the cc.properties file in $NBASE_ARC_HOME/confmaster directory, as follows.
 ```
 confmaster.zookeeper.address=<zookeeper ensemble address>
 confmaster.ip=<IP address of the connected management node>
 ```
-2. Enter the ZooKeeper ensemble address in the form of connection string, as shown below. The connection string format is "IP:port,IP:port,IP:port" where the IP is the IP address of each management node in which ZooKeeper is run, and the port is the basic port of ZooKeeper, 2181. 
+* Enter the ZooKeeper ensemble address in the form of connection string, as shown below. The connection string format is "IP:port,IP:port,IP:port" where the IP is the IP address of each management node in which ZooKeeper is run, and the port is the basic port of ZooKeeper, 2181. 
 ```
 confmaster.zookeeper.address=10.20.30.40:2181,10.20.30.41:2181,10.20.30.42:2181
 ```
-3. Enter the IP address of the machine (management node) currently connected, for server_ip.
+* Enter the IP address of the machine (management node) currently connected, for server_ip.
 ```
 confmaster.ip=10.20.30.40
 ```
-4. Use the default settings for the following fields of cc.properties.
+* Use the default settings for the following fields of cc.properties.
 ```
 confmaster.port=1122                  Client listen port of Configuration master
 confmaster.server.thread.max=64       The no. of threads required to process mgmt-cc
 confmaster.heartbeat.timeout=4000     Heartbeat response timeout. If the timeout expires, it is regarded as terminated.
 confmaster.heartbeat.interval=1000    Heartbeat interval
 ```
-5. Use the following command to execute Configuration master.
+* Use the following command to execute Configuration master.
 ```
 ./confmaster-<version>.sh
 ```

@@ -21,12 +21,6 @@ public class Config {
     private Integer clusterPgsTimeout;
     @Value("${confmaster.cluster.gw.timeout}")
     private Integer clusterGwTimeout;
-    @Value("${confmaster.cluster.pg.id.max}")
-    private Integer clusterPgIdMax;
-    @Value("${confmaster.cluster.pgs.id.max}")
-    private Integer clusterPgsIdMax;
-    @Value("${confmaster.cluster.gw.id.max}")
-    private Integer clusterGwIdMax;
     
     @Value("${confmaster.server.client.max}")
     private Integer serverClientMax;
@@ -92,18 +86,6 @@ public class Config {
         return clusterGwTimeout;
     }
 
-    public Integer getClusterPgIdMax() {
-        return clusterPgIdMax;
-    }
-
-    public Integer getClusterPgsIdMax() {
-        return clusterPgsIdMax;
-    }
-
-    public Integer getClusterGwIdMax() {
-        return clusterGwIdMax;
-    }
-
     public Integer getServerClientMax() {
         return serverClientMax;
     }
@@ -140,11 +122,6 @@ public class Config {
         return serverCommandPgsdelMaxretry;
     }
 
-    public void setServerCommandPgsdelMaxretry(
-            Integer serverCommandPgsdelMaxretry) {
-        this.serverCommandPgsdelMaxretry = serverCommandPgsdelMaxretry;
-    }
-    
     public Long getHeartbeatTimeout() {
         return heartbeatTimeout;
     }

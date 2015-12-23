@@ -51,7 +51,7 @@ A log file is composed of data part and metadata part. The data part is actual r
 #### SMR replication protocol
 A Redis request is replicated and processed through the following steps.
 
-1. Send request
+* Send request
   - A Redis process sends a replication request to the master replicator via library call.
 ```
     Redis(lib)   Master      Slave
@@ -59,7 +59,8 @@ A Redis request is replicated and processed through the following steps.
         X--------->|         |  |
         |          |         |  |
 ```
-2. Transfer log
+
+* Transfer log
   - The master replicator appends the replication request to the local log file and send it to the slave replicators.
 ```
     Redis(lib)   Master      Slave
@@ -67,7 +68,8 @@ A Redis request is replicated and processed through the following steps.
         |          X-------->|->|
         |          |         |  |
 ```
-3. Log ack.
+
+* Log ack.
   - Slave replicator gets the log stream and save the recived portion to the local log file. LSN of the last message in the local log file is acknowledged to the master replicator.
 ```
     Redis(lib)   Master      Slave
@@ -75,7 +77,8 @@ A Redis request is replicated and processed through the following steps.
         |          |<--------X--X
         |          |         |  |
 ```
-4. Commit
+
+* Commit
   - Master replicator tracks the LSN of the replicators and determines the maxinum log sequence number which is safe to commit. Commit policy is determined by the quorum value which means the number of slaves who have the log too. The commit log sequence number is sent to slaves as a mesage in the replication stream.
 ```
                     ( Learner )
@@ -84,7 +87,8 @@ A Redis request is replicated and processed through the following steps.
         |          X-------->|->|
         |          |         |  |
 ```
-5. Learn commit
+
+* Learn commit
   - When a replicator learns the committed log sequence number it notifies the number to the local Reids via local connection.
 ```
                    ( Learner )

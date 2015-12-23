@@ -2426,7 +2426,7 @@ smr_process_internal (smrConnector * connector, int timeout)
   int num_events;
   int i;
   int ret;
-  int mfd, lfd;
+  int mfd;
 
   errno = 0;
   assert (connector != NULL);
@@ -2438,7 +2438,6 @@ smr_process_internal (smrConnector * connector, int timeout)
     }
 
   mfd = connector->mfd;
-  lfd = connector->lfd;
 
   for (i = 0; i < num_events; i++)
     {

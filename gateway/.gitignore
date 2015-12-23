@@ -1,0 +1,7 @@
+.*.swp
+*.o
+*.log
+*.gcno
+*.gcda
+*.gcov
+redis-gateway

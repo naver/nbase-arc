@@ -7,10 +7,16 @@ from fabric.api import *
 from fabric.colors import *
 from fabric.contrib.console import *
 from fabric.contrib.files import *
-import config
 import util
-import pdb
+import importlib
 from gw_cmd import *
+
+timeout = 300
+config = None
+
+def set_config(config_module):
+    global config
+    config = config_module
 
 def init():
     global cm_conn
@@ -19,7 +25,7 @@ def init():
     try:
         cm_conn = telnetlib.Telnet(config.CONF_MASTER_IP, config.CONF_MASTER_PORT)
         cm_conn.write('cluster_ls\r\n')
-        ret = cm_conn.read_until('\r\n', 1)
+        ret = cm_conn.read_until('\r\n', timeout)
         ret = json.loads(ret)
         if 'redirect' == ret['state']:
             cm_conn.close()
@@ -28,7 +34,7 @@ def init():
             config.CONF_MASTER_PORT = int(ret['data']['port'])
             cm_conn = telnetlib.Telnet(config.CONF_MASTER_IP, config.CONF_MASTER_PORT)
             cm_conn.write('cluster_ls\r\n')
-            ret = cm_conn.read_until('\r\n', 1)
+            ret = cm_conn.read_until('\r\n', timeout)
             ret = json.loads(ret)
             if 'success' != ret['state']:
                 warn(red('Can not connect to Conf master. Aborting...'))
@@ -45,7 +51,7 @@ def init():
 
 def pm_ls():
     cm_conn.write('pm_ls\r\n')
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret.encode('ascii'))
     if json_data['state'] != 'success':
         warn(red("Get pm_ls fail."))
@@ -55,7 +61,7 @@ def pm_ls():
 def pm_info(pm_name):
     cmd = 'pm_info %s\r\n' % pm_name
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Get pm_info fail."))
@@ -65,7 +71,7 @@ def pm_info(pm_name):
 def pm_add(name, ip):
     cmd = 'pm_add %s %s\r\n' % (name, ip)
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red('PM Add fail. cmd:%s, ret:%s' % (cmd[:-2], ret.strip())))
@@ -74,7 +80,7 @@ def pm_add(name, ip):
 
 def cluster_ls():
     cm_conn.write('cluster_ls\r\n')
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Cluster '%s' doesn't exist." % cluster_name))
@@ -83,7 +89,7 @@ def cluster_ls():
 
 def cluster_add(name, quorum_policy):
     cm_conn.write('cluster_add %s %s\r\n' % (name, quorum_policy))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Add cluster '%s' fail." % name))
@@ -92,7 +98,7 @@ def cluster_add(name, quorum_policy):
 
 def cluster_del(name):
     cm_conn.write('cluster_del %s\r\n' % (name))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Delete cluster '%s' fail." % name))
@@ -101,7 +107,7 @@ def cluster_del(name):
 
 def cluster_info(cluster_name):
     cm_conn.write('cluster_info %s\r\n' % cluster_name)
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Cluster '%s' doesn't exist." % cluster_name))
@@ -110,7 +116,7 @@ def cluster_info(cluster_name):
 
 def pg_add(cluster_name, pg_id):
     cm_conn.write('pg_add %s %d\r\n' % (cluster_name, pg_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Add PG '%d' fail." % pg_id))
@@ -119,7 +125,7 @@ def pg_add(cluster_name, pg_id):
 
 def pg_del(cluster_name, pg_id):
     cm_conn.write('pg_del %s %d\r\n' % (cluster_name, pg_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Delete PG '%d' fail." % pg_id))
@@ -142,7 +148,7 @@ def pg_infos(cluster_name, pg_ids):
 
     pg_list = []
     for i in range(len(pg_ids)):
-        reply = cm_conn.read_until('\r\n', 1)
+        reply = cm_conn.read_until('\r\n', timeout)
         pg_json = pgstr_to_json(int(pg_ids[i]), reply, slot_map)
         pg_list.append(pg_json)
 
@@ -170,7 +176,7 @@ def pg_info(cluster_name, pg_id, cluster_json=None):
     slot_map = util.slot_rle_to_map(cluster_json['data']['cluster_info']['PN_PG_Map'])
 
     cm_conn.write('pg_info %s %d\r\n' % (cluster_name, pg_id))
-    reply = cm_conn.read_until('\r\n', 1)
+    reply = cm_conn.read_until('\r\n', timeout)
     return pgstr_to_json(pg_id, reply, slot_map)
 
 def pgstr_to_json(pg_id, json_str, slot_map):
@@ -186,7 +192,10 @@ def pgstr_to_json(pg_id, json_str, slot_map):
     else:
         pg_json['slot'] = slot_map[pg_id]
 
-    pg_json['master_Gen'] = max(int(k) for k in pg_json['master_Gen_Map']) + 1
+    if len(pg_json['master_Gen_Map']) == 0:
+        pg_json['master_Gen'] = -1
+    else:
+        pg_json['master_Gen'] = max(int(k) for k in pg_json['master_Gen_Map']) + 1
 
     return pg_json
 
@@ -258,7 +267,7 @@ def get_joined_pgs_count(cluster_name, pg_id):
 
 def pgs_info(cluster_name, pgs_id):
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         return None
@@ -282,14 +291,14 @@ def pgs_add(cluster_name, pgs_id, pg_id, pm_name, pm_ip, port, host):
 
     cmd = 'pgs_add %s %d %d %s %s %d %d\r\n' % (cluster_name, pgs_id, pg_id, pm_name, pm_ip, port, port + 9)
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Add fail. cmd:%s, ret:%s' % (host, cmd[:-2], ret.strip())))
         return False
 
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     print ret.strip() + '\n'
 
     print green('[%s] PGS Add success' % host)
@@ -298,7 +307,7 @@ def pgs_add(cluster_name, pgs_id, pg_id, pm_name, pm_ip, port, host):
 def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
     print magenta("\n[%s] PGS Join" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] PGS Join, PGS_ID:%d. Continue?' % (host, pgs_id))):
@@ -306,7 +315,7 @@ def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
         return False
 
     cm_conn.write('pgs_join %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Join fail, ret:%s' % (host, ret.strip())))
@@ -317,7 +326,7 @@ def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
 def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True):
     print magenta("\n[%s] PGS Leave" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] PGS Leave, PGS_ID:%d. Continue?' % (host, pgs_id))):
@@ -325,7 +334,7 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True):
         return False
 
     cm_conn.write('pgs_leave %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Leave fail, ret:%s' % (host, ret.strip())))
@@ -339,12 +348,12 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True):
 
             while True:
                 conn.write('info clients\r\n')
-                reply = conn.read_until('\r\n', 1)
+                reply = conn.read_until('\r\n', timeout)
                 size = int(reply[1:])
 
                 readlen = 0
                 while readlen <= size:
-                    ret = conn.read_until('\r\n', 1)
+                    ret = conn.read_until('\r\n', timeout)
                     readlen += len(ret)
                     ret = ret.strip()
                     if ret.find('connected_clients') != -1 and ret.find(':') != -1:
@@ -369,7 +378,7 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True):
 def pgs_lconn(cluster_name, pgs_id, ip, smr_base_port, host):
     print magenta("\n[%s] PGS lconn" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] PGS lconn, PGS_ID:%d. Continue?' % (host, pgs_id))):
@@ -377,7 +386,7 @@ def pgs_lconn(cluster_name, pgs_id, ip, smr_base_port, host):
         return False
 
     cm_conn.write('pgs_lconn %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS lconn fail, ret:%s' % (host, ret.strip())))
@@ -389,7 +398,7 @@ def pgs_lconn(cluster_name, pgs_id, ip, smr_base_port, host):
 
         while True:
             conn.write('ping\r\n')
-            ret = conn.read_until('\r\n', 1)
+            ret = conn.read_until('\r\n', timeout)
             print yellow('[%s] >>> %s' % (host, ret.strip()))
             if '+OK 1' in ret: break
             time.sleep(0.5)
@@ -407,14 +416,14 @@ def pgs_del(cluster_name, pgs_id, host):
         return False
 
     cm_conn.write('pgs_del %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Del fail, ret:%s' % (host, ret.strip())))
         return False
 
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] == 'success':
         warn(red('[%s] PGS Del fail, ret:%s' % (host, ret.strip())))
@@ -428,7 +437,7 @@ def role_change(cluster_name, pgs_id, host):
     print magenta("\n[%s] Role Change" % host)
 
     cm_conn.write('role_change %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', 2)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         print green("[%s] Role Change fail, ret:%s" % (host, ret.strip()))
@@ -461,13 +470,13 @@ def get_gw_list(cluster_name):
 
 def gw_info(cluster_name, gw_id):
     cm_conn.write('gw_info %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         return None
     return json_data
 
-def gw_add(cluster_name, gw_id, pm_name, ip, port, version, additional_clnt=0):
+def gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=0):
     host = ip
     print magenta("\n[%s] GW Add" % host)
             
@@ -477,7 +486,7 @@ def gw_add(cluster_name, gw_id, pm_name, ip, port, version, additional_clnt=0):
 
     cmd = 'gw_add %s %d %s %s %d\r\n' % (cluster_name, gw_id, pm_name, ip, port)
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] GW Add fail, ret:%s' % (host, ret.strip())))
@@ -485,13 +494,13 @@ def gw_add(cluster_name, gw_id, pm_name, ip, port, version, additional_clnt=0):
 
     # Check gateway client connection
     try:
-        with GwCmd(ip, port, version) as gw_cmd:
+        with GwCmd(ip, port) as gw_cmd:
             # Auto mode
             ok = False
             for i in range(15):
                 print yellow('[%s:%d] >>> inactive_connections:%d' % (host, port, gw_cmd.info_redis_discoons()))
                 print yellow('[%s:%d] >>> gateway_connected_clients:%d' % (host, port, gw_cmd.info_num_of_clients()))
-                if gw_cmd.info_redis_discoons() == 0 and gw_cmd.info_num_of_clients() >= 1 + config.NUM_CM + additional_clnt:
+                if gw_cmd.info_redis_discoons() == 0 and gw_cmd.info_num_of_clients() >= 1 + config.CONF_MASTER_MGMT_CONS + additional_clnt:
                     ok = True
                     break
                 else:
@@ -515,11 +524,11 @@ def gw_add(cluster_name, gw_id, pm_name, ip, port, version, additional_clnt=0):
     print green('[%s] GW Add success' % host)
     return True
 
-def gw_del(cluster_name, gw_id, ip, port, version):
+def gw_del(cluster_name, gw_id, ip, port):
     host = ip
     print magenta("\n[%s] GW Del" % host)
     cm_conn.write('gw_info %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] GW Del, GW_ID:%d. Continue?' % (host, gw_id))):
@@ -527,7 +536,7 @@ def gw_del(cluster_name, gw_id, ip, port, version):
         return False
 
     cm_conn.write('gw_del %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', 1)
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] GW Del fail, ret:%s' % (host, ret.strip())))
@@ -535,7 +544,7 @@ def gw_del(cluster_name, gw_id, ip, port, version):
 
     # Check gateway client connection
     try:
-        with GwCmd(ip, port, version) as gw_cmd:
+        with GwCmd(ip, port) as gw_cmd:
             # 1. Wait until all client-connections is disconnected.
             ok = False
             old_total_commands_processed = 0
@@ -591,7 +600,7 @@ def mig2pc(cluster_name, src_pg_id, dst_pg_id, range_from, range_to):
     cmd = 'mig2pc %s %d %d %d %d' % (cluster_name, src_pg_id, dst_pg_id, range_from, range_to)
     print cyan('Command : ' + cmd)
     cm_conn.write(cmd + '\r\n')
-    ret = cm_conn.read_until('\r\n')
+    ret = cm_conn.read_until('\r\n', timeout)
     try:
         json_data = json.loads(ret)
         if json_data['state'] != 'success' or json_data['msg'] != '+OK':
@@ -608,7 +617,7 @@ def slot_set_pg(cluster_name, dst_pg_id, range_from, range_to):
     cmd = 'slot_set_pg %s %d:%d %d' % (cluster_name, range_from, range_to, dst_pg_id)
     print cyan('Command : ' + cmd)
     cm_conn.write(cmd + '\r\n')
-    ret = cm_conn.read_until('\r\n')
+    ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red("%s fail." % cmd))
@@ -617,7 +626,7 @@ def slot_set_pg(cluster_name, dst_pg_id, range_from, range_to):
 
 def pgs_ls(cluster_name):
     cm_conn.write('pgs_ls %s\r\n' % cluster_name)
-    reply = cm_conn.read_until('\r\n', 1)
+    reply = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(reply)
     if json_data['state'] != 'success':
         return None

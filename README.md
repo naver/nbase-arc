@@ -1,6 +1,7 @@
 ## Introduction
 
-nbasearc (n-base-ARC) is an open source distributed memory store based on Redis. It provides a zone of clusters where each cluster is composed of synchronously replicated Redis server groups which can scale-in/out without service interruption.
+nbase-arc (n-base-ARC) is an open source distributed memory store based on Redis. It provides a zone of clusters where each cluster is composed of synchronously replicated Redis server groups which can scale-in/out without service interruption.
+![Overviw](/doc/images/overview.png)
 
 ## Features
 * Multi-cluster zone
@@ -10,26 +11,33 @@ nbasearc (n-base-ARC) is an open source distributed memory store based on Redis.
   - Clients access Redis servers indirectly via gateways. A cluster acts like a single big Redis server instance with multiple access point. 
   - Gateway is a Redis proxy that accepts Redis request from client.
 * High availability and consistency
-  - Unlike Redis replication which is asynchronous and can lost changes when a master crashes, nbasearc implements synchronous replication layer that supports both high availability and consistency. Changes replied to clients are durable even the master side of the replication is crashed
+  - Unlike Redis replication which is asynchronous and can lost changes when a master crashes, nbase-arc implements synchronous replication layer that supports both high availability and consistency. Changes replied to clients are durable even the master side of the replication is crashed
 * Service without interruption
-  - All cluster management operations can be performed without service interruption. You can even upgrade gateways (client access directly) transparently if you use nbasearc C/Java client libraries
-
-## Components and architecture
-* [Configuration master](doc/configuration-master.md)
-* [Gateway](doc/gateway.md)
-* [State machine replicator](doc/state-machine-replicator.md)
-* Client libraries
-  - [C API](doc/c-api.md)
-  - [Java API](doc/java-api.md)
-* Tools
-* [Migration](doc/migration.md)
-* [Failure detection and fail-over](doc/failure-detection-and-failover.md)
-* [Supported commands](doc/supported-commands-2.8.8.md)
-* [Compare with Redis Cluster](doc/compare-redis-cluster.md)
+  - All cluster management operations can be performed without service interruption. You can even upgrade gateways (client access directly) transparently if you use nbase-arc C/Java client libraries
 
 ## Quick start
 
-## License
 
-## More
+## Documents
+* Components
+  - [Configuration master](doc/configuration-master.md)
+  - [Gateway](doc/gateway.md)
+  - [State machine replicator](doc/state-machine-replicator.md)
+* Client libraries
+  - [C API](api/arcci/README.md)
+  - [Java API](api/java/README.md)
+* Tools
+  - [Administration Guide](doc/admin/AdminGuide.md)
+  - [CLI](doc/arc-cli.md)
+* More 
+  - [Migration](doc/migration.md)
+  - [Failure detection and fail-over](doc/failure-detection-and-failover.md)
+  - [Supported commands](doc/supported-commands-2.8.8.md)
+  - [Compare with Redis Cluster](doc/compare-redis-cluster.md)
+
+## Discussions
+* User group: https://groups.google.com/forum/#!forum/nbase-arc-user
+
+
+## License
 

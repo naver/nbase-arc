@@ -1,5 +1,1 @@
-# .bash.nbase-arc
-
-export NBASE_ARC_HOME=~/nbase-arc
-export PATH=$NBASE_ARC_HOME/bin:$PATH
-
+# You can add environment variables at data node here.
