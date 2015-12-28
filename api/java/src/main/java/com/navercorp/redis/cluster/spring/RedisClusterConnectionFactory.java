@@ -19,6 +19,7 @@ package com.navercorp.redis.cluster.spring;
 import com.navercorp.redis.cluster.RedisCluster;
 import com.navercorp.redis.cluster.gateway.GatewayClient;
 import com.navercorp.redis.cluster.gateway.GatewayConfig;
+import com.navercorp.redis.cluster.gateway.GatewayException;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.dao.DataAccessException;
@@ -85,7 +86,11 @@ public class RedisClusterConnectionFactory implements InitializingBean, Disposab
      * @see org.springframework.dao.support.PersistenceExceptionTranslator#translateExceptionIfPossible(java.lang.RuntimeException)
      */
     public DataAccessException translateExceptionIfPossible(RuntimeException ex) {
-        return exceptionConverter.convert(ex);
+        if(ex instanceof GatewayException) {
+            return exceptionConverter.convert(ex);
+        }
+
+        return null;
     }
 
     /**
