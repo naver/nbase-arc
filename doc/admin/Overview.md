@@ -49,7 +49,7 @@ PGS stands for partition group server. It is a pair of a Redis process and an SM
 
 ##### PG
 PG stands for partition group. It is a unit of distributed data store. The nbase-arc cluster consists of multiple PGs, by which data keys are grouped. You can say that sharded data is distributed and stored in each PG, similar to a database system.  
-A PG consists of 2 ~ 5 PGSes and each PGS consists of a Redis process and an SMR process. Therefore, one PG consists of 2 5 Redis processes and SMR processes.  
+A PG consists of 2 ~ 5 PGSes and each PGS consists of a Redis process and an SMR process. Therefore, one PG consists of 2 ~ 5 Redis processes and SMR processes.  
 The PGSes that belong to the same PG contain the same data, which means they are replicas to each other.  
 In short, nbase-arc distributes and stores data in a PG, a logical unit of distributed data store, which actually consists of several PGSes. The PGSes in the same PG are replicas that contain the same data for system availability.
 

@@ -16,7 +16,9 @@ nbase-arc (n-base-ARC) is an open source distributed memory store based on Redis
   - All cluster management operations can be performed without service interruption. You can even upgrade gateways (client access directly) transparently if you use nbase-arc C/Java client libraries
 
 ## Quick start
-
+* [Build](doc/quick-start.md#build)
+* [Setup nbase-arc zone](doc/quick-start.md#setup-nbase-arc-zone)
+* [Create nbase-arc cluster](doc/quick-start.md#create-nbase-arc-cluster)
 
 ## Documents
 * Components
