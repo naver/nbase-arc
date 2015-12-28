@@ -15,14 +15,14 @@ Gateway is composed of multiple worker threads and single master thread. Each th
 ### Benchmark
 
 #### Test Settings
-* Hardware
-    Xeon L5640 @ 2.27GHz X 2 sockets
-    48 GB RAM
+* Hardware  
+    Xeon L5640 @ 2.27GHz X 2 sockets  
+    48 GB RAM  
     Local loopback connection
 
-* Software
-    Redis without replication X 8 processes in single machine
-    Gateway X 1 process(1/4/8 worker threads) in same machine
+* Software  
+    Redis without replication X 8 processes in single machine  
+    Gateway X 1 process(1/4/8 worker threads) in same machine  
     Memtier benchmark X 1 process(1/4 threads) in same machine
 
 * Test options
