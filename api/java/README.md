@@ -4,14 +4,14 @@ Client is compatible with jedis 2.7.2 and spring data redis 1.3.5.RELEASE.
 * Spring data redis(http://projects.spring.io/spring-data-redis/)
 
 ## Usage
-You can download the latest build at: https://github.com/naver/nbase-arc/releases
+You can download the latest build at: https://github.com/naver/nbase-arc/releases/tag/api-java-v1.4.5
 Or use it as a maven dependency(not yet):
 ~~~
 <dependencies>
     <dependency>
         <groupId>com.navercorp</groupId>
-        <artifactId>nbase-arc-client</artifactId>
-        <version>1.0.0</version>
+        <artifactId>nbase-arc-java-client</artifactId>
+        <version>1.4.5</version>
     </dependency>
 </dependencies>
 ~~~
