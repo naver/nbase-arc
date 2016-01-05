@@ -78,10 +78,9 @@ public interface RedisClusterCommands {
      * @param seconds the seconds
      * @return Integer reply, specifically: 1: the timeout was set. 0: the
      * timeout was not set since the key already has an associated
-     * timeout (this may happen only in Redis versions < 2.1.3, Redis >=
+     * timeout (this may happen only in Redis versions &lt; 2.1.3, Redis &gt;=
      * 2.1.3 will happily update the timeout), or the key does not
      * exist.
-     * @see <ahref="http://code.google.com/p/redis/wiki/ExpireCommand">ExpireCommand</a>
      */
     Long expire(String key, int seconds);
 
@@ -109,10 +108,9 @@ public interface RedisClusterCommands {
      * @param unixTime the unix time
      * @return Integer reply, specifically: 1: the timeout was set. 0: the
      * timeout was not set since the key already has an associated
-     * timeout (this may happen only in Redis versions < 2.1.3, Redis >=
+     * timeout (this may happen only in Redis versions &lt; 2.1.3, Redis &gt;=
      * 2.1.3 will happily update the timeout), or the key does not
      * exist.
-     * @see <ahref="http://code.google.com/p/redis/wiki/ExpireCommand">ExpireCommand</a>
      */
     Long expireAt(String key, long unixTime);
 
@@ -144,7 +142,7 @@ public interface RedisClusterCommands {
     Long pexpireAt(String key, long millisecondsTimestamp);
 
     /**
-     * OBJECT REFCOUNT <key> returns the number of references of the value associated with the specified key.
+     * OBJECT REFCOUNT &lt;key&gt; returns the number of references of the value associated with the specified key.
      * This command is mainly useful for debugging.
      * <p>
      * Time complexity: O(1)
@@ -155,7 +153,7 @@ public interface RedisClusterCommands {
     Long objectRefcount(String string);
 
     /**
-     * OBJECT ENCODING <key> returns the kind of internal representation used in order to store the value associated with a key.
+     * OBJECT ENCODING &lt;key&gt; returns the kind of internal representation used in order to store the value associated with a key.
      * <p>
      * Time complexity: O(1)
      *
@@ -165,7 +163,7 @@ public interface RedisClusterCommands {
     String objectEncoding(String string);
 
     /**
-     * OBJECT IDLETIME <key> returns the number of seconds since the object stored at the specified key is idle (not requested by read or write operations).
+     * OBJECT IDLETIME &lt;key&gt; returns the number of seconds since the object stored at the specified key is idle (not requested by read or write operations).
      * While the value is returned in seconds the actual resolution of this timer is 10 seconds, but may vary in future implementations.
      * <p>
      * Time complexity: O(1)
@@ -526,7 +524,7 @@ public interface RedisClusterCommands {
 
     /**
      * Set the the respective keys to the respective values. MSET will replace
-     * old values with new values, while {@link #msetnx(String...) MSETNX} will
+     * old values with new values, while MSETNX will
      * not perform any operation at all even if just a single key already
      * exists.
      * <p>
@@ -541,7 +539,6 @@ public interface RedisClusterCommands {
      *
      * @param keysvalues
      * @return Status code reply. Error Code will return if parts of keys fail in cluster due to server down or network problem.
-     * @see #msetnx(String...)
      */
     String mset(final String... keysvalues);
 
@@ -823,7 +820,6 @@ public interface RedisClusterCommands {
      * @param strings the strings
      * @return Integer reply, specifically, the number of elements inside the
      * list after the push operation.
-     * @see Jedis#rpush(String, String)
      */
     Long lpush(String key, String... strings);
 
@@ -864,7 +860,7 @@ public interface RedisClusterCommands {
      * <b>Out-of-range indexes</b>
      * <p>
      * Indexes out of range will not produce an error: if start is over the end
-     * of the list, or start > end, an empty list is returned. If end is over
+     * of the list, or start &gt; end, an empty list is returned. If end is over
      * the end of the list Redis will threat it just like the last element of
      * the list.
      * <p>
@@ -935,7 +931,7 @@ public interface RedisClusterCommands {
      * penultimate element and so on.
      * <p>
      * Indexes out of range will not produce an error: if start is over the end
-     * of the list, or start > end, an empty list is left as value. If end over
+     * of the list, or start &gt; end, an empty list is left as value. If end over
      * the end of the list Redis will threat it just like the last element of
      * the list.
      * <p>
@@ -984,7 +980,6 @@ public interface RedisClusterCommands {
      * @param strings the strings
      * @return Integer reply, specifically, the number of elements inside the
      * list after the push operation.
-     * @see Jedis#lpush(String, String)
      */
     Long rpush(String key, String... strings);
 
@@ -1044,7 +1039,7 @@ public interface RedisClusterCommands {
 
     /**
      * Return all the members (elements) of the set value stored at key. This is
-     * just syntax glue for {@link #sinter(String...) SINTER}.
+     * just syntax glue for SINTER.
      * <p>
      * Time complexity O(N)
      *
@@ -1234,11 +1229,11 @@ public interface RedisClusterCommands {
      * <p>
      * {@code ZRANGEBYSCORE zset (1.3 5}
      * <p>
-     * Will return all the values with score > 1.3 and <= 5, while for instance:
+     * Will return all the values with score &gt; 1.3 and &lt;= 5, while for instance:
      * <p>
      * {@code ZRANGEBYSCORE zset (5 (10}
      * <p>
-     * Will return all the values with score > 5 and < 10 (5 and 10 excluded).
+     * Will return all the values with score &gt; 5 and &lt; 10 (5 and 10 excluded).
      * <p>
      * <b>Time complexity:</b>
      * <p>
@@ -1304,11 +1299,11 @@ public interface RedisClusterCommands {
      * <p>
      * {@code ZRANGEBYSCORE zset (1.3 5}
      * <p>
-     * Will return all the values with score > 1.3 and <= 5, while for instance:
+     * Will return all the values with score &gt; 1.3 and &lt;= 5, while for instance:
      * <p>
      * {@code ZRANGEBYSCORE zset (5 (10}
      * <p>
-     * Will return all the values with score > 5 and < 10 (5 and 10 excluded).
+     * Will return all the values with score &gt; 5 and &lt; 10 (5 and 10 excluded).
      * <p>
      * <b>Time complexity:</b>
      * <p>
@@ -1373,11 +1368,11 @@ public interface RedisClusterCommands {
      * <p>
      * {@code ZRANGEBYSCORE zset (1.3 5}
      * <p>
-     * Will return all the values with score > 1.3 and <= 5, while for instance:
+     * Will return all the values with score &gt; 1.3 and &lt;= 5, while for instance:
      * <p>
      * {@code ZRANGEBYSCORE zset (5 (10}
      * <p>
-     * Will return all the values with score > 5 and < 10 (5 and 10 excluded).
+     * Will return all the values with score &gt; 5 and &lt; 10 (5 and 10 excluded).
      * <p>
      * <b>Time complexity:</b>
      * <p>
@@ -1452,11 +1447,11 @@ public interface RedisClusterCommands {
      * <p>
      * {@code ZRANGEBYSCORE zset (1.3 5}
      * <p>
-     * Will return all the values with score > 1.3 and <= 5, while for instance:
+     * Will return all the values with score &gt; 1.3 and &lt;= 5, while for instance:
      * <p>
      * {@code ZRANGEBYSCORE zset (5 (10}
      * <p>
-     * Will return all the values with score > 5 and < 10 (5 and 10 excluded).
+     * Will return all the values with score &gt; 5 and &lt; 10 (5 and 10 excluded).
      * <p>
      * <b>Time complexity:</b>
      * <p>

@@ -78,7 +78,6 @@ public interface TriplesRedisClusterCommands {
 
     /**
      * Add the string values.
-     * 유효기간은 초단위로 지정한다.
      *
      * @param key           the key
      * @param field         the field

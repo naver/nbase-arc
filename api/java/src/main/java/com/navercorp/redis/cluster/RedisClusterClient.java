@@ -939,7 +939,6 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
      *
      * @param key    the key
      * @param offset the offset
-     * @return the bit
      */
     public void getbit(String key, long offset) {
         getbit(SafeEncoder.encode(key), offset);
@@ -962,7 +961,6 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
      * @param key         the key
      * @param startOffset the start offset
      * @param endOffset   the end offset
-     * @return the range
      */
     public void getrange(String key, long startOffset, long endOffset) {
         getrange(SafeEncoder.encode(key), startOffset, endOffset);

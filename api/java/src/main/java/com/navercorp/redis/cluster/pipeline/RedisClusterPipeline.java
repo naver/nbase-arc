@@ -82,7 +82,7 @@ public class RedisClusterPipeline extends Queable {
     /**
      * Synchronize pipeline by reading all responses. This operation close the
      * pipeline. In order to get return values from pipelined commands, capture
-     * the different Response<?> of the commands you execute.
+     * the different Response&lt;?&gt; of the commands you execute.
      */
     public void sync() {
         if (this.client == null) {
