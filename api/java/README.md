@@ -4,14 +4,13 @@ Client is compatible with jedis 2.7.2 and spring data redis 1.3.5.RELEASE.
 * Spring data redis(http://projects.spring.io/spring-data-redis/)
 
 ## Usage
-You can download the latest build at: https://github.com/naver/nbase-arc/releases/tag/api-java-v1.4.5
-Or use it as a maven dependency(not yet):
+Use it as a maven dependency:
 ~~~
 <dependencies>
     <dependency>
         <groupId>com.navercorp</groupId>
         <artifactId>nbase-arc-java-client</artifactId>
-        <version>1.4.5</version>
+        <version>1.4.6</version>
     </dependency>
 </dependencies>
 ~~~
@@ -31,16 +30,16 @@ To use it just:
 
 Configure RedisClusterTemplate:
 ~~~
-    <bean id="gatewayConfig" class="com.nhncorp.redis.cluster.gateway.GatewayConfig">
+    <bean id="gatewayConfig" class="com.navercorp.redis.cluster.gateway.GatewayConfig">
       <property name="zkAddress" value="zookeeper-address""/>
       <property name="clusterName" value="cluster-name"/>
     </bean>
 
-    <bean id="redisCulsterConnectionFactory" class="com.nhncorp.redis.cluster.spring.RedisCulsterConnectionFactory" destroy-method="destroy">
+    <bean id="redisCulsterConnectionFactory" class="com.navercorp.redis.cluster.spring.RedisCulsterConnectionFactory" destroy-method="destroy">
         <property name="config" ref="gatewayConfig"/>
     </bean>
 
-    <bean id="redisTemplate" class="com.nhncorp.redis.cluster.spring.StringRedisClusterTemplate">
+    <bean id="redisTemplate" class="com.navercorp.redis.cluster.spring.StringRedisClusterTemplate">
         <property name="connectionFactory" ref="redisCulsterConnectionFactory"/>
     </bean>
 ~~~
