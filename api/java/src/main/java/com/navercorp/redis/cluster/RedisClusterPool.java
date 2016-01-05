@@ -94,7 +94,6 @@ public class RedisClusterPool extends Pool<RedisCluster> {
      * @param host       the host
      * @param port       the port
      * @param timeout    the timeout
-     * @param password   the password
      */
     public RedisClusterPool(final RedisClusterPoolConfig poolConfig, final String host, int port, int timeout,
                             final String keyspace) {

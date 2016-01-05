@@ -212,9 +212,6 @@ public class Gateway implements GatewayServerData {
         this.index = index;
     }
 
-    /**
-     * redisClusterPoolMap의 전체 redisClusterPoo을 제거한다.
-     */
     public void destroy() {
         log.info("[Gateway] Destroying " + servers);
 

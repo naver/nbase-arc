@@ -22,13 +22,11 @@ import com.navercorp.redis.cluster.RedisCluster;
  * The Interface RedisClusterCallback.
  *
  * @param <T> the generic type
- *            {@link Client#execute(RedisClusterCallback)}
  * @author seongminwoo
  */
 public interface RedisClusterCallback<T> {
 
     /**
-     * RedisCluster 객체를 통해 redis command를 수행하도록 구현하면된다.
      *
      * @param redisCluster the redis cluster
      * @return the t

@@ -988,7 +988,6 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
      *
      * @param key    the key
      * @param offset the offset
-     * @return the bit
      */
     public void getbit(byte[] key, long offset) {
         sendCommand(Command.GETBIT, key, RedisProtocol.toByteArray(offset));
@@ -1011,7 +1010,6 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
      * @param key         the key
      * @param startOffset the start offset
      * @param endOffset   the end offset
-     * @return the range
      */
     public void getrange(byte[] key, long startOffset, long endOffset) {
         sendCommand(Command.GETRANGE, key, RedisProtocol.toByteArray(startOffset), RedisProtocol.toByteArray(endOffset));

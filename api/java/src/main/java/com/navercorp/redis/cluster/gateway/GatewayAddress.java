@@ -71,7 +71,7 @@ public class GatewayAddress {
     /**
      * As list.
      *
-     * @param addresses the addresses
+     * @param addressList the addresses
      * @return the list
      */
     public static List<GatewayAddress> asList(final List<String> addressList) {

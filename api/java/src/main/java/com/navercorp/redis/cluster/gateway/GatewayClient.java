@@ -42,13 +42,13 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
  * <p>
  * <b>Spring Bean</b><br>
  * <pre>
- * &ltbean id="gatewayConfig" class="com.nhncorp.redis.cluster.GatewayConfig"&gt
- * &ltproperty name="ipAddress" value="10.96.250.205:6379,10.96.250.207:6379,10.96.250.209:6379"/&gt
- * &lt/bean&gt
+ * &lt;bean id="gatewayConfig" class="com.nhncorp.redis.cluster.GatewayConfig"&gt;
+ * &lt;property name="ipAddress" value="10.96.250.205:6379,10.96.250.207:6379,10.96.250.209:6379"/&gt;
+ * &lt;/bean&gt;
  *
- * &ltbean id="gatewayClient" class="com.nhncorp.redis.cluster.GatewayClient" destroy-method="destroy"&gt
- *  &ltconstructor-arg ref="gatewayConfig"/&gt
- * &lt/bean&gt
+ * &lt;bean id="gatewayClient" class="com.nhncorp.redis.cluster.GatewayClient" destroy-method="destroy"&gt;
+ *  &lt;constructor-arg ref="gatewayConfig"/&gt;
+ * &lt;/bean&gt;
  *
  * </pre>
  * <p>
@@ -73,7 +73,7 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
  *   pipeline.incr("foo");
  *   pipeline.incr("bar");
  *
- *   List<Object> result = pipeline.syncAndReturnAll();
+ *   List&lt;Object&gt; result = pipeline.syncAndReturnAll();
  * } finally {
  *   if(pipeline != null) {
  *       pipeline.close();
