@@ -86,6 +86,7 @@ struct workerCmd_
   int ival;
   long long num_rqst;
   long long num_resp;
+  long long num_reconn;
   struct
   {
     long long count;
@@ -100,6 +101,7 @@ struct workerCmd_
   (c)->ival = 0;                        \
   (c)->num_rqst = 0LL;                  \
   (c)->num_resp = 0LL;                  \
+  (c)->num_reconn = 0LL;                \
   for(i=0;i<MAX_HISTO;i++) {            \
     (c)->histo[i].count = 0LL;          \
     (c)->histo[i].sum = 0LL;            \
@@ -142,6 +144,7 @@ struct workerState_
   simpleBuf out;
   long long num_rqst;
   long long num_resp;
+  long long num_reconn;
   //response time histogram
   long long start_usec;
   struct
@@ -179,6 +182,7 @@ struct workerState_
   init_simple_buf(&(s)->out);           \
   (s)->num_rqst = 0LL;                  \
   (s)->num_resp = 0LL;                  \
+  (s)->num_reconn = 0LL;                \
   (s)->start_usec = 0LL;                \
   for(i=0;i<MAX_HISTO;i++) {            \
     (s)->histo[i].count = 0LL;          \
@@ -383,6 +387,7 @@ free_connection (workerState * ws, int reconn)
 
   if (reconn)
     {
+      ws->num_reconn++;
       ws->reconn_after = currtime_millis () + RECONNECT_INTERVAL;
     }
 }
@@ -663,6 +668,7 @@ request_handler (aeEventLoop * el, int fd, void *data, int mask)
   tw = sb_write (sb, fd);
   if (tw < 0)
     {
+      fprintf (stderr, "[smr-client] failed to sb_write:%d\n", tw);
       free_connection (ws, 1);
       return;
     }
@@ -715,8 +721,8 @@ make_histo (workerCmd * cmd, char *buf, int bufsz)
       avg =
 	(double) cmd->histo[i].sum / (double) cmd->histo[i].count / 1000.0;
       n =
-	snprintf (cp, bufsz - (cp - buf), " %lld(%.2f)", cmd->histo[i].count,
-		  avg);
+	snprintf (cp, bufsz - (cp - buf), "[%d](%lld,%.2f)",
+		  i, cmd->histo[i].count, avg);
       assert (n > 0);
       cp += n;
     }
@@ -734,6 +740,7 @@ response_handler (aeEventLoop * el, int fd, void *data, int mask)
   tr = sb_read (sb, fd);
   if (tr < 0)
     {
+      fprintf (stderr, "[smr-client] failed to sb_read:%d\n", tr);
       free_connection (ws, 1);
       return;
     }
@@ -816,6 +823,7 @@ command_handler (aeEventLoop * el, int fd, void *data, int mask)
 	case CMD_STAT:
 	  cmd->num_rqst = ws->num_rqst;
 	  cmd->num_resp = ws->num_resp;
+	  cmd->num_reconn = ws->num_reconn;
 	  for (i = 0; i < MAX_HISTO; i++)
 	    {
 	      cmd->histo[i].count = ws->histo[i].count;
@@ -1259,8 +1267,9 @@ user_cmd_stat (masterState * ms_ary, char **tokens, int ntok)
   cmd.command = CMD_STAT;
   do_worker_cmd (ms, &cmd);
   make_histo (&cmd, buf, sizeof (buf));
-  fprintf (stdout, "+OK rqst:%lld resp:%lld histo(msec):%s\n", cmd.num_rqst,
-	   cmd.num_resp, buf);
+  fprintf (stdout,
+	   "+OK rqst:%lld resp:%lld reconn:%lld histo_usec_log10:%s\n",
+	   cmd.num_rqst, cmd.num_resp, cmd.num_reconn, buf);
   return;
 }
 

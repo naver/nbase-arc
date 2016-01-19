@@ -29,12 +29,36 @@ unit_tests = [
     './unit/test-memdev',
     ]
 
+integrated_tests = [
+    './test_test.py',
+    './test_newpg.py',
+    './test_log_recover.py',
+    './test_mem_disk_change.py',
+    './test_keep_alive.py',
+    './test_ping_during_log_send.py',
+    './test_be_reconf.py',
+    ]
+
 for test in unit_tests:
-  ret = os.system(test)
-  if ret == 0:
-    print 'test %s passed'  % test
-  else:
-    print 'test %s error %d' % (test, ret)
-    sys.exit(-1)
+    ret = os.system(test)
+    if ret == 0:
+        print 'test %s passed'  % test
+    else:
+        print 'test %s error %d' % (test, ret)
+        sys.exit(-1)
+
+cwd = os.getcwd()
+try:
+    os.chdir('integrated')
+    for test in integrated_tests:
+        cmd = 'python %s' % test
+        ret = os.system(cmd)
+        if ret == 0:
+            print 'test %s passed'  % test
+        else:
+            print 'test %s error %d' % (test, ret)
+            sys.exit(-1)
+finally:
+    os.chdir(cwd)
 
 sys.exit(0)

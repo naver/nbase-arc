@@ -2997,6 +2997,7 @@ process_master_input (masterConn * mc, char *buf, int sz)
 
 	      mc->cs_buf_pos = 0;
 	      mc->cs_buf[0] = '\0';
+	      // TODO: consider assertion. seq <= rep->commit_seq can't happen here
 	      if (seq > rep->commit_seq)
 		{
 		  /* it is possible to receive seq < rep->commit_seq.
@@ -4635,7 +4636,7 @@ role_request (mgmtConn * conn, char **tokens, int num_tok)
     }
   else if (strcasecmp (tokens[0], "lconn") == 0)
     {
-      if (conn->rep->role != MASTER && conn->rep->role != SLAVE)
+      if (conn->rep->role == NONE)
 	{
 	  goto bad_state;
 	}

@@ -62,7 +62,7 @@ class TestPingDuringLogSend (unittest.TestCase):
       master_seqs = pgs1.smr.getseq_log()
 
       # pgs2 --> slave
-      pgs2 = Pgs.PGS(1, 'localhost', 9000, cm.dir)
+      pgs2 = Pgs.PGS(1, 'localhost', 1910, cm.dir)
       pg.join(pgs2, start=True)
       pgs2.smr.wait_role(Smr.SMR.SLAVE)
 

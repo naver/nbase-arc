@@ -1604,13 +1604,13 @@ read_input_state (smrConnector * connector, int *nconsumed)
 	  if (cmd->cmd == CONF_COMMAND_NEW_MASTER)
 	    {
 	      confNewMaster *new_master = (confNewMaster *) cmd;
-
+	      // New master is elected and it is guranteed that log after new_master->after_seq
+	      // does not contain my message already sent.
 	      if (connector->new_master != NULL)
 		{
-		  /* reconfiguration during reconfiguration is not permitted */
-		  cfg_free (cmd);
-		  ERRNO_POINT ();
-		  return -1;
+		  // reconfiguration during reconfiguration is possible
+		  cfg_free_new_master (connector->new_master);
+		  connector->new_master = NULL;
 		}
 	      connector->curr_last_cseq = new_master->after_seq;
 	      connector->new_master = new_master;

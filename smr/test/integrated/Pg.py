@@ -37,22 +37,13 @@ class PG:
     self.master.smr.setquorum(q)
 
   def master_election(self):
-    # master generation logic (this logic will be simplified)
-    # 1. use log_commit
-    # 2. if it was a master use min(log_commit, be_commit)
     assert self.master == None
     cseq = -1 
     cand = None
-    was_master_pgsid = None
-    if len(self.mgen_pgsid) > 0:
-      was_master_pgsid = self.mgen_pgsid[-1]
 
     for pgs in self.pgs_map.values():
       seqs = pgs.smr.getseq_log()
-      if pgs.id == was_master_pgsid:
-	seq = seqs['be_sent']
-      else:
-	seq = seqs['commit']
+      seq = seqs['max']
       if seq > cseq:
 	cseq = seq
 	cand = pgs
@@ -80,14 +71,15 @@ class PG:
       else:
 	mgen = len(self.mgen_seq) - 1
 
+    cand = []
     seqs = pgs.smr.getseq_log()
-    cseq =  seqs['commit']
-    if mgen + 1 < len(self.mgen_seq):
-      if cseq > self.mgen_seq[mgen + 1]:
-	raise Exception('Can not join: pgs commit seq:%d, next master seq:%d' % (cseq, self.mgen_seq[mgen + 1]))
+    cand.append(seqs['max'])
+    for idx in range(mgen + 1, len(self.mgen_seq)):
+      cand.append(self.mgen_seq[idx])
+
+    cseq = min(cand)
     pgs.smr.role_slave(pgs.id, self.master.host, self.master.base_port, cseq)
     self.pgsid_mgen_map[pgs.id] = len(self.mgen_seq) - 1
-
 
   def leave(self, pgsid, kill = False):
     if pgsid not in self.pgs_map:

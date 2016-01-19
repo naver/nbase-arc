@@ -34,7 +34,7 @@ class Conn(object):
       self.bytes_written = 0
       self.bytes_read = 0
 
-  def _lazy_connect(self, timeout = 1000):
+  def _lazy_connect(self, timeout = 10000):
     if self._sock is not None:
       return
     sock = None
