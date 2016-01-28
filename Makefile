@@ -1,6 +1,7 @@
 # Top level makefile
 GIT_REFRESH:=$(shell git update-index --refresh)
-VERSION:=$(shell git describe --tags --dirty --always)
+# Note --match value is glob(7) pattern
+VERSION:=$(shell git describe --tags --dirty --always --match=v[0-9]*\.[0-9]*\.[0-9]*)
 REDIS_VERSION=2.8.8
 RELEASE_DIR=release/nbase-arc
 
@@ -45,8 +46,8 @@ release: all
 	cp -rf api/arcci/release/arcci.h $(RELEASE_DIR)/api/c
 	cp -rf api/arcci/release/libarcci.* $(RELEASE_DIR)/api/c
 	# JAVA API
-	cp -rf api/java/target/nbase-arc-client-*-sources.jar $(RELEASE_DIR)/api/java
-	cp -rf api/java/target/nbase-arc-client-*.jar $(RELEASE_DIR)/api/java
+	cp -rf api/java/target/nbase-arc-java-client-*-sources.jar $(RELEASE_DIR)/api/java
+	cp -rf api/java/target/nbase-arc-java-client-*.jar $(RELEASE_DIR)/api/java
 
 .PHONY: release
 
