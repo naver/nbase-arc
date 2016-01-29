@@ -88,6 +88,71 @@ void *bioProcessBackgroundJobs(void *arg);
  * main thread. */
 #define REDIS_THREAD_STACK_SIZE (1024*1024*4)
 
+#ifdef NBASE_ARC
+static int bgdel_bio_mode = 0;
+static pthread_spinlock_t bgdel_spin;
+static pthread_key_t bgdel_thr_key;
+#endif
+
+#ifdef NBASE_ARC
+/* Preppare background system */
+void bioDisableBackgroundDelete(void) {
+    bgdel_bio_mode = 0;
+}
+
+static void bioEnableBackgroundDelete(void) {
+    bgdel_bio_mode = 1;
+}
+
+void bioPrepareInit(void) {
+    char *errmsg = NULL;
+
+    if (pthread_spin_init(&bgdel_spin, PTHREAD_PROCESS_PRIVATE) != 0) {
+        errmsg = "Fatal: Can't Initialize spinlock.";
+        goto error;
+    }
+    if (pthread_key_create(&bgdel_thr_key, NULL) != 0) {
+        errmsg = "Fatal: Can't Initialize TSD.";
+        goto error;
+    }
+    return;
+error:
+    redisLog(REDIS_WARNING, "%s", errmsg);
+    exit(1);
+}
+
+void safeIncrRefCount (void *robj_) {
+    robj * o = (robj *)robj_;
+
+    if (bgdel_bio_mode) {
+        pthread_spin_lock(&bgdel_spin);
+        o->refcount++;
+        pthread_spin_unlock(&bgdel_spin);
+    } else {
+        o->refcount++;
+    }
+}
+
+int safeDecrRefCount (void *robj_) {
+    robj * o = (robj *)robj_;
+    int refcount;
+
+    if (bgdel_bio_mode) {
+        pthread_spin_lock(&bgdel_spin);
+        if (o->refcount <= 0) redisPanic("decrRefCount against refcount <= 0");
+        refcount = --o->refcount;
+        pthread_spin_unlock(&bgdel_spin);
+    } else {
+        refcount = --o->refcount;
+    }
+    return refcount;
+}
+
+int isBackgroundDeleteCandidate(void) {
+    return bgdel_bio_mode && pthread_getspecific(bgdel_thr_key) == NULL;
+}
+#endif
+
 /* Initialize the background system, spawning the thread. */
 void bioInit(void) {
     pthread_attr_t attr;
@@ -137,10 +202,30 @@ void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     pthread_mutex_unlock(&bio_mutex[type]);
 }
 
+#ifdef NBASE_ARC
+void bioCreateBackgroundDeleteJob(int type, void *arg1) {
+    struct bio_job *job = zmalloc(sizeof(*job));
+
+    job->arg1 = arg1;
+    pthread_mutex_lock(&bio_mutex[type]);
+    listAddNodeTail(bio_jobs[type],job);
+    bio_pending[type]++;
+    pthread_cond_signal(&bio_condvar[type]);
+    pthread_mutex_unlock(&bio_mutex[type]);
+}
+#endif
+
 void *bioProcessBackgroundJobs(void *arg) {
     struct bio_job *job;
     unsigned long type = (unsigned long) arg;
     sigset_t sigset;
+
+#ifdef NBASE_ARC
+    if (type == REDIS_BIO_OBJ_DESTRUCT) {
+        pthread_setspecific(bgdel_thr_key, (void *)(long)1);
+        bioEnableBackgroundDelete();
+    }
+#endif
 
     /* Make the thread killable at any time, so that bioKillThreads()
      * can work reliably. */
@@ -176,6 +261,11 @@ void *bioProcessBackgroundJobs(void *arg) {
             close((long)job->arg1);
         } else if (type == REDIS_BIO_AOF_FSYNC) {
             aof_fsync((long)job->arg1);
+#ifdef NBASE_ARC
+	} else if (type == REDIS_BIO_OBJ_DESTRUCT) {
+            freeRedisObject((robj *)job->arg1);
+	    server.stat_bgdel_keys++;
+#endif
         } else {
             redisPanic("Wrong job type in bioProcessBackgroundJobs().");
         }

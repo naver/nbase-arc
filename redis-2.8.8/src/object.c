@@ -32,6 +32,10 @@
 #include <math.h>
 #include <ctype.h>
 
+#ifdef NBASE_ARC
+#include "bio.h"
+#endif
+
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -224,8 +228,55 @@ void freeHashObject(robj *o) {
 void freeSssObject(robj *o) {
     sssRelease((sss*)o->ptr);
 }
-#endif
 
+void freeRedisObject(robj *o) {
+    switch(o->type) {
+    case REDIS_STRING: freeStringObject(o); break;
+    case REDIS_LIST: freeListObject(o); break;
+    case REDIS_SET: freeSetObject(o); break;
+    case REDIS_ZSET: freeZsetObject(o); break;
+    case REDIS_HASH: freeHashObject(o); break;
+    case REDIS_SSS: freeSssObject (o); break;
+    default: redisPanic("Unknown object type"); break;
+    }
+    zfree(o);
+}
+
+static int isBackgroundDeleteObject(robj *o, int *is_s3) {
+    int objsize = 0;
+    if (server.object_bio_delete_min_elems > 0) {
+        switch(o->encoding) {
+        case REDIS_ENCODING_HT: objsize = dictSize((dict*)o->ptr); break;
+        case REDIS_ENCODING_LINKEDLIST: objsize = listLength((list*)o->ptr); break;
+        case REDIS_ENCODING_SKIPLIST: objsize = ((zset*)o->ptr)->zsl->length; break;
+        case REDIS_ENCODING_SSS: objsize = sssTypeValueCount(o); *is_s3 = 1; break;
+        default: break;
+        }
+        return objsize >= server.object_bio_delete_min_elems;
+    } 
+    return 0;
+}
+
+void incrRefCount(robj *o) {
+    safeIncrRefCount(o);
+}
+
+void decrRefCount(robj *o) {
+    int refcount;
+    refcount = safeDecrRefCount(o);
+    if (refcount == 0) {
+        int is_s3 = 0;
+        if(isBackgroundDeleteCandidate() && isBackgroundDeleteObject(o, &is_s3)) {
+            if (is_s3) {
+                sssUnlinkGc((sss *)o->ptr);
+            }
+            bioCreateBackgroundDeleteJob(REDIS_BIO_OBJ_DESTRUCT, (void *) o);
+            return;
+        }
+        freeRedisObject(o);
+    }
+}
+#else
 void incrRefCount(robj *o) {
     o->refcount++;
 }
@@ -239,9 +290,6 @@ void decrRefCount(robj *o) {
         case REDIS_SET: freeSetObject(o); break;
         case REDIS_ZSET: freeZsetObject(o); break;
         case REDIS_HASH: freeHashObject(o); break;
-#ifdef NBASE_ARC
-        case REDIS_SSS: freeSssObject (o); break;
-#endif
         default: redisPanic("Unknown object type"); break;
         }
         zfree(o);
@@ -249,6 +297,7 @@ void decrRefCount(robj *o) {
         o->refcount--;
     }
 }
+#endif
 
 /* This variant of decrRefCount() gets its argument as void, and is useful
  * as free method in data structures that expect a 'void free_object(void*)'

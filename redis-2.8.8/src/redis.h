@@ -109,6 +109,7 @@
 #define REDIS_OOM_DURATION_MS (1000*11)
 #define REDIS_MAX_RDB_BACKUPS 24
 #define REDIS_RDB_ARC_MAX_HEADERS 16
+#define REDIS_OBJ_BIO_DELETE_MIN_ELEMS 100
 #endif
 
 #define REDIS_DEFAULT_REPL_BACKLOG_SIZE (1024*1024)    /* 1mb */
@@ -753,6 +754,7 @@ struct redisServer {
 #ifdef NBASE_ARC
     long long stat_numcommands_replied;     /* Number of processed commands with reply */
     long long stat_numcommands_lcon;        /* Number of processed commands from local connection */
+    long long stat_bgdel_keys;      /* Number of keys deleted by background thread */
 #endif
     long long stat_numconnections;  /* Number of connections received */
     long long stat_expiredkeys;     /* Number of expired keys */
@@ -791,6 +793,9 @@ struct redisServer {
     int dbnum;                      /* Total number of configured DBs */
     int daemonize;                  /* True if running as a daemon */
     clientBufferLimitsConfig client_obuf_limits[REDIS_CLIENT_LIMIT_NUM_CLASSES];
+#ifdef NBASE_ARC
+    unsigned long object_bio_delete_min_elems; /* minimum elements count for deleting object with bio thread */
+#endif
     /* AOF persistence */
     int aof_state;                  /* REDIS_AOF_(ON|OFF|WAIT_REWRITE) */
     int aof_fsync;                  /* Kind of fsync() policy */
@@ -1097,6 +1102,7 @@ typedef struct sssTypeIterator  sssTypeIterator;
 robj * createSssObject(robj *key);
 sss * sssNew(robj *key);
 void sssRelease(sss *s);
+void sssUnlinkGc(sss *s);
 int sssAddValue(sss *s, void *ks, void *svc, void *key, long long idx, void *val, long long exp);
 int sssTypeValueCount(robj *o);
 sssTypeIterator *sssTypeInitIterator(robj *subject);
@@ -1256,6 +1262,10 @@ void freeListObject(robj *o);
 void freeSetObject(robj *o);
 void freeZsetObject(robj *o);
 void freeHashObject(robj *o);
+#ifdef NBASE_ARC
+void freeSssObject(robj *o);
+void freeRedisObject(robj *o);
+#endif
 robj *createObject(int type, void *ptr);
 robj *createStringObject(char *ptr, size_t len);
 robj *dupStringObject(robj *o);

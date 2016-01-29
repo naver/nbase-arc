@@ -47,6 +47,7 @@
 #include "rdb.h"
 #include "rio.h"
 #include "crc16.h"
+#include "bio.h"
 #endif
 
 static int rdbWriteRaw(rio *rdb, void *p, size_t len) {
@@ -932,6 +933,9 @@ int rdbSaveBackground(char *filename) {
         int retval;
 
         /* Child */
+#ifdef NBASE_ARC
+        bioDisableBackgroundDelete();
+#endif
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-bgsave");
         retval = rdbSave(filename);
