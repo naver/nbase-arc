@@ -22,6 +22,9 @@
 #include "redis.h"
 #include "endianconv.h"
 #include "crc16.h"
+#ifdef NBASE_ARC
+#include "bio.h"
+#endif
 
 #ifdef NBASE_ARC
 static sds rdbSetBit (sds bitarray, int bitoffset, int value) {
@@ -168,6 +171,9 @@ static int rdbCheckpointBackground (char *filename, sds bitarray, int hashsize)
         int retval;
 
         /* Child */
+#ifdef NBASE_ARC
+        bioDisableBackgroundDelete();
+#endif
 	closeListeningSockets(0);
         retval = rdbCheckpoint(filename, bitarray, hashsize);
         exitFromChild((retval == REDIS_OK) ? 0 : 1);

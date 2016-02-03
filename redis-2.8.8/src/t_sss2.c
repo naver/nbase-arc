@@ -2217,6 +2217,12 @@ sssRelease (sss * s)
   zfree (s);
 }
 
+void
+sssUnlinkGc (sss * s3)
+{
+  dlisth_delete(&s3->head);
+}
+
 int
 sssAddValue (sss * s3, void *ks, void *svc, void *key, long long idx,
 	     void *val, long long expire)

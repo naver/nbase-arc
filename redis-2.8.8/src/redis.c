@@ -1804,6 +1804,7 @@ void initServerConfig() {
     server.mem_max_allowed_byte = 0;
     server.mem_hard_limit_kb = 0;
 
+    server.object_bio_delete_min_elems = REDIS_OBJ_BIO_DELETE_MIN_ELEMS;
     server.local_ip_addrs = getLocalIpAddrs();
 #endif
 }
@@ -1951,6 +1952,7 @@ void resetServerStats(void) {
 #ifdef NBASE_ARC
     server.stat_numcommands_replied = 0;
     server.stat_numcommands_lcon = 0;
+    server.stat_bgdel_keys = 0;
 #endif
     server.stat_numconnections = 0;
     server.stat_expiredkeys = 0;
@@ -1994,6 +1996,10 @@ void setMemoryLimitValues(void) {
 
 void initServer() {
     int j;
+
+#ifdef NBASE_ARC
+    bioPrepareInit();
+#endif
 
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
@@ -2962,6 +2968,7 @@ sds genRedisInfoString(char *section) {
             "instantaneous_replied_ops_per_sec:%lld\r\n"
             "total_commands_lcon:%lld\r\n"
             "instantaneous_lcon_ops_per_sec:%lld\r\n"
+	    "background_deleted_keys:%lld\r\n"
 #endif
             "rejected_connections:%lld\r\n"
             "sync_full:%lld\r\n"
@@ -2982,6 +2989,7 @@ sds genRedisInfoString(char *section) {
             getOperationsPerSecondWithArg(server.replied_ops_sec_samples),
             server.stat_numcommands_lcon,
             getOperationsPerSecondWithArg(server.lcon_ops_sec_samples),
+	    server.stat_bgdel_keys,
 #endif
             server.stat_rejected_conn,
             server.stat_sync_full,

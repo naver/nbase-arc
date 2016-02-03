@@ -295,6 +295,11 @@ void loadServerConfigFromString(char *config) {
             {
                 err = "Invalid percentage of memory hard limit"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0], "object-bio-delete-min-elems") && argc == 2) {
+            server.object_bio_delete_min_elems = atoi(argv[1]);
+            if (server.object_bio_delete_min_elems < 0) {
+                err = "Invalid number of minimum elements of a structure for background deletion"; goto loaderr;
+            }
 #endif
         } else if (!strcasecmp(argv[0],"include") && argc == 2) {
             loadServerConfig(argv[1],NULL);
@@ -943,6 +948,10 @@ void configSetCommand(redisClient *c) {
             ll <= 0 || ll > 100) goto badfmt;
         server.mem_hard_limit_perc = ll;
         setMemoryLimitValues();
+    } else if (!strcasecmp(c->argv[2]->ptr,"object-bio-delete-min-elems")) {
+        if (getLongLongFromObject(o,&ll) == REDIS_ERR ||
+            ll < 0) goto badfmt;
+        server.object_bio_delete_min_elems = ll;
     } else if (!strcasecmp(c->argv[2]->ptr,"sss-gc-interval")) {
         if (getLongLongFromObject(o,&ll) == REDIS_ERR ||
             ll < 100 || ll > INT_MAX) goto badfmt;
@@ -1026,6 +1035,7 @@ void configGetCommand(redisClient *c) {
     config_get_numerical_field("memory-limit-activation-percentage",server.mem_limit_active_perc);
     config_get_numerical_field("memory-max-allowed-percentage",server.mem_max_allowed_perc);
     config_get_numerical_field("memory-hard-limit-percentage",server.mem_hard_limit_perc);
+    config_get_numerical_field("object-bio-delete-min-elems",server.object_bio_delete_min_elems);
 #endif
     config_get_numerical_field("maxmemory",server.maxmemory);
     config_get_numerical_field("maxmemory-samples",server.maxmemory_samples);
