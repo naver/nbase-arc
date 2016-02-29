@@ -961,7 +961,10 @@ struct redisServer {
     int gc_idx;
     int gc_num_line;
     int gc_interval;                /* Background gc interval in milliseconds */
-    dlisth *gc_line;
+    dlisth *gc_line;                /* fixed rate gc object headers */
+    dlisth gc_eager;                /* s3 object header for eager mode gc */
+    void *gc_obc;                   /* s3 object cursor for incremental purge */
+    int gc_eager_loops;             /* event loop count in eager mode */
     /* SMR config */
     smrConnector * smr_conn;
     int smr_lport;
@@ -1110,6 +1113,9 @@ sssEntry * sssIterNext(sssTypeIterator *si);
 int sssIterPeek(sssEntry *e, robj **ks, robj **svc, robj **key, long long *idx, robj **val, long long int *expire, int *kv_mode);
 void sssTypeReleaseIterator(sssTypeIterator *si);
 long long sssGarbageCollect (long long timeout);
+void *sssObcNew (void);
+int sssGcCron(void);
+void sssDelEntries(void *);
 
 /* smr_checkpoint.c -- SMR Checkpoint */
 int rdbGetBit (sds bitarray, int bitoffset);

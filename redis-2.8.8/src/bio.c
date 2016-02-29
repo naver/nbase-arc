@@ -148,7 +148,7 @@ int safeDecrRefCount (void *robj_) {
     return refcount;
 }
 
-int isBackgroundDeleteCandidate(void) {
+int canBackgroundDelete(void) {
     return bgdel_bio_mode && pthread_getspecific(bgdel_thr_key) == NULL;
 }
 #endif
@@ -203,10 +203,11 @@ void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
 }
 
 #ifdef NBASE_ARC
-void bioCreateBackgroundDeleteJob(int type, void *arg1) {
+void bioCreateBackgroundDeleteJob(int type, void *arg1, long deltype) {
     struct bio_job *job = zmalloc(sizeof(*job));
 
     job->arg1 = arg1;
+    job->arg2 = (void *)deltype;
     pthread_mutex_lock(&bio_mutex[type]);
     listAddNodeTail(bio_jobs[type],job);
     bio_pending[type]++;
@@ -263,8 +264,15 @@ void *bioProcessBackgroundJobs(void *arg) {
             aof_fsync((long)job->arg1);
 #ifdef NBASE_ARC
 	} else if (type == REDIS_BIO_OBJ_DESTRUCT) {
-            freeRedisObject((robj *)job->arg1);
-	    server.stat_bgdel_keys++;
+            long deltype = (long)job->arg2;
+            if (deltype == REDIS_BIO_BGDEL_ROBJ) {
+                freeRedisObject((robj *)job->arg1);
+                server.stat_bgdel_keys++;
+            } else if (deltype == REDIS_BIO_BGDEL_S3ENTRY) {
+                sssDelEntries(job->arg1);
+            } else {
+                redisPanic("Wrong deltype in bioProcessBackgroundJobs().");
+	    }
 #endif
         } else {
             redisPanic("Wrong job type in bioProcessBackgroundJobs().");

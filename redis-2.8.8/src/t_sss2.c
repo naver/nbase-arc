@@ -17,6 +17,8 @@
 #include "redis.h"
 #include "rbtree.h"
 #include "crc16.h"
+#include "dict.h"
+#include "bio.h"
 #include <stddef.h>
 #include <assert.h>
 
@@ -84,6 +86,21 @@ struct sssIterCategories
 {
   sssTypeIterator iter[4];
 };
+
+typedef struct sssObc_ sssObc;
+struct sssObc_
+{
+  sss *s3;
+  robj *ks;
+  robj *svc;
+  robj *key;
+};
+#define init_sss_obc(c) do { \
+  (c)->s3 = NULL;            \
+  (c)->ks = NULL;            \
+  (c)->svc = NULL;           \
+  (c)->key = NULL;           \
+} while(0)
 
 struct add_arg
 {
@@ -155,6 +172,10 @@ static signed int entry_compare_func (void *c, const void *te,
 static sssEntry *new_entry (robj * ks, robj * svc, robj * key, long long idx,
 			    robj * val, long long int expire);
 static void del_entry (sssEntry * e);
+static void link_entry (sssEntry * e, sssEntry ** h, int *count);
+static void del_link_wrt_count (sssEntry * h, int count);
+static void del_link (sssEntry * h);
+static void rbt_remove_node_intree (rb_tree_t * rbt, void *elem);
 static sssTypeIterator *new_iterator (void);
 static int entry_in_range (sssEntry * entry, sssEntry * ke);
 static sssTypeIterator *get_iterator (robj * s3obj, robj * ks, robj * svc,
@@ -217,6 +238,12 @@ static void s3exists_generic (redisClient * c);
 static void s3expire_generic (redisClient * c);
 static void s3mexpire_generic (redisClient * c);
 static void s3ttl_generic (redisClient * c);
+static void obc_set (sssObc * obc, sss * s3, sssEntry * e);
+static int obc_purge_scan (sssObc * obc, long long to, int nscan, int *npur,
+			   sssEntry ** dh, int *dcount);
+static int purge_objects (dlisth * head, sssObc * obc, long long timeout,
+			  long long until_usec, dlisth ** h);
+static void s3gc_obc_reset_if (sss * s3);
 
 /*-----------------------------------------------------------------------------
  * Static variables
@@ -321,8 +348,9 @@ sss_new (robj * key)
   sss *s3 = zmalloc (sizeof (sss));
   int idx;
 
-  /* allocate random number and assign it to the global gc line */
-  idx = random () % server.gc_num_line;
+  /* disperse s3 object over gc_line using hash function other than crc16 */
+  idx =
+    dictGenHashFunction (key->ptr, sdslen (key->ptr)) % server.gc_num_line;
   dlisth_init (&s3->head);
   dlisth_insert_after (&s3->head, &server.gc_line[idx]);
   s3->key = sdsdup (key->ptr);
@@ -506,6 +534,48 @@ del_entry (sssEntry * e)
 }
 
 static void
+link_entry (sssEntry * e, sssEntry ** h, int *count)
+{
+  e->next = *h;
+  *h = e;
+  *count = *count + 1;
+}
+
+static void
+del_link_wrt_count (sssEntry * h, int count)
+{
+  int th = server.object_bio_delete_min_elems;
+  if (canBackgroundDelete() && (th > 0 && count >= th))
+    {
+      bioCreateBackgroundDeleteJob (REDIS_BIO_OBJ_DESTRUCT, h,
+				    REDIS_BIO_BGDEL_S3ENTRY);
+    }
+  else
+    {
+      del_link (h);
+    }
+}
+
+static void
+del_link (sssEntry * h)
+{
+  sssEntry *n;
+
+  while (h != NULL)
+    {
+      n = h->next;
+      del_entry (h);
+      h = n;
+    }
+}
+
+static void
+rbt_remove_node_intree (rb_tree_t * rbt, void *elem)
+{
+  rb_tree_remove_node (rbt, elem);
+}
+
+static void
 init_iterator (sssTypeIterator * iter)
 {
   redisAssert (iter != NULL);
@@ -683,6 +753,8 @@ iterate_values_with_hook (robj * s3obj, robj * ks, robj * svc, robj * key,
   sssEntry *se;
   sss *s3 = s3obj->ptr;
   int i;
+  sssEntry *dh = NULL;
+  int dcount = 0;
 
   for (i = 0; i < SSS_ITER_CATEGORY_SIZE; i++)
     {
@@ -719,21 +791,22 @@ iterate_values_with_hook (robj * s3obj, robj * ks, robj * svc, robj * key,
   iter = &ctg->iter[CATEGORY_EXPIRED];
   while ((se = sssIterNext (iter)) != NULL)
     {
-      rb_tree_remove_node (&s3->tree, se);
+      rbt_remove_node_intree (&s3->tree, se);
       s3->val_count--;
       redisAssert (s3->val_count >= 0);
-      del_entry (se);
+      link_entry (se, &dh, &dcount);
     }
 
   /* Actually delete deleted sssEntry */
   iter = &ctg->iter[CATEGORY_DELETE];
   while ((se = sssIterNext (iter)) != NULL)
     {
-      rb_tree_remove_node (&s3->tree, se);
+      rbt_remove_node_intree (&s3->tree, se);
       s3->val_count--;
       redisAssert (s3->val_count >= 0);
-      del_entry (se);
+      link_entry (se, &dh, &dcount);
     }
+  del_link_wrt_count (dh, dcount);
 }
 
 static int
@@ -2185,6 +2258,195 @@ s3ttl_generic (redisClient * c)
   s3_ttl (c, s3obj);
 }
 
+static void
+obc_set (sssObc * obc, sss * s3, sssEntry * e)
+{
+  robj *ks = NULL;
+  robj *svc = NULL;
+  robj *key = NULL;
+
+  if (e)
+    {
+      assert (e->ks->refcount >= 1);
+      assert (e->svc->refcount >= 1);
+      assert (e->key->refcount >= 1);
+      incrRefCount (e->ks);
+      incrRefCount (e->svc);
+      incrRefCount (e->key);
+    }
+
+  obc->s3 = s3;
+  ks = obc->ks;
+  svc = obc->svc;
+  key = obc->key;
+  obc->ks = obc->svc = obc->key = NULL;
+  if (e)
+    {
+      obc->ks = e->ks;
+      obc->svc = e->svc;
+      obc->key = e->key;
+    }
+  if (ks != NULL)
+    {
+      decrRefCount (ks);
+    }
+  if (svc != NULL)
+    {
+      decrRefCount (svc);
+    }
+  if (key != NULL)
+    {
+      decrRefCount (key);
+    }
+}
+
+static int
+obc_purge_scan (sssObc * obc, long long to, int nscan, int *npur,
+		sssEntry ** dh, int *dcount)
+{
+  sss *s3;
+  sssEntry *e, ke;
+  sssEntry *first;
+  int ns = 0;
+  int np = 0;
+
+  s3 = obc->s3;
+  ke.ks = obc->ks;
+  ke.svc = obc->svc;
+  ke.key = obc->key;
+  ke.index = 0LL;
+  ke.val = NULL;
+
+  first = NULL;
+  e = rb_tree_find_node_geq (&s3->tree, &ke);
+  while (e != NULL && ns++ < nscan)
+    {
+      sssEntry *ne;
+      ne = rb_tree_iterate (&s3->tree, e, RB_DIR_RIGHT);
+
+      if (to >= e->expire)
+	{
+	  e->next = first;
+	  first = e;
+	}
+      e = ne;
+    }
+
+  // update object cursor
+  if (e != NULL)
+    {
+      obc_set (obc, s3, e);
+    }
+  else
+    {
+      obc_set (obc, NULL, NULL);
+    }
+
+  // purge entries
+  while (first != NULL)
+    {
+      sssEntry *tbd = first;
+      first = first->next;
+      rbt_remove_node_intree (&s3->tree, tbd);
+      s3->val_count--;
+      redisAssert (s3->val_count >= 0);
+      link_entry (tbd, dh, dcount);
+      np++;
+    }
+
+  *npur = np;
+  return ns;
+}
+
+// out parameter h_ stores last unpurged list item
+// h_ == head means all items are purged (this includes empty list)
+static int
+purge_objects (dlisth * head, sssObc * obc, long long timeout,
+	       long long until_usec, dlisth ** h_)
+{
+  dlisth *h = NULL;
+  int tot_dead = 0;
+  long long curr_usec = ustime ();
+  int tscan = 0;
+
+  for (h = head->next; h != head; h = h->next)
+    {
+      sss *s3 = (sss *) h;
+      int ns, nd;
+      sssEntry *dh = NULL;
+      int dcount = 0;
+
+      if (server.migrate_slot)
+	{
+	  int hashsize = NBASE_ARC_KS_SIZE;
+	  int keyhash = crc16 (s3->key, sdslen (s3->key), 0) % hashsize;
+	  if (rdbGetBit (server.migrate_slot, keyhash))
+	    {
+	      /* Skipping keys on migration */
+	      continue;
+	    }
+	}
+
+      /* purge s3 object using object cursor */
+      if (obc->s3 != s3)
+	{
+	  obc_set (obc, s3, NULL);
+	}
+
+      do
+	{
+	  nd = 0;
+	  ns = obc_purge_scan (obc, timeout, 1000, &nd, &dh, &dcount);
+	  if (nd > 0)
+	    {
+	      tot_dead += nd;
+	    }
+	  tscan += ns;
+	  if (tscan / 1000 >= 1)
+	    {
+	      curr_usec = ustime ();
+	      tscan = tscan % 1000;
+	    }
+	}
+      while (curr_usec < until_usec && obc->s3 != NULL);
+
+      // delete purged entries
+      del_link_wrt_count (dh, dcount);
+
+      /* delete s3 object if it is empty */
+      if (s3->val_count == 0)
+	{
+	  robj key;
+	  h = h->prev;
+	  initStaticStringObject (key, s3->key);
+	  dbDelete (&server.db[REDIS_CLUSTER_DB], &key);
+	}
+
+      if (curr_usec >= until_usec)
+	{
+	  if (obc->s3 == NULL)
+	    {
+	      h = h->next;
+	    }
+	  break;
+	}
+    }
+
+  *h_ = h;
+  return tot_dead;
+}
+
+static void
+s3gc_obc_reset_if (sss * s3)
+{
+  sssObc *obc = (sssObc *) server.gc_obc;
+
+  if (obc && obc->s3 == s3)
+    {
+      obc_set (obc, NULL, NULL);
+    }
+}
+
 /*-----------------------------------------------------------------------------
  * Exported part (inter module)
  *----------------------------------------------------------------------------*/
@@ -2200,7 +2462,6 @@ sssRelease (sss * s)
   sssEntry *e;
 
   dlisth_delete (&s->head);
-
   sdsfree (s->key);
 
   /* For each (left -> right) */
@@ -2210,7 +2471,7 @@ sssRelease (sss * s)
       sssEntry *ne;
 
       ne = rb_tree_iterate (&s->tree, e, RB_DIR_RIGHT);
-      rb_tree_remove_node (&s->tree, e);
+      rbt_remove_node_intree (&s->tree, e);
       del_entry (e);
       e = ne;
     }
@@ -2220,7 +2481,8 @@ sssRelease (sss * s)
 void
 sssUnlinkGc (sss * s3)
 {
-  dlisth_delete(&s3->head);
+  dlisth_delete (&s3->head);
+  s3gc_obc_reset_if (s3);
 }
 
 int
@@ -2276,53 +2538,139 @@ long long
 sssGarbageCollect (long long timeout)
 {
   int idx;
-  long long curr_time;
-  long long curr_server_time;
+  long long curr_usec, until_usec;
+  long long curr_msec;
   long long tot_dead = 0;
-  robj s3obj, key;
 
-  curr_time = smr_mstime ();
-  curr_server_time = mstime ();
+  curr_msec = smr_mstime ();
+  curr_usec = ustime ();
+  if (timeout > 0)
+    {
+      until_usec = curr_usec + timeout * 1000;
+    }
+  else
+    {
+      until_usec = curr_usec + 300;	// 0.3 msec
+    }
+
   idx = 0;
   do
     {
-      dlisth *h, *head;
+      sssObc obc;
+      dlisth *h = NULL, *head;
+      int num_dead;
 
       head = &server.gc_line[(server.gc_idx + idx) % server.gc_num_line];
-      for (h = head->next; h != head; h = h->next)
+      idx++;
+      if (dlisth_is_empty (head))
 	{
-	  sss *s3 = (sss *) h;
-	  sssIterCategories ctg;
-
-	  if (server.migrate_slot)
-	    {
-	      int hashsize = NBASE_ARC_KS_SIZE;
-	      int keyhash = crc16 (s3->key, sdslen (s3->key), 0) % hashsize;
-	      if (rdbGetBit (server.migrate_slot, keyhash))
-		{
-                  /* Skipping keys on migration */
-		  continue;
-		}
-	    }
-	  /* below line is a hack to use cleanup_values_with_hook */
-	  s3obj.ptr = s3;
-	  iterate_values_with_hook (&s3obj, NULL, NULL, NULL, curr_time,
-				    &ctg, NULL, NULL);
-	  tot_dead += ctg.iter[CATEGORY_EXPIRED].count;
-
-	  if (s3->val_count == 0)
-	    {
-	      h = h->prev;
-	      initStaticStringObject (key, s3->key);
-	      dbDelete (&server.db[REDIS_CLUSTER_DB], &key);
-	    }
+	  continue;
 	}
+
+      init_sss_obc (&obc);
+      num_dead = purge_objects (head, &obc, curr_msec, until_usec, &h);
+      tot_dead += num_dead;
+      obc_set (&obc, NULL, NULL);
+
+      if (h && h != head)
+	{
+	  dlisth *h2 = head->prev;
+	  dlisth *h3 = server.gc_eager.prev;
+	  /* 
+	   * join remaining s3 object to the gc_eager
+	   * (old) h ... h2   h3 - server.gc_eager 
+	   * (new) h3 - h ... h2 - server.gc_eager
+	   */
+	  /* unlink h ... h2 */
+	  h->prev->next = h2->next;
+	  h2->next->prev = h->prev;
+	  h3->next = h;
+	  h->prev = h3;
+	  h2->next = &server.gc_eager;
+	  server.gc_eager.prev = h2;
+	  break;
+	}
+      curr_usec = ustime ();
     }
-  while (++idx < server.gc_num_line
-	 && (curr_server_time + timeout) > mstime ());
+  while (idx < server.gc_num_line && curr_usec < until_usec);
 
   server.gc_idx = (server.gc_idx + idx) % server.gc_num_line;
   return tot_dead;
+}
+
+void *
+sssObcNew (void)
+{
+  sssObc *obc;
+
+  obc = zmalloc (sizeof (sssObc));
+  init_sss_obc (obc);
+  return obc;
+}
+
+int
+sssGcCron (void)
+{
+  int num_dead;
+  dlisth *h = NULL;
+  long long until_usec;
+  int cron_per_gc;
+  long long curr_msec;
+
+  if (dlisth_is_empty (&server.gc_eager))
+    {
+      return 0;
+    }
+  server.gc_eager_loops++;
+  curr_msec = smr_mstime ();
+  until_usec = ustime () + 600;	// 0.6 msec
+  num_dead =
+    purge_objects (&server.gc_eager, (sssObc *) server.gc_obc, curr_msec,
+		   until_usec, &h);
+
+  /* restore purged objects to gc lines */
+  while (!dlisth_is_empty (&server.gc_eager))
+    {
+      int idx;
+      sss *s3;
+      dlisth *tmp = server.gc_eager.next;
+      if (tmp == h)
+	{
+	  break;
+	}
+      s3 = (sss *) tmp;
+      dlisth_delete (tmp);
+      idx =
+	dictGenHashFunction (s3->key, sdslen (s3->key)) % server.gc_num_line;
+      dlisth_insert_after (&s3->head, &server.gc_line[idx]);
+    }
+
+  /* make return value */
+  if (dlisth_is_empty (&server.gc_eager))
+    {
+      server.gc_eager_loops = 0;
+      return 0;
+    }
+
+  cron_per_gc = REDIS_MAX_HZ / server.hz;
+  if (cron_per_gc <= 1)
+    {
+      return 0;
+    }
+  else if (server.gc_eager_loops % cron_per_gc == 0)
+    {
+      return 0;
+    }
+  else
+    {
+      return 1000 / REDIS_MAX_HZ;
+    }
+}
+
+void
+sssDelEntries (void *dh)
+{
+  del_link (dh);
 }
 
 /*-----------------------------------------------------------------------------

@@ -1224,6 +1224,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     /* Update the time cache. */
     updateCachedTime();
 
+    /* s3 object GC */
+    if ((j = sssGcCron()) > 0) return j; 
+
     run_with_period(100) trackOperationsPerSecond();
 
     /* We have just 22 bits per object for LRU information.
@@ -1439,8 +1442,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
 #ifdef NBASE_ARC
-    /* Expire 1 gc line of s3 objects every 10 sec 
-     * 8192 gc line * 10 sec = 1 day */
+    /* Fixed rate garbage collection of s3 objects */
     run_with_period(server.gc_interval) sssGarbageCollect(0);
 
     /* Check memory usage to apply memory limiting features */
@@ -1790,6 +1792,9 @@ void initServerConfig() {
     server.gc_num_line = 8192; /* Note: this is nothing to do with NBASE_ARC_KS_SIZE */
     server.gc_line = NULL;
     server.gc_interval = 5000;
+    server.gc_obc = NULL;
+    dlisth_init(&server.gc_eager);
+    server.gc_eager_loops = 0;
 
     server.smr_oom_until = 0;
     server.mem_limit_activated = 0;
@@ -2135,6 +2140,7 @@ void initServer() {
     for(j = 0; j < server.gc_num_line; j++) {
         dlisth_init(&server.gc_line[j]);
     }
+    server.gc_obc = sssObcNew();
     if (server.cluster_mode) {
         redisAssert(server.smrlog_client == NULL);
         server.smrlog_client = createClient(-1); /* make fake redisClient for excuting smr log */

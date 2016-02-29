@@ -35,8 +35,10 @@ void bioDisableBackgroundDelete(void);
 void bioPrepareInit(void);
 void safeIncrRefCount(void *robj);
 int safeDecrRefCount(void *robj);
-int isBackgroundDeleteCandidate(void);
-void bioCreateBackgroundDeleteJob(int type, void *arg1);
+int canBackgroundDelete(void);
+#define REDIS_BIO_BGDEL_ROBJ       0
+#define REDIS_BIO_BGDEL_S3ENTRY    1
+void bioCreateBackgroundDeleteJob(int type, void *arg1, long deltype);
 #endif
 unsigned long long bioPendingJobsOfType(int type);
 void bioWaitPendingJobsLE(int type, unsigned long long num);
