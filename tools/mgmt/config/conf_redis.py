@@ -1,7 +1,7 @@
 # Redis configuration file template
 
 REDIS_CONFIG = (
-    # <available versions> <key> <value>
+    # <key> <value>
     ["smr-local-port", "-1"],
     ["port", "-1"],
     # nBase-ARC

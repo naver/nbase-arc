@@ -5,7 +5,11 @@ CLUSTER_CONFIG = [
         {
             "hash-max-ziplist-entries" : "1024",
             "memory-hard-limit-percentage" : 80
+        },
+        "smr" :
+        {
+            "use_memlog" : True
         }
-    }
+    },
 ]
 

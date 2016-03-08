@@ -18,7 +18,6 @@ import json
 import time
 import telnetlib
 import socket
-import glob
 import traceback
 import sys
 from fabric.api import *
@@ -81,6 +80,27 @@ def make_remote_path(remote_path):
         run('mkdir -p %s' % remote_path)
     return True
 
+def apply_pgs_conf(cluster_name, smr_base_port, redis_port, cronsave_num=1):
+    # SMR memlog 
+    use_memlog = config.get_cluster_opt(cluster_name)('smr')('use_memlog').v()
+    if use_memlog == True:
+        # Create smr memlog if this cluster uses smr memlog 
+        if exist_smr_memlog(smr_base_port) == False:
+            if create_smr_memlog(smr_base_port) == False:
+                warn(red("[%s] Create memlog fail, PORT:%d" % (env.host_string, smr_base_port)))
+                return False
+    else:
+        # Remove smr memlog if this cluster doesn't use smr memlog 
+        if exist_smr_memlog(smr_base_port) == True:
+            if remove_smr_memlog(smr_base_port) == False:
+                warn(red("[%s] Remove memlog fail, PORT:%d" % (env.host_string, smr_base_port)))
+                return False
+
+    # Redis config
+    if deploy_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_num) == False:
+        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (env.host_string, cluster_name, smr_base_port, redis_port)))
+        return False
+
 def deploy_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_num=1):
     cronsave_min = (smr_base_port - config.BGSAVE_BASE) % 60
     cronsave_hour = float((3 + int((smr_base_port - config.BGSAVE_BASE) / 60)) % 24)
@@ -129,12 +149,12 @@ def deploy_arc_bash_profile(ip):
         # Make ARC_BASH_PROFILE
         bash_profile_path = config.make_bash_profile_file(config.REMOTE_NBASE_ARC)
         if bash_profile_path  == None:
-            warn("[%s:%d] Make bash profile fail." % host)
+            warn("[%s:%d] Make bash profile fail." % env.host_string)
             return False
 
         # Copy ARC_BASH_PROFILE to remote machine
         if copy(bash_profile_path, '~/.%s' % config.ARC_BASH_PROFILE) == False:
-            warn(red('[%s] Failed to write ARC_BASH_PROFILE. Aborting...' % host))
+            warn(red('[%s] Failed to write ARC_BASH_PROFILE. Aborting...' % env.host_string))
             return False
         local('rm -f %s' % bash_profile_path)
 
@@ -147,13 +167,13 @@ def deploy_arc_bash_profile(ip):
                     '   . ~/.%s' % config.ARC_BASH_PROFILE,
                     'fi'])
                 if run('echo "%s" >> ~/.bashrc' % bash_script).failed:
-                    warn(red('[%s] Failed to write ~/.bash_profile. Aborting...' % host))
+                    warn(red('[%s] Failed to write ~/.bash_profile. Aborting...' % env.host_string))
                     return False
 
             # Check NBASE_ARC_HOME
             env.shell = old_shell 
             if run('test -n "$NBASE_ARC_HOME"').failed:
-                warn(red('[%s] $NBASE_ARC_HOME is empty. Aborting...' % host))
+                warn(red('[%s] $NBASE_ARC_HOME is empty. Aborting...' % env.host_string))
                 return False
 
         print green('\n #### SETUP ARC_BASH_PROFILE SUCCESS. IP:%s #### \n' % ip)
@@ -274,7 +294,7 @@ def stop_redis_process(ip, port, pid, smr_base_port):
             return False
 
     if check_process_stopped(10, is_redis_process_exist, smr_base_port) == False:
-        print warn(red('[%s] Stop Redis fail' % env.host_string))
+        warn(red('[%s] Stop Redis fail' % env.host_string))
         return False
 
     print green('[%s] Stop Redis success' % env.host_string)
@@ -285,19 +305,116 @@ def stop_smr_process(port):
     pid = int(run("ps -ef | grep smr-replicator | grep '\-b %d' | grep -v grep | awk '{print $2}'" % port))
     run("ps -ef | grep smr-replicator | grep %d | grep -v grep" % pid)
 
+    # Confirm 
     if config.confirm_mode and not confirm(cyan('[%s] Stop SMR. PID:%d, %s:%d. Continue?' % (env.host_string, pid, env.host, port))):
         warn("Aborting at user request.")
         return False
 
+    # Kill smr process
     with settings(warn_only=True):
         if run('kill %d' % pid).failed:
             return False
 
+    # Check smr process
     if check_process_stopped(10, is_smr_process_exist, port) == False:
-        print warn(red('[%s] Stop SMR fail' % env.host_string))
+        warn(red('[%s] Stop SMR fail' % env.host_string))
         return False
 
+    # Sync smr memlog
+    if exist_smr_memlog(port) == True:
+        if sync_smr_memlog(port) == False:
+            warn(red('[%s] Sync SMR memlog fail, PORT:%d' % (env.host_string, port)))
+            return False
+
     print green('[%s] Stop SMR success' % env.host_string)
+    return True
+
+def exist_smr_memlog(smr_base_port):
+    puts(magenta("Does SMR memlog exist?"))
+
+    # Check smr log path
+    smr_log_path = util.make_smr_log_path_str(smr_base_port)
+    if path_exist(smr_log_path) == False:
+        warn("[%s] SMR log path doesn't exist. Aborting..." % env.host_string)
+        return False
+
+    # Check memlog
+    file_path = smr_log_path + "/" + "master-log"
+    if exists(file_path) == True:
+        puts("SMR memlog exists.\n")
+        return True
+    else:
+        puts("SMR memlog doesn't exist.\n")
+        return False
+
+def create_smr_memlog(smr_base_port):
+    puts(magenta("Create SMR memlog. PORT:%d" % smr_base_port))
+
+    # Check smr log path
+    smr_log_path = util.make_smr_log_path_str(smr_base_port)
+    if path_exist(smr_log_path) == False:
+        warn("[%s] SMR log path doesn't exist. Aborting..." % env.host_string)
+        return False
+
+    # Create memlog
+    if smr_logutil("createlog %s" % smr_log_path) == False:
+        warn("[%s] Create memlog fail. Aborting..." % env.host_string)
+        return False
+
+    # Check memlog
+    if exist_smr_memlog(smr_base_port) == False:
+        warn(red("[%s] Create smr memlog fail. Aborting..." % env.host_string))
+        return False
+
+    return True
+
+def remove_smr_memlog(smr_base_port):
+    puts(magenta("Remove SMR memlog. PORT:%d" % smr_base_port))
+
+    # Chec smr log path
+    smr_log_path = util.make_smr_log_path_str(smr_base_port)
+    if path_exist(smr_log_path) == False:
+        warn("[%s] SMR log path does not exist. Aborting..." % env.host_string)
+        return False
+
+    # Delete memlog
+    if smr_logutil("deletelog %s" % smr_log_path) == False:
+        warn("[%s] Delete memlog fail. Aborting..." % env.host_string)
+        return False
+
+    # Check memlog
+    if exist_smr_memlog(smr_base_port) == True:
+        warn(red("[%s] Delete smr memlog fail. Aborting...") % env.host_string)
+        return False
+
+    return True
+
+def sync_smr_memlog(smr_base_port):
+    puts(magenta("Sync SMR memlog. PORT:%d" % smr_base_port))
+
+    # Check memlog
+    if exist_smr_memlog(smr_base_port) == False:
+        warn(red("[%s] SMR memlog doesn't exist. Aborting..." % env.host_string))
+        return False
+
+    # Sync memlog
+    smr_log_path = util.make_smr_log_path_str(smr_base_port)
+    if smr_logutil("synclog %s" % smr_log_path) == False:
+        warn("[%s] Sync memlog fail. Aborting..." % env.host_string)
+        return False
+
+    return True
+
+def smr_logutil(arg):
+    exec_str = "smr-logutil-%s %s" % (config.SMR_VERSION, arg)
+
+    if config.confirm_mode and not confirm(cyan('[%s] Run smr-logutil %s. Continue?' % (env.host_string, arg))):
+        warn("Aborting at user request.")
+        return False
+
+    with settings(warn_only=True):
+        if run(exec_str).failed: return False
+
     return True
 
 def get_checkpoint(src_ip, src_port, file_name, pn_pg_map, smr_base_port):
@@ -668,7 +785,7 @@ def stop_gateway(cluster_name, ip, port):
     time.sleep(1)
 
     if check_process_stopped(10, is_gw_process_exist, cluster_name, port) == False:
-        print warn(red('[%s] Stop Gateway fail' % env.host_string))
+        warn(red('[%s] Stop Gateway fail' % env.host_string))
         return False
 
     print green('[%s] Stop Gateway success' % env.host_string)
