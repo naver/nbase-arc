@@ -20,6 +20,7 @@ import com.navercorp.redis.cluster.gateway.GatewayConfig;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -27,6 +28,9 @@ import org.springframework.context.annotation.Configuration;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 /**
+ * {@link EnableAutoConfiguration Auto-Configuration} for nBase-Arc RedisTemplate
+ * {@link GatewayConfig}, {@link RedisClusterConnectionFactory} and {@link StringRedisClusterTemplate}
+ *
  * @author Junhwan Oh
  */
 @Configuration
