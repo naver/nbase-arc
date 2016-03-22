@@ -11,7 +11,7 @@ import java.util.Map;
  * Created by rerun on 2016. 3. 23..
  */
 
-@RestController
+//@RestController
 public class HelloController {
 
     private static String KEY = "SAMPLE";

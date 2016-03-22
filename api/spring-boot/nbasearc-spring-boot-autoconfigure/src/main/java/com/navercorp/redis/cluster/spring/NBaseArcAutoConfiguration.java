@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -34,6 +35,7 @@ import org.apache.commons.logging.LogFactory;
  * @author Junhwan Oh
  */
 @Configuration
+@ConditionalOnProperty("nbase.arc.zkAddress")
 @ConditionalOnClass({ GatewayConfig.class, RedisClusterConnectionFactory.class , StringRedisClusterTemplate.class })
 @EnableConfigurationProperties(NBaseArcSpringbootProperties.class)
 public class NBaseArcAutoConfiguration implements DisposableBean{
@@ -48,12 +50,14 @@ public class NBaseArcAutoConfiguration implements DisposableBean{
     @Bean
     @ConditionalOnMissingBean
     public GatewayConfig gatewayConfig(){
+        log.debug("set gatewayConfig zkAddress=" + gatewayConfig().getZkAddress() + ";clusterName="+ gatewayConfig().getClusterName());
         return properties;
     }
 
     @Bean
     @ConditionalOnMissingBean
     public RedisClusterConnectionFactory redisClusterConnectionFactory(){
+        log.debug("Init redisClusterConnectionFactory zkAddress=" + gatewayConfig().getZkAddress() + ";clusterName="+ gatewayConfig().getClusterName());
         redisClusterConnectionFactory = new RedisClusterConnectionFactory();
         redisClusterConnectionFactory.setConfig(gatewayConfig());
         return redisClusterConnectionFactory;
@@ -62,6 +66,7 @@ public class NBaseArcAutoConfiguration implements DisposableBean{
     @Bean
     @ConditionalOnMissingBean
     public StringRedisClusterTemplate redisTemplate(){
+        log.debug("Init StringRedisClusterTemplate");
         StringRedisClusterTemplate redisClusterTemplate = new StringRedisClusterTemplate();
         redisClusterTemplate.setConnectionFactory(redisClusterConnectionFactory);
         return redisClusterTemplate;
@@ -71,4 +76,5 @@ public class NBaseArcAutoConfiguration implements DisposableBean{
             redisClusterConnectionFactory.destroy();
         }
     }
+
 }
