@@ -8,17 +8,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Created by rerun on 2016. 3. 23..
+ *  @author Junhwan Oh
  */
 
-//@RestController
+@RestController
 public class HelloController {
 
     private static String KEY = "SAMPLE";
+
     @Autowired
     private StringRedisClusterTemplate redisTemplate;
 
-    @RequestMapping("/get")
+    @RequestMapping(value = "/get", method = RequestMethod.GET)
     @ResponseBody
     public Map<String, String> get() {
         String sample = redisTemplate.opsForValue().get(KEY);
