@@ -40,6 +40,8 @@ nbase-arc (n-base-ARC) is an open source distributed memory store based on Redis
 ## Discussions
 * User group: https://groups.google.com/forum/#!forum/nbase-arc-user
 
+## Related Projects
+* nbase-arc spring boot starter: https://github.com/smallmiro/nbasearc-spring-boot-starter
 
 ## License
 
