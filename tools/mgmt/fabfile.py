@@ -180,7 +180,7 @@ def deploy_pgs_binary(cluster_name, pgs_id, pm_ip, smr_base_port, redis_port, cr
     print green('[%s] copy_binary end' % host)
 
     # Check smr directory
-    smr_path = '%s/%d/smr' % (config.REMOTE_PGS_DIR, smr_base_port)
+    smr_path = util.make_smr_path_str(smr_base_port)
     if execute(remote.path_exist, smr_path)[host] == True:
         warn(red("[%s] smr directory already exists. PATH:%s" % (host, smr_path)))
         return False
@@ -192,7 +192,7 @@ def deploy_pgs_binary(cluster_name, pgs_id, pm_ip, smr_base_port, redis_port, cr
         return False
 
     # Make smr directory
-    smr_path = '%s/%d/smr/log' % (config.REMOTE_PGS_DIR, smr_base_port)
+    smr_path = util.make_smr_log_path_str(smr_base_port)
     if execute(remote.make_remote_path, smr_path)[host] == False:
         return False
     print green('[%s] Make smr path %s success' % (host, smr_path))
@@ -202,9 +202,9 @@ def deploy_pgs_binary(cluster_name, pgs_id, pm_ip, smr_base_port, redis_port, cr
         return False
     print green('[%s] Make redis path %s success' % (host, redis_path))
 
-    # Deploy redis conf
-    if execute(remote.deploy_redis_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
-        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
+    # Apply PGS conf
+    if execute(remote.apply_pgs_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
+        warn(red("[%s] Apply pgs conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
         return False
 
     return True
@@ -417,7 +417,7 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
             if active_role == 'L':
                 target_is_lconn = True
                 show_info.show_pgs_list(cluster_name, pg_id, True)
-                print green('PGS state bacame LCONN')
+                print green('PGS state became LCONN')
                 break 
             else:
                 time.sleep(0.5)
@@ -453,6 +453,11 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
             return False
 
     if remain_data == False:
+        # Remove smr memlog
+        if execute(remote.exist_smr_memlog, smr_base_port)[host] == True:
+            if execute(remote.remove_smr_memlog, smr_base_port)[host] == False:
+                return False;
+
         # Remove directory
         path = config.REMOTE_PGS_DIR + '/' + str(smr_base_port)
         if execute(remote.remove_remote_path, path)[host] != True:
@@ -719,7 +724,8 @@ def menu_upgrade_pgs():
 def upgrade_all_pgs_in_cluster(cluster_name, new_cronsave_num):
     # Get cluster info from Conf Master
     json_data = cm.cluster_info(cluster_name)
-    if json_data == None: return
+    if json_data == None: 
+        return False
 
     # Get PG and PGS info
     pg_list = {}
@@ -731,7 +737,7 @@ def upgrade_all_pgs_in_cluster(cluster_name, new_cronsave_num):
             pgs_json_data = cm.pgs_info(cluster_name, pgs_id)
             if pgs_json_data == None: 
                 warn(red("PGS '%s' doesn't exist." % pgs_id))
-                return
+                return False
 
             pg_list[pg_id][pgs_id] = {}
             pg_list[pg_id][pgs_id]['ip'] = pgs_json_data['data']['pm_IP']
@@ -834,7 +840,7 @@ def supplement_pgs(cluster_name, pg_id, pm_name, pm_ip, redis_port, cronsave_num
                 suppl_pgs['pgs_id'] += 1
                 continue
             else:
-                print warn(red('[%s] Failed to add pgs. ERROR:%d PGSID:%d IP:%s Port:%d #### \n' % 
+                warn(red('[%s] Failed to add pgs. ERROR:%d PGSID:%d IP:%s Port:%d #### \n' % 
                         (suppl_pm_ip, ret, suppl_pgs['pgs_id'], suppl_pm_ip, suppl_pgs['smr_base_port'])))
                 return False, None
 
@@ -1035,14 +1041,14 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
         warn(red("[%s] Stop SMR fail, PGS_ID:%d, IP:%s, PORT:%d" % (host, pgs_id, ip, smr_base_port)))
         return False
 
+    # Apply pgs conf
+    if execute(remote.apply_pgs_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
+        warn(red("[%s] Apply pgs conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
+        return False
+
     # Start SMR process
     if execute(remote.start_smr_process, ip, smr_base_port, log_delete_delay)[host] != True:
         warn(red("[%s] Start SMR fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, smr_base_port)))
-        return False
-
-    # Deploy redis conf
-    if execute(remote.deploy_redis_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
-        warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
         return False
 
     # Start Redis process
@@ -1374,9 +1380,9 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
         host = config.USERNAME + '@' + pgs['ip'].encode('ascii')
         env.hosts = [host]
 
-        # Deploy redis conf
-        if execute(remote.deploy_redis_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
-            warn(red("[%s] Deploy redis conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
+        # Apply PGS conf
+        if execute(remote.apply_pgs_conf, cluster_name, smr_base_port, redis_port, cronsave_num)[host] == False:
+            warn(red("[%s] Apply pgs conf fail, CLUSTER_NAME:%s, SMR_BASE_PORT:%d, REDIS_PORT:%d" % (host, cluster_name, smr_base_port, redis_port)))
             return False
 
         # Start SMR process
@@ -1463,68 +1469,6 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
             return False
 
     print green("\n #### REPAIR PG '%d' SUCCESS #### \n" % (pg_id))
-    print '===================================================================='
-    return True
-
-def execute_pgs(cluster_name, pgs_id):
-    print yellow('\n #### EXECUTE PGS PGSID:%d #### \n' % (pgs_id))
-
-    # Check if pgs exists
-    pgs = cm.pgs_info(cluster_name, pgs_id)
-    if pgs == None:
-        warn(red("PGS '%d' does't exist in %s CLUSTER" % (pgs_id, cluster_name)))
-        return False
-
-    pgs = pgs['data']
-    pg_id = pgs['pg_id']
-    pm_ip = pgs['ip']
-    smr_base_port = pgs['smr_base_port']
-    redis_port = pgs['redis_port']
-
-    host = config.USERNAME + '@' + pgs['ip'].encode('ascii')
-    env.hosts = [host]
-
-    # Check redis and smr are running
-    if execute(remote.is_redis_process_exist, smr_base_port)[host] == True:
-        warn(red("[%s] Redis already running. Aborting..." % host))
-        return False
-
-    if execute(remote.is_smr_process_exist, smr_base_port)[host] == True:
-        warn(red("[%s] SMR already running. Aborting..." % host))
-        return False
-
-    # Check pgs
-    path = config.REMOTE_PGS_DIR + '/' + str(smr_base_port) + '/redis'
-    if execute(remote.path_exist, path)[host] == False:
-        warn(red("[%s] '%s' doesn't exist." % (host, path)))
-        return False
-
-    path = config.REMOTE_PGS_DIR + '/' + str(smr_base_port) + '/smr/log'
-    if execute(remote.path_exist, path)[host] == False:
-        warn(red("[%s] '%s' doesn't exist." % (host, path)))
-        return False
-
-    # Start SMR process
-    if execute(remote.start_smr_process, pm_ip, smr_base_port)[host] != True:
-        warn(red("[%s] Start SMR fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, smr_base_port)))
-        return False
-
-    # Start Redis process
-    pongs = ['+OK 1', '+OK 2', '+OK 3']
-    if execute(remote.start_redis_process, pm_ip, smr_base_port, redis_port, cluster_name, pongs)[host] != True:
-        warn(red("[%s] Start Redis fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, redis_port)))
-        return False
-
-    if util.check_smr_state(pm_ip, smr_base_port, host) == False:
-        warn(red("[%s] Check SMR state fail, PG_ID:%d, PGS_ID:%d, PORT:%d" % (host, pg_id, pgs_id, smr_base_port)))
-        return False
-
-    # Check redis state
-    if util.check_redis_state(pm_ip, redis_port) != True:
-        warn(red("[%s] Check Redis state fail. PGS_ID:%d, PORT:%d" % (host, pgs_id, redis_port))) 
-        return False
-
-    print green('\n #### EXECUTE PGS SUCCESS PGSID:%d IP:%s Port:%d #### \n' % (pgs_id, pm_ip, smr_base_port))
     print '===================================================================='
     return True
 
@@ -2374,7 +2318,7 @@ def menu_deploy_bash_profile():
 
     return True
 
-def main(config_path="config"):
+def init_config(config_path):
     global config
 
     # Load config
@@ -2386,7 +2330,7 @@ def main(config_path="config"):
     # Check config
     if config.check_config() == False: 
         warn(red("Configuration is not correct."))
-        return
+        return None
 
     # Init modules
     cm.set_config(config)
@@ -2394,7 +2338,14 @@ def main(config_path="config"):
     remote.set_config(config)
     show_info.set_config(config)
 
-    if cm.init() == False: return
+    if cm.init() == False: 
+        return None
+
+    return config
+
+def main(config_path="config"):
+    if init_config(config_path) == None:
+        return False
 
     # Menu
     menu = [

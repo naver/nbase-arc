@@ -14,7 +14,8 @@
 # limitations under the License.
 #
 
-GW_ADDITIONAL_OPTION = {
-    "opt" : "-d"
-}
+# SMR default configuration
 
+SMR_CONFIG = {
+    "use_memlog" : False
+}

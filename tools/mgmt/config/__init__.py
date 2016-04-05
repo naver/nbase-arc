@@ -25,6 +25,8 @@ from conf_dnode import *
 from conf_cluster import *
 from conf_redis import *
 from conf_gateway import *
+from conf_smr import *
+import util
 
 def check_config():
     # Check attributes
@@ -118,9 +120,9 @@ def make_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_hour, cron
             else:
                 conf[e[0]] = e[1]
 
-        cluster_conf = get_cluster_conf(cluster_name)
-        if cluster_conf != None:
-            for k, v in cluster_conf['redis'].iteritems():
+        redis_conf = get_cluster_opt(cluster_name)("redis").v()
+        if redis_conf  != None :
+            for k, v in redis_conf.iteritems():
                 if k == "client-output-buffer-limit":
                     for confv in conf[k]:
                         find = False
@@ -147,6 +149,24 @@ def get_cluster_conf(cluster_name):
     elif len(conf) == 0:
         return None
     return conf[0]
+
+def get_cluster_opt(cluster_name):
+    conf = get_cluster_conf(cluster_name)
+
+    # Set default configurations
+    if conf == None:
+        conf = {
+            "cluster_name" : cluster_name,
+            "smr" : SMR_CONFIG,
+        }
+    elif conf.has_key("smr") == False:
+        conf["smr"] = SMR_CONFIG
+    else:
+        for k, v in SMR_CONFIG.items():
+            if conf["smr"].has_key(k) == False:
+                conf["smr"][k] = v
+
+    return util.make_dict_traverser(conf)
 
 def get_gw_additional_option():
     if GW_ADDITIONAL_OPTION.has_key("opt"):

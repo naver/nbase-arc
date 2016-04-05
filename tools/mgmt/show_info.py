@@ -48,9 +48,9 @@ PG_FORMAT =    '| %(pg_id)5d | %(slot)18s | %(master_Gen)4s |'
 PG_HEADER = PG_PARTITION + '\n' + PG_COLUMN  + '\n' + PG_PARTITION
 PG_PREFIX = '|%7s|%20s|%6s|' % ('', '', '')
 
-PGS_PARTITION = '+--------+------+----------------+-------+------+--------+'
-PGS_COLUMN =    '| PGS_ID | MGEN |       IP       |  PORT | ROLE | QUORUM |'
-PGS_FORMAT =    '| %(pgs_id)6d | %(master_Gen)4s |%(ip)15s |%(smr_base_port)6d | %(active_role)s(%(smr_role)s) | %(quorum)6s |'
+PGS_PARTITION = '+--------+------+----------------+-------+------+--------+--------+'
+PGS_COLUMN =    '| PGS_ID | MGEN |       IP       |  PORT | ROLE | MEMLOG | QUORUM |'
+PGS_FORMAT =    '| %(pgs_id)6d | %(master_Gen)4s |%(ip)15s |%(smr_base_port)6d | %(active_role)s(%(smr_role)s) | %(memlog)6s | %(quorum)6s |'
 PGS_HEADER = PGS_PARTITION + '\n' + PGS_COLUMN  + '\n' + PGS_PARTITION
 
 def set_config(config_module):
@@ -145,9 +145,7 @@ def menu_select_info(cluster_name):
     menu = [
                 ["All", menu_show_all],
                 ["GW list", menu_show_gw_list],
-                #["Cluster > GW", menu_show_gw],
                 ["PG list", menu_show_pg_list],
-                #["Cluster > PG", menu_show_pg],
                 ["PG > PGS list", menu_show_pgs_list],
                 ["PGS", menu_show_pgs],
            ]
@@ -184,6 +182,10 @@ def show_cluster_list(cluster_name_list):
     for cluster_name in cluster_name_list:
         print yellow(CLUSTER_FORMAT % cluster_name)
     print yellow(CLUSTER_PARTITION)
+
+def show_opt(dick_name, d):
+    for k, v in d.items():
+        print yellow(OPT_FORMAT % (dick_name, k, str(v)))
 
 def menu_show_all(cluster_name):
     # Check cluster
@@ -328,11 +330,17 @@ def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None):
         return True
 
     for id, data in pgs_list.items():
+        # Get active role
         data['active_role'] = util.get_role_of_smr(data['ip'], data['mgmt_port'], verbose=False)
         if data['active_role'] == 'M':
             data['quorum'] = remote.get_quorum(data)
         else:
             data['quorum'] = ''
+
+        # Get memlog
+        host = config.USERNAME + '@' + data['ip'].encode('ascii')
+        with settings(hide('warnings', 'running', 'stdout', 'user'), hosts=[host]):
+            data['memlog'] = execute(remote.exist_smr_memlog, data['smr_base_port'])[host]
 
     pgs_state = True
     begin = True

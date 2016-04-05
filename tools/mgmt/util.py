@@ -658,3 +658,28 @@ def prepare_suppl_pgsinfo(cluster_name, pg_id, pm_name, pm_ip):
 
     return {"pgs_id" : pgs_id, "smr_base_port" : port, "redis_port" : port + 9}
 
+def make_smr_path_str(smr_base_port):
+    return '%s/%d/smr' % (config.REMOTE_PGS_DIR, smr_base_port)
+
+def make_smr_log_path_str(smr_base_port):
+    return '%s/log' % make_smr_path_str(smr_base_port)
+
+class Traverser:
+    def __init__(self, d, lift, op):
+        self.d = d
+        self.lift = lift
+        self.op   = op
+
+    def __call__(self, arg):
+        self.d = self.lift(self.d)
+        result = self.op(self.d, arg)
+        return Traverser(result, self.lift, self.op)
+
+    def v(self):
+        return self.d
+
+def make_dict_traverser(dictionary):
+    return Traverser(dictionary,
+            lambda d: d if isinstance(d, dict) else {},
+            lambda d, k: d[k] if d.has_key(k) else None)
+
