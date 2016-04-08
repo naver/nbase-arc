@@ -242,14 +242,14 @@ void freeRedisObject(robj *o) {
     zfree(o);
 }
 
-static int isBackgroundDeleteObject(robj *o, int *is_s3) {
+static int isBackgroundDeleteObject(robj *o) {
     int objsize = 0;
     if (server.object_bio_delete_min_elems > 0) {
         switch(o->encoding) {
         case REDIS_ENCODING_HT: objsize = dictSize((dict*)o->ptr); break;
         case REDIS_ENCODING_LINKEDLIST: objsize = listLength((list*)o->ptr); break;
         case REDIS_ENCODING_SKIPLIST: objsize = ((zset*)o->ptr)->zsl->length; break;
-        case REDIS_ENCODING_SSS: objsize = sssTypeValueCount(o); *is_s3 = 1; break;
+        case REDIS_ENCODING_SSS: objsize = sssTypeValueCount(o); break;
         default: break;
         }
         return objsize >= server.object_bio_delete_min_elems;
@@ -263,14 +263,15 @@ void incrRefCount(robj *o) {
 
 void decrRefCount(robj *o) {
     int refcount;
+
     refcount = safeDecrRefCount(o);
     if (refcount == 0) {
-        int is_s3 = 0;
-        if(isBackgroundDeleteCandidate() && isBackgroundDeleteObject(o, &is_s3)) {
-            if (is_s3) {
-                sssUnlinkGc((sss *)o->ptr);
-            }
-            bioCreateBackgroundDeleteJob(REDIS_BIO_OBJ_DESTRUCT, (void *) o);
+        int is_s3 = (o->encoding == REDIS_ENCODING_SSS);
+	if (is_s3) {
+	    sssUnlinkGc((sss *)o->ptr);
+	}
+        if(canBackgroundDelete() && isBackgroundDeleteObject(o)) {
+            bioCreateBackgroundDeleteJob(REDIS_BIO_OBJ_DESTRUCT, (void *) o, REDIS_BIO_BGDEL_ROBJ);
             return;
         }
         freeRedisObject(o);
