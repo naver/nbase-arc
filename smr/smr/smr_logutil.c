@@ -282,7 +282,7 @@ deletelog (int argc, char *argv[])
   ret = smrlog_unlink_master (log_dir);
   if (ret < 0)
     {
-      printf ("Failed to createlog errno:%d\n", errno);
+      printf ("Failed to deletelog errno:%d\n", errno);
       exit (1);
     }
   printf ("OK deletelog succeeded log dir:%s\n", log_dir);
@@ -352,6 +352,7 @@ main (int argc, char *argv[])
       exit (1);
     }
 
+  errno = 0;
   if (strcmp (argv[1], "vc") == 0)
     {
       verify_checksum (argc - 2, argv + 2);
