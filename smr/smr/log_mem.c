@@ -127,6 +127,8 @@ struct masterShm_
   logSeq seqs[MAX_MEMLOG];
   bufLog logs[MAX_MEMLOG];
   char prefix[SHM_NAME_SIZE];
+  // extensions
+  int isLocked;
 };
 #define init_mastershm(s) do {                                    \
   int i_;                                                         \
@@ -141,6 +143,7 @@ struct masterShm_
     init_buf_log(&(s)->logs[i_], _o, i_+1);                       \
   }                                                               \
   (s)->prefix[0] = '\0';                                          \
+  (s)->isLocked = 0;                                              \
 } while(0)
 
 struct memLogDev_
@@ -1103,6 +1106,17 @@ open_mastershm (char *prefix, char *name, char *path, int create)
       goto error;
     }
 
+  /* try mlock master shm */
+  ret = mlock (ms, master_shm_size);
+  if (ret == 0)
+    {
+      ms->isLocked = 1;
+    }
+  else
+    {
+      ms->isLocked = 0;
+    }
+
   if (do_init)
     {
       init_mastershm (ms);
@@ -1760,6 +1774,7 @@ mem_info_cs (masterShm * shm, gpbuf_t * gp)
   masterWal *wal;
 
   gpbuf_printf (gp, "size:%d\n", shm->size);
+  gpbuf_printf (gp, "mlocked:%d\n", shm->isLocked);
   gpbuf_printf (gp, "semid:%d\n", shm->semid);
   gpbuf_printf (gp, "initialized:%d\n", shm->initialized);
   wal = &shm->wal;
