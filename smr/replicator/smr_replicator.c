@@ -864,7 +864,7 @@ log_rewind_to_cseq (smrReplicator * rep, long long seq)
   aseq_set (&rep->sync_seq, seq);
   aseq_set (&rep->log_seq, seq);
   aseq_set (&rep->cron_est_min_seq, seq_round_down (seq));
-  rep->commit_seq = seq;
+  assert (seq >= rep->commit_seq);
   return 0;
 }
 
@@ -3825,10 +3825,10 @@ do_role_master (mgmtConn * conn, long long rewind_cseq)
   else if (rewind_cseq != -1)
     {
       /* check against my sequence number */
-      if (aseq_get (&rep->min_seq) > rewind_cseq)
+      if (rep->commit_seq > rewind_cseq)
 	{
-	  LOG (LG_ERROR, "rewind_cseq %lld is less than my min_seq %lld",
-	       rewind_cseq, aseq_get (&rep->min_seq));
+	  LOG (LG_ERROR, "rewind_cseq %lld is less than my commit_seq %lld",
+	       rewind_cseq, rep->commit_seq);
 	  return -1;
 	}
 
@@ -3837,7 +3837,6 @@ do_role_master (mgmtConn * conn, long long rewind_cseq)
 	  LOG (LG_ERROR, "rewind log entry failed");
 	  return -1;
 	}
-      assert (rep->commit_seq == rewind_cseq);
       assert (aseq_get (&rep->log_seq) == rewind_cseq);
     }
 
@@ -3892,7 +3891,7 @@ do_role_master (mgmtConn * conn, long long rewind_cseq)
     }
   else if (notify_be_new_master (rep, "localhost",
 				 rep->base_port + PORT_OFF_CLIENT,
-				 rep->commit_seq, rep->nid) != 0)
+				 aseq_get (&rep->log_seq), rep->nid) != 0)
     {
       goto error;
     }
@@ -3998,10 +3997,10 @@ do_role_slave (mgmtConn * conn, const char *host, int slave_port,
   else if (rewind_cseq != -1)
     {
       /* check against my sequence number */
-      if (aseq_get (&rep->min_seq) > rewind_cseq)
+      if (rep->commit_seq > rewind_cseq)
 	{
-	  LOG (LG_ERROR, "rewind_cseq %lld is less than my min_seq %lld",
-	       rewind_cseq, aseq_get (&rep->min_seq));
+	  LOG (LG_ERROR, "rewind_cseq %lld is less than my commit_seq %lld",
+	       rewind_cseq, rep->commit_seq);
 	  return -1;
 	}
 
@@ -4010,7 +4009,6 @@ do_role_slave (mgmtConn * conn, const char *host, int slave_port,
 	  LOG (LG_ERROR, "rewind log entry failed");
 	  return -1;
 	}
-      assert (rep->commit_seq == rewind_cseq);
       assert (aseq_get (&rep->log_seq) == rewind_cseq);
     }
 
