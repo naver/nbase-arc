@@ -63,7 +63,9 @@ public class RedisClusterConnectionFactory implements InitializingBean, Disposab
      * @see org.springframework.beans.factory.InitializingBean#afterPropertiesSet()
      */
     public void afterPropertiesSet() {
-        client = new GatewayClient(config);
+        if (client == null) {
+            client = new GatewayClient(config);
+        }
     }
 
     /*
