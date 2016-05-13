@@ -2,6 +2,7 @@
 set server_path [tmpdir "server.convert-zipmap-hash-on-load"]
 
 exec cp -f tests/assets/hash-zipmap.rdb $server_path
+file delete [glob -nocomplain $server_path/*.log]
 start_server [list overrides [list "dir" $server_path "dbfilename" "hash-zipmap.rdb"]] {
   test "RDB load zipmap hash: converts to ziplist" {
     r select 0
@@ -13,6 +14,7 @@ start_server [list overrides [list "dir" $server_path "dbfilename" "hash-zipmap.
 }
 
 exec cp -f tests/assets/hash-zipmap.rdb $server_path
+file delete [glob -nocomplain $server_path/*.log]
 start_server [list overrides [list "dir" $server_path "dbfilename" "hash-zipmap.rdb" "hash-max-ziplist-entries" 1]] {
   test "RDB load zipmap hash: converts to hash table when hash-max-ziplist-entries is exceeded" {
     r select 0
@@ -24,6 +26,7 @@ start_server [list overrides [list "dir" $server_path "dbfilename" "hash-zipmap.
 }
 
 exec cp -f tests/assets/hash-zipmap.rdb $server_path
+file delete [glob -nocomplain $server_path/*.log]
 start_server [list overrides [list "dir" $server_path "dbfilename" "hash-zipmap.rdb" "hash-max-ziplist-value" 1]] {
   test "RDB load zipmap hash: converts to hash table when hash-max-ziplist-value is exceeded" {
     r select 0
