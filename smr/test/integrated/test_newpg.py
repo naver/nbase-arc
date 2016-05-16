@@ -43,9 +43,9 @@ class rState:
 ## replication group configuration
 ## -------------------------------
 class replicationGroup:
-  def __init__(self, name, members):
+  def __init__(self, name, copy):
     self.name = name
-    self.members = members
+    self.copy = copy
     self.cm = Cm.CM(self.name)
     self.cm.create_workspace()
     self.pg = None
@@ -54,11 +54,11 @@ class replicationGroup:
 
   def init(self):
     self.pg = PgNew.PgNew(0)
-    for i in range(0, self.members):
+    for i in range(0, self.copy):
       pgs = Pgs.PGS(i, 'localhost', 1900 + i * 10, self.cm.dir)
       self.pgs_ary.append(pgs)
 
-    for i in range(0, self.members):
+    for i in range(0, self.copy):
       self.clients.append(None)
 
   def get_logfilename(self, name):
@@ -114,16 +114,12 @@ class replicationGroup:
     slotid = i
     resp = self.clients[i].stat(slotid)
     s = {}
-    # rqst
-    k, v = resp[0].split(':')
-    s[k] = int (v)
-    # resp
-    e, v = resp[1].split(':')
-    s[k] = int (v)
+    s['rqst'] = int(resp['rqst'])
+    s['resp'] = int(resp['resp'])
     return s
 
-  def reconfigure(self, quorum, affinity=None, dis=None):
-    self.pg.reconfigure(quorum, affinity, dis)
+  def reconfigure(self, copy, quorum, affinity=None, dis=None):
+    self.pg.reconfigure(copy, quorum, affinity, dis)
 
   def finalize(self):
     for cli in self.clients:
@@ -168,18 +164,18 @@ class TestNewPg (unittest.TestCase):
     try:
       G.init()
       G.up_pgs(0)
-      G.reconfigure(quorum=0)
+      G.reconfigure(copy=1, quorum=0)
       G.load_gen(0)
       for i in range (0, 10):
 	G.lconn_pgs(0)
-	G.reconfigure(quorum=0)
+	G.reconfigure(copy=1, quorum=0)
 	diff = self.check_progress(G, 0)
 	logging.debug('progress %d' % diff)
       G.down_pgs(0)
     except:
-      Util.tstop('Exception Occurred')
-      traceback.print_exc()
+      #Util.tstop('Exception Occurred')
       logging.exception(sys.exc_info()[0])
+      raise
     finally:
       G.finalize()
 
@@ -193,7 +189,7 @@ class TestNewPg (unittest.TestCase):
       G.init()
       G.up_pgs(0)
       G.up_pgs(1)
-      G.reconfigure(quorum=1)
+      G.reconfigure(copy=2, quorum=1)
       G.load_gen(0)
       G.load_gen(1)
       for i in range (0, 10):
@@ -201,15 +197,15 @@ class TestNewPg (unittest.TestCase):
 	kill_id = (aff_id + 1) % 2
 	aff = G.get_pgs(aff_id)
 	G.lconn_pgs(kill_id)
-	G.reconfigure(quorum=1, affinity=aff)
+	G.reconfigure(copy=2, quorum=1, affinity=aff)
 	progress0 = self.check_progress(G, 0)
 	progress1 = self.check_progress(G, 1)
 	logging.info('progress 0:%d 1:%d' % (progress0, progress1))
       G.down_pgs(0)
     except:
-      Util.tstop('Exception Occurred')
-      traceback.print_exc()
+      #Util.tstop('Exception Occurred')
       logging.exception( sys.exc_info()[0])
+      raise
     finally:
       G.finalize()
 
@@ -224,7 +220,7 @@ class TestNewPg (unittest.TestCase):
       G.up_pgs(0)
       G.up_pgs(1)
       G.up_pgs(2)
-      G.reconfigure(quorum=1)
+      G.reconfigure(copy=3, quorum=1)
       G.load_gen(0)
       G.load_gen(1)
       G.load_gen(2)
@@ -233,16 +229,16 @@ class TestNewPg (unittest.TestCase):
 	G.lconn_pgs(i%3)
 	G.lconn_pgs((i+1)%3)
 	G.lconn_pgs((i+2)%3)
-	G.reconfigure(quorum=1, dis=was)
+	G.reconfigure(copy=3, quorum=1, dis=was)
 	progress0 = self.check_progress(G, 0)
 	progress1 = self.check_progress(G, 1)
 	progress2 = self.check_progress(G, 2)
 	logging.info('progress 0:%d 1:%d 2:%d' % (progress0, progress1, progress2))
       G.down_pgs(0)
     except:
-      Util.tstop('Exception Occurred')
-      traceback.print_exc()
+      #Util.tstop('Exception Occurred')
       logging.exception( sys.exc_info()[0])
+      raise
     finally:
       G.finalize()
 
@@ -258,7 +254,7 @@ class TestNewPg (unittest.TestCase):
       # starts with (1, 0)
       G.init()
       G.up_pgs(0)
-      G.reconfigure(quorum=0)
+      G.reconfigure(copy=1, quorum=0)
       curr = rState(1, 0)
       as_is_states = []
       as_is_states.append(True)
@@ -300,9 +296,9 @@ class TestNewPg (unittest.TestCase):
 	  raise Exception("different checkpoint file %s %s" % (f1, f2))
 
     except:
-      Util.tstop('Exception Occurred')
-      traceback.print_exc()
+      #Util.tstop('Exception Occurred')
       logging.exception( sys.exc_info()[0])
+      raise
     finally:
       G.finalize()
 
@@ -319,7 +315,7 @@ class TestNewPg (unittest.TestCase):
       else:
 	G.up_pgs(i)
 
-    G.reconfigure(quorum=next.q)
+    G.reconfigure(copy=next.c, quorum=next.q)
     as_is_states = to_be_states
     curr = next
 

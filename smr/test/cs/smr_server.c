@@ -658,7 +658,7 @@ processQuery (smrClient * client, char *buf, int bufsz)
 static int
 cb_session_close (void *arg, long long seq, short nid, int sid)
 {
-  if (nid == server.nid && sid > 0)
+  if (server.nid != -1 && nid == server.nid && sid > 0)
     {
       assert (server.clients[sid] == SYNC_CLOSE_MARKER);
       close (sid);
@@ -842,7 +842,7 @@ read_checkpoint (char *filename, long long *seq)
 	    }
 
 	  ti = atoi (sp + 1);
-	  if (ti < 0 || ti >= USHRT_MAX)
+	  if (ti < 0 || ti > USHRT_MAX)
 	    {
 	      log_msg ("invalid checksum:%d", ti);
 	      goto error;
@@ -869,7 +869,7 @@ read_checkpoint (char *filename, long long *seq)
       unsigned short tcksum;
 
       ti = atoi (line);
-      if (ti < 0 || ti >= USHRT_MAX)
+      if (ti < 0 || ti > USHRT_MAX)
 	{
 	  log_msg ("invalid checksum:%d", ti);
 	  goto error;
@@ -953,7 +953,8 @@ log_msg (char *fmt, ...)
 	      localtime (&tv.tv_sec));
   snprintf (time_buf + off, sizeof (time_buf) - off, "%03d",
 	    (int) tv.tv_usec / 1000);
-  fprintf (server.log_fp, "[smr-server]%s %s\n", time_buf, msg_buf);
+  fprintf (server.log_fp, "[smr-server(%d)]%s %s\n", server.nid, time_buf,
+	   msg_buf);
 }
 
 static void

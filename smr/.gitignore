@@ -1,6 +1,8 @@
 *.o
 *.gcno
 *.gcda
+*.pyc
+*.swp
 replicator/smr-replicator
 smr/libsmr.a
 smr/smr-logutil

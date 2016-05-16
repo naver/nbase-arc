@@ -73,9 +73,8 @@ class TestTest (unittest.TestCase):
 
       pgs.smr.wait_role(Smr.SMR.LCONN)
     except:
-      Util.tstop('Exception Occurred')
-      traceback.print_exc()
-      e = sys.exc_info()[0]
+      #Util.tstop('Exception Occurred')
+      raise
     finally:
       if pgs is not None:
 	pgs.kill_be()
@@ -148,9 +147,8 @@ class TestTest (unittest.TestCase):
       new = pgs.be.get(0)
       assert old == new
     except:
-      Util.tstop('Exception Occurred')
-      traceback.print_exc()
-      e = sys.exc_info()[0]
+      #Util.tstop('Exception Occurred')
+      raise
     finally:
       if pgs is not None:
 	pgs.kill_smr()

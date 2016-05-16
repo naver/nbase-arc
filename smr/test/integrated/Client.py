@@ -45,7 +45,7 @@ class Client:
     self._proc.stdin.write('%s\n' % command)
     self._proc.stdin.flush()
     resp = self._proc.stdout.readline()
-    if resp[0] == '-1':
+    if resp[0] == '-':
       raise resp
     return resp.split()[1:]
 
@@ -74,4 +74,10 @@ class Client:
 
   def stat(self, id):
     resp = self._do_command('STAT %d' % id)
-    return resp
+    respm = {}
+    nokv = ""
+    for seg in resp:
+      kv = seg.split(':')
+      if len(kv) == 2:
+	respm[kv[0]] = kv[1]
+    return respm

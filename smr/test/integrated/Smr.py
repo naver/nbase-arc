@@ -68,7 +68,7 @@ class SMR (Proc.Proc):
     seg = resp[0].split()
     return int(seg[0])
 
-  def wait_role(self, role, timeout = 1000):
+  def wait_role(self, role, timeout = 2000):
     wait_time_sec = 0.0
     while wait_time_sec * 1000 < timeout:
       if role == self.get_role():
