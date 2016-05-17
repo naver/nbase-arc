@@ -57,6 +57,8 @@ public class Config {
     private Long serverCommandSlowlog;
     @Value("${confmaster.server.command.pgsdel.maxretry}")
     private Integer serverCommandPgsdelMaxretry;
+    @Value("${confmaster.server.command.mig2pc.catchup.timeout}")
+    private Long serverCommandMig2pcCatchupTimeout;
     
     @Value("${confmaster.heartbeat.timeout}")
     private Long heartbeatTimeout;
@@ -136,6 +138,10 @@ public class Config {
 
     public Integer getServerCommandPgsdelMaxretry() {
         return serverCommandPgsdelMaxretry;
+    }
+
+    public Long getServerCommandMig2pcCatchupTimeout() {
+        return serverCommandMig2pcCatchupTimeout;
     }
 
     public Long getHeartbeatTimeout() {

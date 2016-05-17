@@ -60,6 +60,7 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtInvalidQuorumPo
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeAlreayExistsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
+import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
@@ -102,6 +103,9 @@ public class ClusterService {
 
     @Autowired
     private ThreadPool executor;
+
+    @Autowired
+    private Config config;
 
     @Autowired
     private ClusterImo clusterImo;
@@ -670,7 +674,7 @@ public class ClusterService {
 
         /* catchup checking loop */
         long startTick = System.currentTimeMillis();
-        long endTick = startTick + GW_QUERY_TIMEOUT;
+        long endTick = startTick + config.getServerCommandMig2pcCatchupTimeout();
         boolean rollback = false;
         String errMsg = null;
         
