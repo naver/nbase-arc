@@ -27,26 +27,39 @@ class BE(Proc.Proc):
     # Note can't connect to the Be before its restart recovery is finished
     # self.init_conn()
 
+  def checked_return(self, resp, also_val = True):
+    segs = resp[0].split()
+    if segs[0] != '+OK':
+      raise resp[0]
+    elif also_val:
+      return int(segs[1])
+    else:
+      return 0
+
   # -------- #
   # Commands #
   # -------- #
   def set(self, key, data):
     resp = self._conn.do_request("SET %d %s" % (key, str(data)))
-    return int(resp[0])
+    return self.checked_return(resp)
 
   def reset(self):
     resp = self._conn.do_request("RESET")
-    return int(resp[0])
+    return self.checked_return(resp)
 
   def get(self, key):
     resp = self._conn.do_request("GET %d" % key)
-    return int(resp[0])
+    return self.checked_return(resp)
 
   def ckpt(self):
     resp = self._conn.do_request("CKPT")
-    return int(resp[0])
+    return self.checked_return(resp)
 
   def ping(self):
+    resp = self._conn.do_request("BPING")
+    return self.checked_return(resp)
+
+  def replicated_ping(self):
     resp = self._conn.do_request("PING")
-    return int(resp[0])
+    return self.checked_return(resp, False)
 
