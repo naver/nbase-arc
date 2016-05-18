@@ -20,6 +20,9 @@ import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 @Component("BJRoleSlave")
 public class BJRoleSlave {
 
+    // It is not allowed to decalre any member variable in this class.
+    // Since it is a singleton instance and represents a part of workflow logic running in multiple threads.
+
     @Autowired
     protected WorkflowLogDao workflowLogDao;
 

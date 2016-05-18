@@ -15,6 +15,9 @@ import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.Rol
 @Component("MERoleMaster")
 public class MERoleMaster {
 
+    // It is not allowed to decalre any member variable in this class.
+    // Since it is a singleton instance and represents a part of workflow logic running in multiple threads.
+
     @Autowired
     WorkflowLogDao workflowLogDao;
 
