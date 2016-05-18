@@ -339,7 +339,7 @@ def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
 
     return util.check_smr_state(ip, smr_base_port, host)
 
-def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True):
+def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True, forced=False):
     print magenta("\n[%s] PGS Leave" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
     ret = cm_conn.read_until('\r\n', timeout)
@@ -349,7 +349,10 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True):
         warn("Aborting at user request.")
         return False
 
-    cm_conn.write('pgs_leave %s %d\r\n' % (cluster_name, pgs_id))
+    cmd = 'pgs_leave %s %d' % (cluster_name, pgs_id)
+    if forced:
+        cmd = cmd + ' forced'
+    cm_conn.write(cmd + '\r\n')
     ret = cm_conn.read_until('\r\n', timeout)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':

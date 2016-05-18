@@ -23,5 +23,14 @@
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.leaderelection"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.manager"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.workflow"/>
+	
+	<bean id="RARoleLconn" class="com.navercorp.nbasearc.confmaster.server.workflow.RARoleLconn"/>
+	<bean id="RASetquorum" class="com.navercorp.nbasearc.confmaster.server.workflow.RASetquorum"/>
+	<bean id="MERoleMaster" class="com.navercorp.nbasearc.confmaster.server.workflow.MERoleMaster"/>
+	<bean id="MERoleLconn" class="com.navercorp.nbasearc.confmaster.server.workflow.MERoleLconn"/>
+	<bean id="QASetquorum" class="com.navercorp.nbasearc.confmaster.server.workflow.QASetquorum"/>
+	<bean id="BJRoleSlave" class="com.navercorp.nbasearc.confmaster.server.workflow.BJRoleSlave"/>
+	<bean id="YJRoleSlave" class="com.navercorp.nbasearc.confmaster.server.workflow.YJRoleSlave"/>
+	<bean id="MGSetquorum" class="com.navercorp.nbasearc.confmaster.server.workflow.MGSetquorum"/>
 	 
 </beans>

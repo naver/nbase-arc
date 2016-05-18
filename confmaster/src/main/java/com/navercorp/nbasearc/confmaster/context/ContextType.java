@@ -24,7 +24,13 @@ public enum ContextType {
     HB("HB"),   // Heartbeat
     GW("GW"),   // Gateway
     PS("PS"),   // Partition Group Server
-    RS("RS");   // Redis Server
+    RS("RS"),   // Redis Server
+    RA("RA"),   // Role Adjustment
+    QA("QA"),   // Quorum Adjustment
+    ME("ME"),   // Master Election
+    YJ("YJ"),   // Yellow Join
+    BJ("BJ"),   // Blue Join
+    MG("MG");   // Memgership Grant
     
     private String value;
     

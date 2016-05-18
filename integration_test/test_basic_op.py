@@ -132,26 +132,3 @@ zk_session_timeout_millis 10000
     def stop_process(self, capi_server):
         capi_server.send_signal(signal.SIGTERM)
         capi_server.wait()
-
-    def __test_basic_op_capi(self, arch = 64):
-
-        capi_server = self.run_capi_server(arch)
-
-        f = open("%s/test_basicop_output_capi%d" % (constant.logdir, arch), 'w')
-        p = util.exec_proc_async("../redis-2.8.8",
-                            "./runtest_gw --accurate --gw-port 6200",
-                            True, None, f, None)
-
-        ret = p.wait()
-        f.close()
-        self.assertEquals(0, ret)
-
-        self.stop_process(capi_server)
-
-    def test_basic_op_capi64(self):
-        util.print_frame()
-        self.__test_basic_op_capi(64)
-
-    def test_basic_op_capi32(self):
-        util.print_frame()
-        self.__test_basic_op_capi(32)

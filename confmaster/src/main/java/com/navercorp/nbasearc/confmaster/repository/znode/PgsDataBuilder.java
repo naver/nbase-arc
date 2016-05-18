@@ -16,6 +16,12 @@
 
 package com.navercorp.nbasearc.confmaster.repository.znode;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+
+import java.util.Arrays;
+
+import com.navercorp.nbasearc.confmaster.logger.Logger;
+
 public class PgsDataBuilder {
 
     private int pgId;
@@ -28,6 +34,7 @@ public class PgsDataBuilder {
     private long stateTimestamp;
     private String hb;
     private String role;
+    private Color color;
     private int masterGen;
 
     public PgsDataBuilder from(PartitionGroupServerData data) {
@@ -41,6 +48,7 @@ public class PgsDataBuilder {
         withStateTimestamp(data.getStateTimestamp());
         withHb(data.getHb());
         withRole(data.getRole());
+        withColor(data.getColor());
         withMasterGen(data.getMasterGen());
         return this;
     }
@@ -92,10 +100,27 @@ public class PgsDataBuilder {
 
     public PgsDataBuilder withRole(String role) {
         this.role = role;
+        
+        // TODO
+        if (role.equals(PGS_ROLE_NONE)) {
+            this.state = SERVER_STATE_FAILURE;
+        } else if (role.equals(PGS_ROLE_LCONN)) {
+            this.state = SERVER_STATE_LCONN;
+        } else if (role.equals(PGS_ROLE_SLAVE)) {
+            this.state = SERVER_STATE_NORMAL;
+        } else if (role.equals(PGS_ROLE_MASTER)) {
+            this.state = SERVER_STATE_NORMAL;
+        }
+        
         return this;
     }
 
     public PgsDataBuilder withOldRole(String oldRole) {
+        return this;
+    }
+    
+    public PgsDataBuilder withColor(Color color) {
+        this.color = color;
         return this;
     }
 
@@ -107,7 +132,7 @@ public class PgsDataBuilder {
     public PartitionGroupServerData build() {
         PartitionGroupServerData data = new PartitionGroupServerData();
         data.initialize(pgId, pmName, pmIp, redisPort, smrBasePort,
-                smrMgmtPort, state, role, masterGen, hb);
+                smrMgmtPort, state, role, color, masterGen, hb);
         ;
         data.setStateTimestamp(stateTimestamp);
         return data;

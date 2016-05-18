@@ -16,10 +16,12 @@
 
 package com.navercorp.nbasearc.confmaster.heartbeat;
 
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.OPINION_PUBLISH;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 
 import java.io.UnsupportedEncodingException;
 
+import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.slf4j.helpers.MessageFormatter;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +32,11 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperExcept
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.repository.dao.OpinionDao;
+import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.RealState;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
 
 @Component
@@ -45,8 +51,11 @@ public class HBResultProcessor {
     @Autowired 
     private WorkflowExecutor workflowExecutor;
     
+    @Autowired
+    private OpinionDao opinionDao;
+    
     public static String OPINION_FORMAT = 
-            "{\"name\":\"{}\",\"opinion\":\"{}\",\"version\":{},\"state_timestamp\":{}}";
+            "{\"name\":\"{}\",\"opinion\":\"{}\",\"version\":{},\"state_timestamp\":{},\"creation_time\":{}}";
 
     public String proc(HBResult result, boolean putOpinion)
             throws NodeExistsException, MgmtZooKeeperException {
@@ -79,64 +88,31 @@ public class HBResultProcessor {
     
     private void pgs(HBRefData refData, HBResult result, boolean putOpinion) 
             throws MgmtZooKeeperException, NodeExistsException {
-        String newState = result.getState();
+        final RealState newState = PartitionGroupServer.convertToState(result.getResponse());
         long stateTimestamp = Constant.DEFAULT_STATE_TIMESTAMP;
         HBRefData.ZKData zkData = refData.getZkData(); 
         
-        if (result.getState().equals(Constant.SERVER_STATE_NORMAL)) {
-            String[] resAry = result.getResponse().split(" ");
-            if (resAry.length < 3) {
-                Logger.error("Invalid response. from: {}, response: {}", 
-                        result.getRemoteIP() + ":" + result.getRemoteIP(),
-                        result.getResponse());
-                newState = Constant.SERVER_STATE_FAILURE;
-            }
-            
-            if (resAry[1].equals("1")) {
-                newState = Constant.SERVER_STATE_LCONN;
-            }
-            else if (resAry[1].equals("0")) {
-                newState = Constant.SERVER_STATE_FAILURE;
-            }
-            
-            stateTimestamp = Long.parseLong(resAry[2]);
-        } else if (result.getState().equals(Constant.SERVER_STATE_FAILURE)) {
-            stateTimestamp = zkData.stateTimestamp + 1;
+        if (newState.getRole().equals(PGS_ROLE_NONE)) {
+            stateTimestamp = zkData.stateTimestamp;
+        } else {
+            stateTimestamp = newState.getStateTimestamp();
         }
         
-        if (stateTimestamp == zkData.stateTimestamp && newState.equals(zkData.state)) {
+        if (newState.getRole().equals(refData.getLastState()) 
+        		&& newState.getRole().equals(refData.getZkData().state)) {
             if (refData.isSubmitMyOpinion()) {
                 if (putOpinion) {
-                    removeMyOpinion(refData, result, newState);
+                    removeMyOpinion(refData, result, newState.getRole());
                 } else {
-                    workflowExecutor.perform(OPINION_PUBLISH, result);
+                    workflowExecutor.perform(OPINION_DISCARD, result.getTarget());
                 }
             }
-        } else if (newState.equals(zkData.state) && 
-                 newState.equals(Constant.SERVER_STATE_FAILURE) && 
-                 stateTimestamp - 1 == zkData.stateTimestamp) {
-            if (refData.isSubmitMyOpinion()) {
-                if (putOpinion) {
-                    removeMyOpinion(refData, result, newState);
-                } else {
-                    workflowExecutor.perform(OPINION_PUBLISH, result);
-                }
-            }
-        }
-        /**
-         * HBC assumes that dead PGS`s version is zk_version + 1, because Dead
-         * PGS`s version(timestamp) is 0. so this routine is located at the
-         * bottom of these conditional statements. Otherwise, if PGS was in
-         * dead, then this function increases PGS`s version and puts an opinion
-         * to the ZooKeeper repeatedly.
-         */
-        else if (!newState.equals(refData.getLastState()) || 
-                 stateTimestamp != refData.getLastStateTimestamp()) {
+        } else {
             if (putOpinion) {
                 if (refData.isSubmitMyOpinion()) {
-                    removeMyOpinion(refData, result, newState);
+                    removeMyOpinion(refData, result, newState.getRole());
                 }
-                putMyOpinion(stateTimestamp, refData, result, newState);
+                putMyOpinion(stateTimestamp, refData, result, newState.getRole());
             } else {
                 workflowExecutor.perform(OPINION_PUBLISH, result);
             }
@@ -153,11 +129,9 @@ public class HBResultProcessor {
             } else {
                 workflowExecutor.perform(OPINION_PUBLISH, result);
             }
-        } else if (!result.getState().equals(refData.getLastState()) && 
+        } else if (!result.getState().equals(refData.getZkData().state) && 
                  !result.getState().equals(zkData.state))  {
             if (putOpinion) {
-                if (refData.isSubmitMyOpinion()) 
-                    removeMyOpinion(refData, result, result.getState());
                 putMyOpinion(0, refData, result, result.getState());
             } else {
                 workflowExecutor.perform(OPINION_PUBLISH, result);
@@ -169,9 +143,23 @@ public class HBResultProcessor {
             HBResult result, String newState) throws MgmtZooKeeperException,
             NodeExistsException {
         String path = makePathOfMyOpinion(result.getTarget().getTargetOfHeartbeatPath());
-        byte[] data;
+
+        if (refData.isSubmitMyOpinion()) {
+        		try {
+					OpinionData op = opinionDao.getOpinion(path);
+					if (op.getOpinion().equals(newState) 
+							&& op.getStatetimestamp() == stateTimestamp
+							&& op.getVersion() == refData.getZkData().version) {
+						return;
+					} else {
+						removeMyOpinion(refData, result, result.getState());
+					}
+				} catch (NoNodeException e) {
+					// Ignore
+				}
+        }
         
-        data = makeDataOfMyOpinion(refData, stateTimestamp, result, newState);
+        byte[] data = makeDataOfMyOpinion(refData, stateTimestamp, result, newState);
         
         try {
             zookeeper.createEphemeralZNode(path, data);
@@ -185,7 +173,7 @@ public class HBResultProcessor {
             throw e;
         }
         
-        Logger.info(result.toString());
+        Logger.info("Put " + result.toString());
         
         refData.setLastState(newState);
         refData.setLastStateTimestamp(stateTimestamp);
@@ -193,15 +181,11 @@ public class HBResultProcessor {
     }
     
     private void removeMyOpinion(HBRefData refData, HBResult result,
-            String newState) throws MgmtZooKeeperException {
+            String newView) throws MgmtZooKeeperException {
         String path = makePathOfMyOpinion(result.getTarget().getTargetOfHeartbeatPath());
 
         zookeeper.deleteZNode(path, -1);
 
-        Logger.info(result.toString());
-
-        refData.setLastState(Constant.SERVER_STATE_UNKNOWN);
-        refData.setLastStateTimestamp(0L);
         refData.setSubmitMyOpinion(false);
     }
     
@@ -224,7 +208,7 @@ public class HBResultProcessor {
         HBRefData.ZKData zkData = data.getZkData(); 
         return MessageFormatter.arrayFormat(OPINION_FORMAT,
             new Object[] { config.getIp() + ":" + config.getPort(),
-                            newState, zkData.version, stateTimestamp });
+                            newState, zkData.version, stateTimestamp, System.currentTimeMillis() });
     }
     
 }

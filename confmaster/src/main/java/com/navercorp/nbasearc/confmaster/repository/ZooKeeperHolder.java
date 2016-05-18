@@ -448,7 +448,7 @@ public class ZooKeeperHolder {
             throw new MgmtZooKeeperException(e);
         }
     }
-    
+
     public String getIpPort() {
         return ipPort;
     }

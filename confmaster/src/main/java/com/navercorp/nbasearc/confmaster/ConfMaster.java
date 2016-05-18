@@ -38,6 +38,7 @@ import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.server.command.CommandExecutor;
 import com.navercorp.nbasearc.confmaster.server.command.ConfmasterService;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionHandler;
+import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionSupport;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
 import com.navercorp.nbasearc.confmaster.statistics.Statistics;
 
@@ -69,17 +70,16 @@ public class ConfMaster {
     @Autowired
     private HeartbeatChecker heartbeatChecker;
     
-    @Autowired
     private GracefulTerminator terminator;
     
     private ClusterContollerServer server;
     
     public void initialize() throws InterruptedException,
-            MgmtZooKeeperException, KeeperException, Exception {        
-        Statistics.initialize(config, jobExecutor);
+            MgmtZooKeeperException, KeeperException, Exception {
+        terminator = new GracefulTerminator(
+                context.getBean(LeaderElectionSupport.class));
         
-        // Add shutdown hook
-        Runtime.getRuntime().addShutdownHook(terminator);
+        Statistics.initialize(config, jobExecutor);
         
         // Heartbeat layer
         heartbeatChecker.initialize();
@@ -124,15 +124,22 @@ public class ConfMaster {
     }
     
     public static void main(String[] args) {
+        String applicationContextPath = "classpath:applicationContext.xml";
+        if (args.length != 0) {
+            applicationContextPath = "classpath:" + args[0];
+        }
+        
         ClassPathXmlApplicationContext context = null;
         ConfMaster cc = null;
         
         try {
-            context = new ClassPathXmlApplicationContext(
-                    "classpath:applicationContext.xml");
+            context = new ClassPathXmlApplicationContext(applicationContextPath);
             cc = context.getBean(ConfMaster.class);
-
+            
             cc.initialize();
+
+            // Add shutdown hook
+            Runtime.getRuntime().addShutdownHook(cc.terminator);
 
             cc.run();
 
@@ -142,6 +149,11 @@ public class ConfMaster {
             Logger.error("Exception propagated to the main.", e);
             Logger.flush(DEBUG);
         }
+    }
+
+    public void terminate() {
+        terminator.terminate();;
+        terminator.await();
     }
     
 }

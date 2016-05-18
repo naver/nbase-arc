@@ -26,7 +26,7 @@ import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
-import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
 import com.navercorp.nbasearc.confmaster.repository.znode.RedisServerData;
@@ -34,7 +34,7 @@ import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
 
 public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarget {
     
-    private BlockingSocket serverConnection;    
+    private BlockingSocketImpl serverConnection;    
     private String clusterName;
     
     private HBSession hbc;
@@ -56,7 +56,7 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
         setData(data);
         
         setServerConnection(
-            new BlockingSocket(
+            new BlockingSocketImpl(
                 this.getData().getPmIp(), this.getData().getRedisPort(), 
                 config.getClusterPgsTimeout(), Constant.REDIS_PING, 
                 config.getDelim(), config.getCharset()));
@@ -114,7 +114,7 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
     }
 
     @Override
-    public String getState() {
+    public String getView() {
         return this.getData().getState();
     }
 
@@ -194,7 +194,7 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
         this.hbc = hbc;
     }
     
-    public String getRealState() {
+    public String replPing() {
         try {
             String reply = executeQuery(Constant.PGS_PING);
             Logger.info("CMD=\"" + Constant.PGS_PING + 
@@ -212,11 +212,11 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
         }
     }
 
-    public BlockingSocket getServerConnection() {
+    public BlockingSocketImpl getServerConnection() {
         return serverConnection;
     }
 
-    public void setServerConnection(BlockingSocket serverConnection) {
+    public void setServerConnection(BlockingSocketImpl serverConnection) {
         this.serverConnection = serverConnection;
     }
     

@@ -82,8 +82,4 @@ public class LogHistoryHolder {
         logHistory.log(prevLogHistory);
     }
 
-    public void setContextType(ContextType type) {
-        logHistory.setContextType(type);
-    }
-
 }

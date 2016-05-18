@@ -49,6 +49,8 @@ public class Config {
     private Integer serverJobThreadMax;
     @Value("${confmaster.server.workflow.log.max}")
     private Integer serverJobWorkflowLogMax;
+    @Value("${confmaster.server.workflow.pg.reconfig.delay}")
+    private Long serverJobWorkflowPgReconfigDelay;
     @Value("${confmaster.server.command.rolechange.logcatch.timeout}")
     private Long serverCommandRolechangeLogcatchTimeout;
     @Value("${confmaster.server.command.rolechange.lconn.timeout}")
@@ -170,6 +172,10 @@ public class Config {
     
     public Long getStatisticsInterval() {
         return statisticsInterval;
+    }
+
+    public Long getServerJobWorkflowPgReconfigDelay() {
+        return serverJobWorkflowPgReconfigDelay;
     }
 
 }

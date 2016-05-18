@@ -51,7 +51,7 @@ public class WorkflowTemplate implements Callable<Object> {
     public WorkflowTemplate(String workflow, Object[] args, 
             ApplicationContext context, Map<String, WorkflowCaller> workflowMethods, 
             Map<String, LockCaller> lockMethods) {
-        this.workflow  = workflow.toString();
+        this.workflow  = workflow;
         this.args = args;
         this.context = context;
         this.workflowMethods = workflowMethods;
@@ -93,10 +93,10 @@ public class WorkflowTemplate implements Callable<Object> {
     }
     
     private void checkPrivilege() throws MgmtPrivilegeViolationException {
-        final WorkflowCaller methodr = workflowMethods.get(workflow);
-        if (!LeaderState.getPrevilege().isGreaterOrEqual(methodr.getPrivilege())) {
+        final WorkflowCaller method = workflowMethods.get(workflow);
+        if (!LeaderState.getPrevilege().isGreaterOrEqual(method.getPrivilege())) {
             throw new MgmtPrivilegeViolationException(
-                methodr + " requires " + methodr.getPrivilege() + 
+                method + " requires " + method.getPrivilege() + 
                 " ,but " + LeaderState.getPrevilege());
         }
     }

@@ -17,6 +17,7 @@
 package com.navercorp.nbasearc.confmaster.repository.znode;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.SortedMap;
 import java.util.TreeMap;
@@ -103,16 +104,28 @@ public class PartitionGroupData implements Cloneable {
         return masterGenMap.get(gen);
     }
     
+    public long minMaxLogSeq(Integer fromGen) {
+        if (fromGen < masterGenMap.firstKey()) {
+            return 0L;
+        }
+        
+        return Collections.min(masterGenMap.tailMap(fromGen).values());
+    }
+    
     public Long currentSeq() {
-        return commitSeq(currentGen() - 1);
+        return commitSeq(currentGen());
     }
 
     public int currentGen() {
         if (masterGenMap.isEmpty()) {
-            return 0;
+            return -1;
         } else {
-            return masterGenMap.lastKey() + 1;
+            return masterGenMap.lastKey();
         }
+    }
+    
+    public int nextGen() {
+        return currentGen() + 1;
     }
 
     @SuppressWarnings("unchecked")

@@ -24,7 +24,7 @@ import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.annotate.JsonPropertyOrder;
 import org.codehaus.jackson.map.ObjectMapper;
 
-import com.navercorp.nbasearc.confmaster.Constant;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 @JsonAutoDetect(
         fieldVisibility=Visibility.ANY, 
@@ -35,7 +35,7 @@ import com.navercorp.nbasearc.confmaster.Constant;
 @JsonPropertyOrder(
         { "pg_ID", "pm_Name", "pm_IP", "backend_Port_Of_Redis",
         "replicator_Port_Of_SMR", "management_Port_Of_SMR", "state",
-        "stateTimestamp", "hb", "smr_Role", "old_SMR_Role", "master_Gen" })
+        "stateTimestamp", "hb", "smr_Role", "old_SMR_Role", "color", "master_Gen" })
 public class PartitionGroupServerData implements Cloneable {
     
     @JsonProperty("pg_ID")
@@ -58,6 +58,8 @@ public class PartitionGroupServerData implements Cloneable {
     private String hb;
     @JsonProperty("smr_Role")
     private String role;
+    @JsonProperty("color")
+    private Color color;
     @JsonProperty("master_Gen")
     private int masterGen;
 
@@ -72,6 +74,7 @@ public class PartitionGroupServerData implements Cloneable {
                             final int smrMgmtPort,
                             final String state,
                             final String smrRole,
+                            final Color color,
                             final int masterGen,
                             final String hb) {
         this.pgId = pgId;
@@ -83,6 +86,7 @@ public class PartitionGroupServerData implements Cloneable {
         this.state = state;
         this.stateTimestamp = 0;
         this.role = smrRole;
+        this.color = color;
         this.masterGen = masterGen;
         this.hb = hb;
     }
@@ -153,6 +157,14 @@ public class PartitionGroupServerData implements Cloneable {
 
     protected void setRole(String role) {
         this.role = role;
+    }
+
+    public Color getColor() {
+        return color;
+    }
+
+    public void setColor(Color color) {
+        this.color = color;
     }
 
     public int getMasterGen() {

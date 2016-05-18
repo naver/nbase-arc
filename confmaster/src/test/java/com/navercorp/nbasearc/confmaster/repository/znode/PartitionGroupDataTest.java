@@ -113,4 +113,25 @@ public class PartitionGroupDataTest {
         assertEquals(data.getPgsIdList(), Arrays.asList(new Integer[]{1, 51}));
     }
     
+    @Test
+    public void minCommitSeq() throws JsonParseException, JsonMappingException, IOException {
+        ObjectMapper mapper = new ObjectMapper();
+
+        PartitionGroupData sequential = mapper.readValue(
+                "{\"master_Gen_Map\":{\"0\":0,\"1\":100,\"2\":200,\"3\":300}}",
+                PartitionGroupData.class);
+        assertEquals(0, sequential.minMaxLogSeq(0));
+        assertEquals(100, sequential.minMaxLogSeq(1));
+        assertEquals(200, sequential.minMaxLogSeq(2));
+        assertEquals(300, sequential.minMaxLogSeq(3));
+        
+        PartitionGroupData prominent = mapper.readValue(
+                "{\"master_Gen_Map\":{\"0\":0,\"1\":100,\"2\":3000,\"3\":2500}}",
+                PartitionGroupData.class);
+        assertEquals(0, prominent.minMaxLogSeq(0));
+        assertEquals(100, prominent.minMaxLogSeq(1));
+        assertEquals(2500, prominent.minMaxLogSeq(2));
+        assertEquals(2500, prominent.minMaxLogSeq(3));
+    }
+    
 }

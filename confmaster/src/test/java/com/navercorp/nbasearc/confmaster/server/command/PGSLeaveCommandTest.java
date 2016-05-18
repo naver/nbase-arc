@@ -16,8 +16,9 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -27,7 +28,6 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.server.cluster.PGSComponentMock;
-import com.navercorp.nbasearc.confmaster.server.cluster.PGSJoinLeaveSetting;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
@@ -50,22 +50,28 @@ public class PGSLeaveCommandTest extends BasicSetting {
     
     @Test
     public void pgsJoinLeave() throws Exception {
-        final int index = 0;
+        PGSComponentMock mockup[] = new PGSComponentMock[2]; 
         createCluster();
         createPm();
         createPg();
-        createPgs(index);
-
-        // Mock up watchers
-        PGSComponentMock mockup = new PGSComponentMock(getPgs(index), getRs(index));
         
-        // PGS Join
-        joinLeave.pgsJoin(getPgs(index), getRs(index), mockup);
+        for (int i = 0; i < 2; i++) {
+            createPgs(i);
+    
+            // Mock up watchers
+            mockup[i] = new PGSComponentMock(getPgs(i), getRs(i));
+            
+            // PGS Join
+            joinLeave.pgsJoin(getPgs(i), getRs(i), mockup[i]);
+        }
         
         // PGS Leave
-        joinLeave.pgsLeave(getPgs(index), getRs(index), mockup);
+        joinLeave.pgsLeave(getPgs(1), getRs(1), mockup[1], "");
+        joinLeave.pgsLeave(getPgs(0), getRs(0), mockup[0], FORCED);
 
-        deletePgs(index, true);
+        for (int i = 0; i < 2; i++) {
+            deletePgs(i, true);
+        }
         deletePg();
         deleteCluster();
         deletePm();

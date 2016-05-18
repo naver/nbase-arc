@@ -28,7 +28,7 @@ import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
-import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
 import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
@@ -41,7 +41,7 @@ import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerGw;
 
 public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     
-    private BlockingSocket serverConnection;
+    private BlockingSocketImpl serverConnection;
     private String clusterName;
     
     private HBSession hbc;
@@ -65,7 +65,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
         setData(data);
         
         setServerConnection(
-            new BlockingSocket(
+            new BlockingSocketImpl(
                 getData().getPmIp(), getData().getPort() + 1, 
                 config.getClusterGwTimeout(), Constant.GW_PING,
                 config.getDelim(), config.getCharset()));
@@ -171,7 +171,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     }
 
     @Override
-    public String getState() {
+    public String getView() {
         return this.getData().getState();
     }
     
@@ -238,11 +238,11 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
         this.watcher = watcher;
     }
     
-    public BlockingSocket getServerConnection() {
+    public BlockingSocketImpl getServerConnection() {
         return serverConnection;
     }
 
-    public void setServerConnection(BlockingSocket serverConnection) {
+    public void setServerConnection(BlockingSocketImpl serverConnection) {
         this.serverConnection = serverConnection;
     }
 

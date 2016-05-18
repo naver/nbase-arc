@@ -9,6 +9,18 @@
 
 	<bean class="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor"></bean>
 	
+	<bean id="faultInjectionService"
+		class="com.navercorp.nbasearc.confmaster.faultinjection.FaultInjectionServiceImpl"/>
+
+	<bean id="RARoleLconn" class="com.navercorp.nbasearc.confmaster.faultinjection.RARoleLconnFI"/>
+	<bean id="RASetquorum" class="com.navercorp.nbasearc.confmaster.faultinjection.RASetquorumFI"/>
+	<bean id="MERoleMaster" class="com.navercorp.nbasearc.confmaster.faultinjection.MERoleMasterFI"/>
+	<bean id="MERoleLconn" class="com.navercorp.nbasearc.confmaster.faultinjection.MERoleLconnFI"/>
+	<bean id="QASetquorum" class="com.navercorp.nbasearc.confmaster.faultinjection.QASetquorumFI"/>
+	<bean id="BJRoleSlave" class="com.navercorp.nbasearc.confmaster.faultinjection.BJRoleSlaveFI"/>
+	<bean id="YJRoleSlave" class="com.navercorp.nbasearc.confmaster.faultinjection.YJRoleSlaveFI"/>
+	<bean id="MGSetquorum" class="com.navercorp.nbasearc.confmaster.faultinjection.MGSetquorumFI"/>
+	
 	<context:annotation-config />
 	
 	<bean class="com.navercorp.nbasearc.confmaster.EmbeddedZooKeeper"

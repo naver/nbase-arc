@@ -30,7 +30,13 @@ import com.navercorp.nbasearc.confmaster.context.ContextType;
 public class Logger {
     
     public static void setContextType(ContextType type) {
-        ThreadLocalVariableHolder.getLogHistoryHolder().setContextType(type);
+        ThreadLocalVariableHolder.getLogHistoryHolder().getLogHistory()
+                .setContextType(type);
+    }
+
+    public static void setMsgDecorator(MsgDecorator decorator) {
+        ThreadLocalVariableHolder.getLogHistoryHolder().getLogHistory()
+                .setMsgDecorator(decorator);
     }
 
     public static void error(String msg) {        

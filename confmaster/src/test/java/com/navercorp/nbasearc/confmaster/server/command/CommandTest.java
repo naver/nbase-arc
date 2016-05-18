@@ -16,24 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
-import static com.navercorp.nbasearc.confmaster.Constant.GW_PING;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_PONG;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_NO;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_MASTER;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_NONE;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_SLAVE;
-import static com.navercorp.nbasearc.confmaster.Constant.REDIS_PONG;
-import static com.navercorp.nbasearc.confmaster.Constant.REDIS_REP_PING;
-import static com.navercorp.nbasearc.confmaster.Constant.S2C_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_FAILURE;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_NORMAL;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_UNKNOWN;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_BLOCKER;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_CRITICAL;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_MAJOR;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_MINOR;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_MODERATE;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -52,7 +35,6 @@ import java.util.concurrent.Callable;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -65,7 +47,7 @@ import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
-import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
@@ -76,7 +58,6 @@ import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
-import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
@@ -331,7 +312,7 @@ public class CommandTest extends BasicSetting {
         assertNotNull(gateway);
         gateway.getData().setState(SERVER_STATE_NORMAL);
         
-        BlockingSocket sock = mock(BlockingSocket.class);
+        BlockingSocketImpl sock = mock(BlockingSocketImpl.class);
         gateway.setServerConnection(sock);
         when(sock.execute(anyString())).thenReturn(S2C_OK);
         when(sock.execute(GW_PING)).thenReturn(GW_PONG);
@@ -348,7 +329,7 @@ public class CommandTest extends BasicSetting {
                 .withState(SERVER_STATE_NORMAL).build();
         getPgs(id).setData(pgsModified);
 
-        sock = mock(BlockingSocket.class);
+        sock = mock(BlockingSocketImpl.class);
         getPgs(id).setServerConnection(sock);
         when(sock.execute(anyString())).thenReturn(S2C_OK);
         when(sock.execute("ping")).thenReturn("+OK 1 1400000000");
@@ -411,12 +392,12 @@ public class CommandTest extends BasicSetting {
         
         PartitionGroupServerData pgsData = new PartitionGroupServerData();
         pgsData.initialize(0, pmName, pmData.getIp(), 8109, 8100, 8103,
-                SERVER_STATE_FAILURE, PGS_ROLE_NONE, 0, HB_MONITOR_NO);
+                SERVER_STATE_FAILURE, PGS_ROLE_NONE, Color.RED, -1, HB_MONITOR_NO);
         HBRefData hbcRefData = new HBRefData();
         hbcRefData.setLastState(SERVER_STATE_UNKNOWN);
         hbcRefData.setLastStateTimestamp(0);
         hbcRefData.setSubmitMyOpinion(false);
-        hbcRefData.setZkData(SERVER_STATE_FAILURE, 0, 0);
+        hbcRefData.setZkData(PGS_ROLE_NONE, 0, 0);
         String pgsInfoAll = "{\"MGMT\":" + pgsData + ",\"HBC\":" + hbcRefData + "}";
         assertEquals("check result of pgs_info_all", pgsInfoAll, result.getMessages().get(0));
     }
@@ -426,7 +407,7 @@ public class CommandTest extends BasicSetting {
         JobResult result = doCommand("pgs_info " + clusterName + " 0");
         PartitionGroupServerData pgsData = new PartitionGroupServerData();
         pgsData.initialize(0, pmName, pmData.getIp(), 8109, 8100, 8103,
-                SERVER_STATE_FAILURE, PGS_ROLE_NONE, 0, HB_MONITOR_NO);
+                SERVER_STATE_FAILURE, PGS_ROLE_NONE, Color.RED, -1, HB_MONITOR_NO);
         assertEquals("check result of pgs_info", pgsData.toString(), result.getMessages().get(0));
     }
 
@@ -441,7 +422,7 @@ public class CommandTest extends BasicSetting {
         doNothing().when(handler).handleResult(anyString(), anyString());
         getPgs(id).getHbc().setHandler(handler);
 
-        BlockingSocket msock = mock(BlockingSocket.class);
+        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
         getPgs(id).setServerConnection(msock);
         when(msock.execute(anyString())).thenReturn(S2C_OK);
         
@@ -467,7 +448,7 @@ public class CommandTest extends BasicSetting {
         doNothing().when(handler).handleResult(anyString(), anyString());
         getPgs(id).getHbc().setHandler(handler);
 
-        BlockingSocket msock = mock(BlockingSocket.class);
+        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
         getPgs(id).setServerConnection(msock);
         when(msock.execute(anyString())).thenReturn(S2C_OK);
         when(msock.execute("getseq log")).thenReturn(
@@ -479,7 +460,7 @@ public class CommandTest extends BasicSetting {
                 new PartitionGroupServer.RealState(false, 
                         SERVER_STATE_FAILURE, PGS_ROLE_NONE, 0L));
         
-        JobResult result = doCommand("pgs_sync " + clusterName + " " + id);
+        JobResult result = doCommand("pgs_sync " + clusterName + " " + id + " " + FORCED);
         assertEquals("check result of pgs_sync", ok, result.getMessages().get(0));
     }
 
@@ -496,41 +477,6 @@ public class CommandTest extends BasicSetting {
         JobResult result = doCommand("pm_ls");
         String pmInfo = "{\"list\":[\"test01.arc\"]}";
         assertEquals("check result of pm_ls", pmInfo, result.getMessages().get(0));
-    }
-
-    @Test
-    public void roleChange() throws Exception {
-        // Mock PGS
-        for (int id = 0; id < MAX_PGS; id++) {
-            final HBSessionHandler handler = mock(HBSessionHandler.class);
-            final PartitionGroupServer pgs = getPgs(id);
-            doNothing().when(handler).handleResult(anyString(), anyString());
-            pgs.getHbc().setHandler(handler);
-            
-            PartitionGroupServerData pgsModified = 
-                PartitionGroupServerData.builder().from(pgs.getData())
-                    .withRole(id == 0 ? PGS_ROLE_MASTER : PGS_ROLE_SLAVE)
-                    .withState(SERVER_STATE_NORMAL)
-                    .withHb(HB_MONITOR_YES).build();
-            pgs.setData(pgsModified);
-            
-            BlockingSocket sock = mock(BlockingSocket.class);
-            pgs.setServerConnection(sock);
-            when(sock.execute(anyString())).thenReturn(S2C_OK);
-            when(sock.execute("ping")).thenReturn("+OK 1 1400000000");
-            when(sock.execute("getquorum")).thenReturn("1");
-            when(sock.execute("getseq log")).thenReturn("+OK log min:0 commit:0 max:0 be_sent:0");
-            
-            final RedisServer rs = getRs(id);
-            sock = mock(BlockingSocket.class);
-            rs.setServerConnection(sock);
-            when(sock.execute(REDIS_REP_PING)).thenReturn(REDIS_PONG);
-        }
-        
-        // Perform role_change
-        JobResult result = doCommand("role_change " + clusterName + " 1");
-        String expected = "{\"master\":1,\"role_slave_error\":[]}";
-        assertEquals("check result of role_change", expected, result.getMessages().get(0));
     }
     
     @Test

@@ -87,7 +87,7 @@ public class HBRefData {
     }
 
     public class ZKData {
-        public String state;
+        public String state; // M,S,L,N for PGS, N,F for GW and Redis.
         public long stateTimestamp;
         public int version;
     }

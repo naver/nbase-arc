@@ -176,7 +176,7 @@ def initialize_info_of_cm_about_pgs( cluster, server, leader_cm, pg_id=None ):
 
 
 def finalize_info_of_cm_about_pgs( cluster, server, leader_cm ):
-    cmd = 'pgs_leave %s %d' % (cluster['cluster_name'], server['id'])
+    cmd = 'pgs_leave %s %d forced' % (cluster['cluster_name'], server['id'])
     result = util.cm_command( leader_cm['ip'], leader_cm['cm_port'], cmd )
     jobj = json.loads(result)
     if jobj['state'] != 'success':

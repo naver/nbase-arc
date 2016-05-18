@@ -29,7 +29,7 @@ public class PartitionGroupServerDataTest {
     public PartitionGroupServerData build() {
         PartitionGroupServerData d = new PartitionGroupServerData();
         d.initialize(0, "test01.pm", "192.168.0.10", 5009, 5000, 5003,
-                SERVER_STATE_NORMAL, PGS_ROLE_SLAVE, 0, HB_MONITOR_YES);
+                SERVER_STATE_NORMAL, PGS_ROLE_SLAVE, Color.RED, 0, HB_MONITOR_YES);
         d.setStateTimestamp(1000L);
         return d;
     }

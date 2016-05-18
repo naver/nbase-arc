@@ -312,11 +312,35 @@ def cluster_info(mgmt_ip, mgmt_port, cluster_name):
         return None
 
 
+def pg_info(mgmt_ip, mgmt_port, cluster_name, pg_id):
+    reply = cm_command(mgmt_ip, mgmt_port, 'pg_info %s %d' % (cluster_name, pg_id))
+    log('pg_info ret : %s' % reply)
+    ret = json.loads(reply)
+    if ret == None:
+        log('cluster_info fail, cluster_name:%s, pg_id:%d' % (cluster_name, pg_id))
+        return None
+
+    state = ret['state']
+    if 'success' == state:
+        return ret['data']
+    else:
+        return None
+
+
 def get_pgs_info(mgmt_ip, mgmt_port, cluster_name, pgs_id):
     reply = cm_command(mgmt_ip, mgmt_port, 'pgs_info %s %s\r\n' % (cluster_name, pgs_id))
     ret = json.loads(reply)
     pgs_info = ret['data']
+    pgs_info['pgs_id'] = pgs_id
     return pgs_info
+
+
+def get_pgs_info_list(mgmt_ip, mgmt_port, cluster):
+    infoList= []
+    for s in cluster['servers']:
+        info = get_pgs_info(mgmt_ip, mgmt_port, cluster['cluster_name'], s['id'])
+        infoList.append(info)
+    return infoList
 
 
 def get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id):
@@ -334,9 +358,9 @@ def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=Fal
     ok = True
     cluster = cluster_info(mgmt_ip, mgmt_port, cluster_name)
     for pg in sorted(cluster['pg_list'], key=lambda k: int(k['pg_id'])):
-        pg_id = pg['pg_id']
+        pg['pg_id']
         log('')
-        log('PG %s' % pg_id)
+        log('PG %s' % pg['pg_id'])
 
         master_count = 0
         slave_count = 0
@@ -348,7 +372,7 @@ def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=Fal
             ip = pgs_info['pm_IP']
             port = pgs_info['management_Port_Of_SMR']
             role = smr_role(ip, port, False)
-            msg = '%s:%s a(%s) m(%s) %d' % (ip, port, role, pgs_info['smr_Role'], role.ts)
+            msg = '%s:%s a%s m%s %s %d' % (ip, port, role, pgs_info['smr_Role'], pgs_info['color'][:1], role.ts)
             if role == pgs_info['smr_Role']:
                 log('+%s' % msg)
                 if role == 'M':
@@ -361,19 +385,14 @@ def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=Fal
                 log('@%s' % msg)
 
             if state != None:
-                state.append({'pgs_id':pgs_id, 'ip':ip, 'port':port, 'mgmt_role':pgs_info['smr_Role'], 'active_role':role, 'active_ts':role.ts,'quorum':quorum})
+                state.append({'pgs_id':pgs_id, 'ip':ip, 'port':port, 'mgmt_role':pgs_info['smr_Role'], 'active_role':role, 'active_ts':role.ts,'quorum':quorum,'color':pgs_info['color']})
 
         expected_slave_count = 1
         if len(pgs_id_list) == 3:
             expected_slave_count = 2
 
         if check_quorum:
-            qp = json.loads(cluster['cluster_info']['Quorum_Policy'])
-            if len(qp) >= master_count + slave_count:
-                expected_quorum = int(qp[master_count + slave_count - 1])
-            else:
-                expected_quorum = int(qp[len(qp) - 1])
-
+            expected_quorum = slave_count
             if False == (master_count == 1 and slave_count == expected_slave_count and quorum == expected_quorum):
                 ok = False
 
@@ -1764,7 +1783,7 @@ def upgrade_pgs(upgrade_server, leader_cm, cluster):
             log('succeeded : role consistency, %s:%d %s==%s' % (s['ip'], s['smr_mgmt_port'], cm_role, active_role))
 
     # detach pgs from cluster
-    cmd = 'pgs_leave %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
+    cmd = 'pgs_leave %s %d forced\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
     ret = cm_command(leader_cm['ip'], leader_cm['cm_port'], cmd)
     jobj = json.loads(ret)
     if jobj['msg'] != '+OK':

@@ -11,6 +11,7 @@
         <slf4j.version>1.5.8</slf4j.version>
         <log4j.version>1.2.14</log4j.version>
         <jackson.version>1.8.10</jackson.version>
+        <maven.jar.plugin.version>2.4</maven.jar.plugin.version>
         <clover.version>3.1.6</clover.version>
         <clover.license.location>${basedir}/clover.license</clover.license.location>
     </properties>
@@ -114,7 +115,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
-                <version>2.4</version>
+                <version>${maven.jar.plugin.version}</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -316,6 +317,70 @@
                     <version>${clover.version}</version>
                 </dependency>
             </dependencies>
+		    <build>        
+			    <plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>build-helper-maven-plugin</artifactId>
+						<version>1.7</version>
+						<executions>
+							<execution>
+								<id>add-source</id>
+								<phase>generate-sources</phase>
+								<goals>
+									<goal>add-source</goal>
+									<goal>add-resource</goal>
+								</goals>
+								<configuration>
+									<sources>
+										<source>src/test/java/com/navercorp/nbasearc/confmaster/faultinjection</source>
+									</sources>
+              						<resources>
+									<resource>
+										<directory>src/test/resources</directory>
+									</resource>
+              						</resources>
+								</configuration>
+							</execution>
+						</executions>
+					</plugin>
+		            <plugin>
+		                <groupId>org.apache.maven.plugins</groupId>
+		                <artifactId>maven-resources-plugin</artifactId>
+		                <version>2.6</version>
+		                <executions>
+		                    <execution>
+		                        <id>copy-resources</id>
+		                        <phase>validate</phase>
+		                        <goals>
+		                            <goal>copy-resources</goal>
+		                        </goals>
+		                        <configuration>
+		                            <encoding>${encoding}</encoding>
+		                            <outputDirectory>${project.basedir}/target</outputDirectory>
+		                            <resources>
+		                                <resource>
+		                                    <directory>${project.basedir}/src/main/resources</directory>
+		                                    <includes>
+		                                        <include>cc.properties</include>
+		                                        <include>applicationContext.xml</include>
+		                                    </includes>
+		                                    <filtering>true</filtering>
+		                                </resource>
+		                                <resource>
+		                                    <directory>${project.basedir}/src/test/resources</directory>
+		                                    <includes>
+		                                        <include>applicationContext-fi.xml</include>
+		                                    </includes>
+		                                    <filtering>true</filtering>
+		                                </resource>
+		                            </resources>
+		                        </configuration>
+		                    </execution>
+		                </executions>
+		            </plugin>
+			    </plugins>
+			</build>
         </profile>
     </profiles>
 

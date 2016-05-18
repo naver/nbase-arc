@@ -52,17 +52,34 @@ public class WorkflowExecutor {
     
     private Map<String, WorkflowCaller> workflowMethods = new HashMap<String, WorkflowCaller>();
     private Map<String, LockCaller> lockMethods = new HashMap<String, LockCaller>();
+    private Map<String, ContextType> ctMap = new HashMap<String, ContextType>();
     
     public WorkflowExecutor() {
+        ctMap.put(COMMON_STATE_DECISION, ContextType.HB);
+        ctMap.put(PGS_STATE_DECISION, ContextType.HB);
+        ctMap.put(BLUE_JOIN, ContextType.BJ);
+        ctMap.put(MASTER_ELECTION, ContextType.ME);
+        ctMap.put(MEMBERSHIP_GRANT, ContextType.MG);
+        ctMap.put(ROLE_ADJUSTMENT, ContextType.RA);
+        ctMap.put(QUORUM_ADJUSTMENT, ContextType.QA);
+        ctMap.put(YELLOW_JOIN, ContextType.YJ);
+        ctMap.put(OPINION_DISCARD, ContextType.HB);
+        ctMap.put(OPINION_PUBLISH, ContextType.HB);
+        ctMap.put(UPDATE_HEARTBEAT_CHECKER, ContextType.HB);
     }
     
-    public static final String FAILOVER_COMMON = "FailoverCommon";
-    public static final String FAILOVER_PGS = "FailoverPgs";
+    public static final String COMMON_STATE_DECISION = "CommonStateDecision";
+    public static final String PGS_STATE_DECISION = "PGSStateDecision";
+    public static final String BLUE_JOIN = "BlueJoin";
+    public static final String MASTER_ELECTION = "MasterElection";
+    public static final String MEMBERSHIP_GRANT = "MembershipGrant";
+    public static final String ROLE_ADJUSTMENT = "RoleAdjustment";
+    public static final String QUORUM_ADJUSTMENT = "QuorumAdjustment";
+    public static final String YELLOW_JOIN = "YellowJoin";
     public static final String OPINION_DISCARD = "OpinionDiscard";
     public static final String OPINION_PUBLISH = "OpinionPublish";
-    public static final String SET_QUORUM = "SetQuorum";
     public static final String UPDATE_HEARTBEAT_CHECKER = "UpdateHeartbeatChecker";
-        
+    
     public void initialize() {
         Map<String, Object> servies = context.getBeansWithAnnotation(Service.class);
         
@@ -111,6 +128,10 @@ public class WorkflowExecutor {
         return sb.toString();
     }
     
+    public ContextType getContextType(String workflow) {
+        return ctMap.get(workflow);
+    }
+    
     public Future<Object> perform(String workflow, Object ... args) {
         if (!checkPrivilege(workflow)) {
             return null;
@@ -123,12 +144,12 @@ public class WorkflowExecutor {
         WorkflowTemplate wf = new WorkflowTemplate(
                 workflow, objects, context, workflowMethods, lockMethods);
         ExecutionContext<Object> c = 
-                new ExecutionContext<Object>(wf, ContextType.WF, executor);
+                new ExecutionContext<Object>(wf, getContextType(workflow), executor);
         return executor.perform(c);
     }
-
-    public Future<Object> performContextContinue(String workflow,
-            Object... args) throws MgmtDuplicatedReservedCallException {
+    
+    public Future<Object> performDelayed(String workflow, long delay, TimeUnit timeUnit,
+            Object... args) {
         if (!checkPrivilege(workflow)) {
             return null;
         }
@@ -139,8 +160,25 @@ public class WorkflowExecutor {
         }
         WorkflowTemplate wf = new WorkflowTemplate(
                 workflow, objects, context, workflowMethods, lockMethods);
+        ExecutionContext<Object> c = 
+                new ExecutionContext<Object>(wf, getContextType(workflow), executor);
+        return executor.performDelayed(c, delay, timeUnit);
+    }
+
+    public void performContextContinue(String workflow,
+            Object... args) throws MgmtDuplicatedReservedCallException {
+        if (!checkPrivilege(workflow)) {
+            return;
+        }
+        
+        Object[] objects = new Object[args.length];
+        for (int i = 0; i < objects.length; i++) {
+            objects[i] = args[i];
+        }
+        WorkflowTemplate wf = new WorkflowTemplate(
+                workflow, objects, context, workflowMethods, lockMethods);
         ContextChain.setNextJob(wf, 0, TimeUnit.MILLISECONDS);
-        return null;
+        return;
     }
 
     public Future<Object> performContextContinueDelayed(String workflow,

@@ -28,6 +28,7 @@ import load_generator
 import config
 import json
 import gateway_mgmt
+import constant as c
 
 class TestMaintenance(unittest.TestCase):
     cluster = config.clusters[0]
@@ -79,28 +80,31 @@ class TestMaintenance(unittest.TestCase):
         self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
-        # check if pgs is removed
-        success = False
-        for try_cnt in range( 10 ):
-            redis = redis_mgmt.Redis( server_to_del['id'] )
-            ret = redis.connect( server_to_del['ip'], server_to_del['redis_port'] )
-            self.assertEquals( ret, 0, 'failed : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
-            util.log( 'succeeded : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
+        r = util.get_role_of_server(server_to_del)
+        # If quorum of left master is larger than 1, info command will be blocked.
+        if r != c.ROLE_MASTER:
+            # check if pgs is removed
+            success = False
+            for try_cnt in range( 10 ):
+                redis = redis_mgmt.Redis( server_to_del['id'] )
+                ret = redis.connect( server_to_del['ip'], server_to_del['redis_port'] )
+                self.assertEquals( ret, 0, 'failed : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
+                util.log( 'succeeded : connect to smr%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
 
-            redis.write( 'info stats\r\n' )
-            for i in range( 6 ):
-                redis.read_until( '\r\n' )
-            res = redis.read_until( '\r\n' )
-            self.assertNotEqual( res, '', 'failed : get reply of "info stats" from redis%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
-            util.log( 'succeeded : get reply of "info stats" from redis%d(%s:%d), reply="%s"' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port'], res[:-2]) )
-            no = int( res.split(':')[1] )
-            if no <= 100:
-                success = True
-                break
-            time.sleep( 1 )
+                redis.write( 'info stats\r\n' )
+                for i in range( 6 ):
+                    redis.read_until( '\r\n' )
+                res = redis.read_until( '\r\n' )
+                self.assertNotEqual( res, '', 'failed : get reply of "info stats" from redis%d(%s:%d)' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port']) )
+                util.log( 'succeeded : get reply of "info stats" from redis%d(%s:%d), reply="%s"' % (server_to_del['id'], server_to_del['ip'], server_to_del['redis_port'], res[:-2]) )
+                no = int( res.split(':')[1] )
+                if no <= 100:
+                    success = True
+                    break
+                time.sleep( 1 )
 
-        self.assertEquals( success, True, 'failed : pgs does not removed.' )
-        util.log( 'succeeded : pgs is removed' )
+            self.assertEquals( success, True, 'failed : pgs does not removed.' )
+        util.log( 'pgs is removed' )
 
         # change state of pgs to lconn
         cmd = 'pgs_lconn %s %d\r\n' % (server_to_del['cluster_name'], server_to_del['id'])
@@ -149,10 +153,11 @@ class TestMaintenance(unittest.TestCase):
             self.load_gen_list[i] = load_gen
 
         # Loop (smr: 3 copy)
-        target_server = util.get_server_by_role(self.cluster['servers'], 'slave')
-        self.assertNotEquals(target_server, None, 'Get slave fail.')
-        target = target_server['id']
         for i in range(30):
+            target_server = util.get_server_by_role(self.cluster['servers'], 'slave')
+            self.assertNotEquals(target_server, None, 'Get slave fail.')
+            target = target_server['id']
+
             print ''
             util.log("(3 copy) Loop:%d, target pgs:%d" % (i, target))
 
@@ -175,11 +180,14 @@ class TestMaintenance(unittest.TestCase):
                 max_try_cnt = 20
                 ok = False
                 for try_cnt in range(max_try_cnt):
-                    pong = util.pingpong(s['ip'], s['redis_port'])
-                    if pong != None and pong == '+PONG\r\n':
-                        ok = True
-                        break
-                    time.sleep(0.1)
+                    try:
+                        pong = util.pingpong(s['ip'], s['redis_port'])
+                        if pong != None and pong == '+PONG\r\n':
+                            ok = True
+                            break
+                    except:
+                        pass
+                    time.sleep(0.2)
                 self.assertTrue(ok, 'redis state error.')
 
             # Get new timestamp
@@ -201,11 +209,21 @@ class TestMaintenance(unittest.TestCase):
         # Loop (smr: 2 copy)
         self.__del_server(self.cluster['servers'][0])
         servers = [self.cluster['servers'][1], self.cluster['servers'][2]]
-        s = util.get_server_by_role(servers, 'slave')
-        target = s['id']
+
+        normal_state = False
+        for i in xrange(20):
+            normal_state = util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], check_quorum=True)
+            if normal_state:
+                break
+            time.sleep(0.5)
+        self.assertTrue(normal_state, "Unstable cluster state")
+
         for i in range(30):
             print ''
             util.log("(2 copy) Loop:%d, target pgs:%d" % (i, target))
+
+            s = util.get_server_by_role(servers, 'slave')
+            target = s['id']
 
             # Get old timestamp
             util.log_server_state( self.cluster )
@@ -285,7 +303,7 @@ class TestMaintenance(unittest.TestCase):
 
         # Check rollback - check quorum
         if master not in hanging_servers:
-            expected = 1
+            expected = 2
             ok = self.__check_quorum(master, expected)
             self.assertTrue(ok, 'rollback quorum fail. expected:%s' % (expected))
 
@@ -321,24 +339,18 @@ class TestMaintenance(unittest.TestCase):
             self.assertNotEqual(s1, None, 'slave1 is None.')
             self.assertNotEqual(s2, None, 'slave2 is None.')
 
-            expected = 1
+            expected = 2
             ok = self.__check_quorum(m, expected)
             self.assertTrue(ok, 'rollback quorum fail. expected:%s' % (expected))
 
-        # Get new timestamp
-        new_timestamps = {}
-        for s in self.cluster['servers']:
-            ts = util.get_timestamp_of_pgs( s )
-            new_timestamps[s['id']] = ts
-
-        # Compare old timestamps and new timestamps
-        for s in self.cluster['servers']:
-            old_ts = old_timestamps[s['id']]
-            new_ts = new_timestamps[s['id']]
-            if master in hanging_servers and len(running_servers) != 0:
-                self.assertNotEqual(old_ts, new_ts, 'Timestamp of a hanging server has not changed. %d->%d' % (old_ts, new_ts))
-            else:
-                self.assertEqual(old_ts, new_ts, 'Timestamp of a running server has changed. %d->%d' % (old_ts, new_ts))
+        # Check cluster state
+        normal_state = False
+        for i in xrange(20):
+            normal_state = util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], check_quorum=True)
+            if normal_state:
+                break
+            time.sleep(0.5)
+        self.assertTrue(normal_state, "Unstable cluster state")
 
         # Cheeck Consistency
         for i in range(self.max_load_generator):
@@ -419,6 +431,15 @@ class TestMaintenance(unittest.TestCase):
             ret = testbase.request_to_shutdown_redis( target )
             self.assertEquals( ret, 0, 'failed to shutdown redis' )
 
+            r = ''
+            expected = 'N'
+            for fc_cnt in xrange(20):
+                r = util.get_smr_role_of_cm(target, self.leader_cm)
+                if r == expected:
+                    break
+                time.sleep(0.5)
+            self.assertEquals(r, expected, 'failure detection error.')
+
             running_servers = []
             for s in self.cluster['servers']:
                 if s != target:
@@ -484,8 +505,17 @@ class TestMaintenance(unittest.TestCase):
             util.log("States (after recovery)")
             util.log_server_state(self.cluster)
 
+            # Check cluster state
+            normal_state = False
+            for i in xrange(20):
+                normal_state = util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], check_quorum=True)
+                if normal_state:
+                    break
+                time.sleep(0.5)
+            self.assertTrue(normal_state, "Unstable cluster state")
+
             # Check quorum
-            expected = 1
+            expected = 2
             ok = self.__check_quorum(m, expected)
             self.assertTrue(ok, 'unexpected quorum(after recovery). expected:%s' % (expected))
 

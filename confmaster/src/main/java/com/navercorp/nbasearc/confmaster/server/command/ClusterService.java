@@ -26,7 +26,6 @@ import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_HA
 import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_HAS_PGS;
 import static com.navercorp.nbasearc.confmaster.Constant.GW_PING;
 import static com.navercorp.nbasearc.confmaster.Constant.GW_PONG;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_QUERY_TIMEOUT;
 import static com.navercorp.nbasearc.confmaster.Constant.GW_RESPONSE_OK;
 import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
 import static com.navercorp.nbasearc.confmaster.Constant.KEY_SPACE_SIZE;
@@ -103,7 +102,7 @@ public class ClusterService {
 
     @Autowired
     private ThreadPool executor;
-
+    
     @Autowired
     private Config config;
 

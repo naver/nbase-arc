@@ -18,11 +18,8 @@ package com.navercorp.nbasearc.confmaster.server.watcher;
 
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.FAILOVER_COMMON;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.COMMON_STATE_DECISION;
 
-import java.io.IOException;
-
-import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.springframework.context.ApplicationContext;
 
@@ -53,7 +50,7 @@ public class WatchEventHandlerRs extends WatchEventHandler {
             rs.getHbc().urgent();
         }
 
-        workflowExecutor.perform(FAILOVER_COMMON, rs);
+        workflowExecutor.perform(COMMON_STATE_DECISION, rs);
     }
 
     @Override

@@ -1,226 +1,145 @@
-/*
- * Copyright 2015 Naver Corp.
- * 
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- *     http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
 import static org.junit.Assert.*;
 
-import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
 
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.MockitoAnnotations;
-import org.springframework.test.context.ContextConfiguration;
-import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
-import com.navercorp.nbasearc.confmaster.BasicSetting;
-import com.navercorp.nbasearc.confmaster.repository.znode.PgDataBuilder;
-import com.navercorp.nbasearc.confmaster.repository.znode.PgsDataBuilder;
-import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
-import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
-import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup.SlaveJoinInfo;
-import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
-
-@RunWith(SpringJUnit4ClassRunner.class)
-@ContextConfiguration("classpath:applicationContext-test.xml")
-public class PartitionGroupTest extends BasicSetting {
-
-    final int MAX_PGS = 3;
-    
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        LeaderState.setLeader();
-        BasicSetting.beforeClass();
-    }
-    
-    @Before
-    public void before() throws Exception {
-        super.before();
-        MockitoAnnotations.initMocks(this);
-    }
-    
-    @After
-    public void after() throws Exception {
-        super.after();
-    }
+public class PartitionGroupTest {
 
     @Test
-    public void checkJoinConstraintMaster() throws Exception {
-        // Initialize
-        createCluster();
-        createPm();
-        createPg();
-        for (int id = 0; id < MAX_PGS; id++) {
-            createPgs(id);
-            mockPgs(id);
-        }
-
-        for (int id = 0; id < MAX_PGS; id++) {
-            mockPgsLconn(getPgs(id));
-        }
+    public void logSequenceOrdering() {
+        Map<String, Long> logSeqMap = new HashMap<String, Long>();
+        logSeqMap.put("0", 0L);
+        logSeqMap.put("1", 10L);
+        logSeqMap.put("3", 30L);
+        logSeqMap.put("2", 20L);
         
-        PartitionGroupServer master = waitRoleMaster(getPgsList());
-        for (int id = 0; id < MAX_PGS; id++) {
-            if (getPgs(id).equals(master)) {
-                continue;
-            }
-            waitRoleSlave(getPgs(id));
-        }
+        List<Map.Entry<String, Long>> logDescend = 
+                new ArrayList<Map.Entry<String, Long>>(logSeqMap.entrySet());
+        Collections.sort(logDescend,
+                new Comparator<Map.Entry<String, Long>>() {
+                    @Override
+                    public int compare(
+                            Entry<String, Long> o1,
+                            Entry<String, Long> o2) {
+                        if (o1.getValue() > o1.getValue()) {
+                            return 1;
+                        } else if (o1.getValue() < o1.getValue()) {
+                            return -1;
+                        } else {
+                            return 0;
+                        }
+                    }
+                });
+
+        assertEquals("3", logDescend.get(0).getKey());
+        assertEquals("2", logDescend.get(1).getKey());
+        assertEquals("1", logDescend.get(2).getKey());
+        assertEquals("0", logDescend.get(3).getKey());
         
-        LogSequence masterLogSeq = new LogSequence();
-        Field logCommit = LogSequence.class.getDeclaredField("logCommit");
-        logCommit.setAccessible(true);
+        assertEquals(Long.valueOf(30L), logDescend.get(0).getValue());
+        assertEquals(Long.valueOf(20L), logDescend.get(1).getValue());
+        assertEquals(Long.valueOf(10L), logDescend.get(2).getValue());
+        assertEquals(Long.valueOf(0L), logDescend.get(3).getValue());
+    }
+    
+    public class ValueSortedMap<K extends Comparable, V extends Comparable> extends TreeMap<K, V> {
+        @Override
+        public Set<Entry<K, V>> entrySet() {
+            Set<Entry<K, V>> originalEntries = super.entrySet();
+            Set<Entry<K, V>> sortedEntry = new TreeSet<Entry<K, V>>(new Comparator<Entry<K, V>>() {
+                @Override
+                public int compare(Entry<K, V> entryA, Entry<K, V> entryB) {
+                    int compareTo = entryA.getValue().compareTo(entryB.getValue());
+                    if(compareTo == 0) {
+                        compareTo = entryA.getKey().compareTo(entryB.getKey());
+                    }
+                    return compareTo;
+                }
+            });
+            sortedEntry.addAll(originalEntries);
+            return sortedEntry;
+        }
 
-        // Master has the same commit sequence of current-mgen-sequence
-        logCommit.set(masterLogSeq, getPg().getData().currentSeq());
-        assertTrue(
-            "Check join constraint for master fail. (Master has the same commit sequence)",
-            getPg().checkJoinConstraintMaster(master, masterLogSeq, 1L, workflowLogDao));
-
-        // Master has the larger commit sequence of current-mgen-sequence        
-        logCommit.set(masterLogSeq, getPg().getData().currentSeq() + 1L);
-        assertTrue(
-            "Check join constraint for master fail. (Master has larger commit sequence)",
-            getPg().checkJoinConstraintMaster(master, masterLogSeq, 1L, workflowLogDao));
-
-        // Master has the less commit sequence of current-mgen-sequence
-        logCommit.set(masterLogSeq, getPg().getData().currentSeq() - 1L);
-        assertFalse(
-            "Check join constraint for master fail. (Master has larger commit sequence)",
-            getPg().checkJoinConstraintMaster(master, masterLogSeq, 1L, workflowLogDao));
+        @Override
+        public Collection<V> values() {
+            Set<V> sortedValues = new TreeSet<V>(new Comparator<V>(){
+                @Override
+                public int compare(V vA, V vB) {
+                    return vA.compareTo(vB);
+                }
+            });
+            sortedValues.addAll(super.values());
+            return sortedValues;
+        }
     }
 
+    public class EntryValueComparator implements Comparator {
+        public int compare(Object o1, Object o2) {
+            return compare((Map.Entry) o1, (Map.Entry) o2);
+        }
+
+        public int compare(Map.Entry e1, Map.Entry e2) {
+           int cf = ((Comparable)e1.getValue()).compareTo(e2.getValue());
+           if (cf == 0) {
+              cf = ((Comparable)e1.getKey()).compareTo(e2.getKey());
+           }
+           return cf;
+        }
+    }
+
+    public class Student implements Comparable {
+        final String name;
+        final int no;
+        
+        public Student(String name, int no) {
+            this.name = name;
+            this.no = no;
+        }
+
+        @Override
+        public String toString() {
+            return "[" + name + ", " + no + "]"; 
+        }
+
+        @Override
+        public int compareTo(Object o) {
+            if (o == null) {
+                return -1;
+            }
+            if (!(o instanceof Student)) {
+                return -1;
+            }
+            
+            Student another = (Student)o;
+            return no - another.no;
+        }
+    }
+    
     @Test
-    public void checkJoinConstraintSlave() throws Exception {
-        // Initialize
-        createCluster();
-        createPm();
-        createPg();
-        for (int id = 0; id < MAX_PGS; id++) {
-            createPgs(id);
-            mockPgs(id);
-        }
-
-        for (int id = 0; id < MAX_PGS; id++) {
-            mockPgsLconn(getPgs(id));
-        }
+    public void sortedMap() {
+        Map<Student, String> lhm = new TreeMap<Student, String>();
         
-        PartitionGroupServer master = waitRoleMaster(getPgsList());
-        for (int id = 0; id < MAX_PGS; id++) {
-            if (getPgs(id).equals(master)) {
-                continue;
-            }
-            waitRoleSlave(getPgs(id));
+        lhm.put(new Student("1cc", 30), "C");
+        lhm.put(new Student("2bb", 20), "B");
+        lhm.put(new Student("3aa", 10), "A");
+        for (Map.Entry<Student, String> e : lhm.entrySet()) {
+            System.out.println(e.getKey() + " " + e.getValue());
         }
-
-        // Add master generation
-        getPg().setData(new PgDataBuilder().from(getPg().getData())
-                .addMasterGen(1000).addMasterGen(2000).addMasterGen(3000).build());
-        /*
-         *  Master generation number of pg is 4
-         *  pgs-mgen | pg-mgen-map | seq
-         *      1    |      0      |  0
-         *      2    |      1      | 1000
-         *      3    |      2      | 2000
-         *      4    |      3      | 3000
-         */
-        System.out.println(getPg().getData().getMasterGenMap());
-        assertEquals(4, getPg().getData().currentGen());
-        assertEquals(new Long(3000), getPg().getData().currentSeq());
-
-        PartitionGroupServer slave = getPgs(1);
-        
-        // Slave log sequence
-        LogSequence slaveLogSeq = new LogSequence();
-        Field logCommit = LogSequence.class.getDeclaredField("logCommit");
-        logCommit.setAccessible(true);
-
-        // Slave max sequence
-        Field logMax = LogSequence.class.getDeclaredField("max");
-        logMax.setAccessible(true);
-
-        // PGS.MGEN < PG.MGEN
-        slave.setData(new PgsDataBuilder().from(slave.getData())
-                .withMasterGen(getPg().getData().currentGen()-1).build());
-        {
-            // && PGS.LOG(commit) < PG.HIST[PGS.MGEN + 1]
-            logCommit.set(slaveLogSeq, 2500);
-            logMax.set(slaveLogSeq, 2700);
-            SlaveJoinInfo joinInfo = getPg().checkJoinConstraintSlave(
-                    slave, slaveLogSeq, 1L, workflowLogDao);
-            assertTrue(joinInfo.isSuccess());
-            assertEquals(joinInfo.getJoinSeq(), logMax.get(slaveLogSeq));
-            
-            // && PGS.LOG(commit) == PG.HIST[PGS.MGEN + 1]
-            logCommit.set(slaveLogSeq, 3000);
-            logMax.set(slaveLogSeq, 3000);
-            joinInfo = getPg().checkJoinConstraintSlave(
-                    slave, slaveLogSeq, 1L, workflowLogDao);
-            assertTrue(joinInfo.isSuccess());
-            assertEquals(joinInfo.getJoinSeq(), logMax.get(slaveLogSeq));
-            
-            // && PGS.LOG(commit) > PG.HIST[PGS.MGEN + 1]
-            logCommit.set(slaveLogSeq, 3500);
-            logMax.set(slaveLogSeq, 3500);
-            joinInfo = getPg().checkJoinConstraintSlave(
-                    slave, slaveLogSeq, 1L, workflowLogDao);
-            assertFalse(joinInfo.isSuccess());
+        for (String s : lhm.values()) {
+            System.out.println(s);
         }
-        
-        // PGS.MGEN == PG.MGEN
-        slave.setData(new PgsDataBuilder().from(slave.getData())
-                .withMasterGen(getPg().getData().currentGen()).build());
-        {
-            // && PGS.LOG(commit) < PG.HIST[PGS.MGEN + 1]
-            logCommit.set(slaveLogSeq, 2500);
-            logMax.set(slaveLogSeq, 2700);
-            SlaveJoinInfo joinInfo = getPg().checkJoinConstraintSlave(
-                    slave, slaveLogSeq, 1L, workflowLogDao);
-            assertTrue(joinInfo.isSuccess());
-            assertEquals(joinInfo.getJoinSeq(), logMax.get(slaveLogSeq));
-            
-            // && PGS.LOG(commit) == PG.HIST[PGS.MGEN + 1]
-            logCommit.set(slaveLogSeq, 3000);
-            logMax.set(slaveLogSeq, 3000);
-            joinInfo = getPg().checkJoinConstraintSlave(
-                    slave, slaveLogSeq, 1L, workflowLogDao);
-            assertTrue(joinInfo.isSuccess());
-            assertEquals(joinInfo.getJoinSeq(), logMax.get(slaveLogSeq));
-            
-            // && PGS.LOG(commit) > PG.HIST[PGS.MGEN + 1]
-            logCommit.set(slaveLogSeq, 3500);
-            logMax.set(slaveLogSeq, 3500);
-            joinInfo = getPg().checkJoinConstraintSlave(
-                    slave, slaveLogSeq, 1L, workflowLogDao);
-            assertTrue(joinInfo.isSuccess());
-            assertEquals(joinInfo.getJoinSeq(), logMax.get(slaveLogSeq));
-        }
-        
-        // PGS.MGEN > PG.MGEN
-        slave.setData(new PgsDataBuilder().from(slave.getData())
-                .withMasterGen(getPg().getData().currentGen()+1).build());
-        logCommit.set(slaveLogSeq, 2500);
-        logMax.set(slaveLogSeq, 2700);
-        SlaveJoinInfo joinInfo = getPg().checkJoinConstraintSlave(
-                slave, slaveLogSeq, 1L, workflowLogDao);
-        assertFalse(joinInfo.isSuccess());
     }
-
 }

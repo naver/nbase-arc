@@ -16,44 +16,25 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
-import static com.navercorp.nbasearc.confmaster.Constant.ALL;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_PHYSICAL_MACHINE_CLUSTER_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_ZOOKEEPER;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_PING;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_PONG;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_RESPONSE_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_NO;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
-import static com.navercorp.nbasearc.confmaster.Constant.LOG_TYPE_COMMAND;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_MASTER;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_NONE;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_SLAVE;
-import static com.navercorp.nbasearc.confmaster.Constant.S2C_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_FAILURE;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_MODERATE;
-import static com.navercorp.nbasearc.confmaster.Constant.TEMP_ZNODE_NAME_FOR_CHILDEVENT;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.FAILOVER_PGS;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.SET_QUORUM;
+import static com.navercorp.nbasearc.confmaster.server.mapping.ArityType.GREATER;
+import static com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType.NULLABLE;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.ROLE_ADJUSTMENT;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
-import org.apache.zookeeper.Op;
-import org.apache.zookeeper.OpResult;
-import org.apache.zookeeper.ZooKeeper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtNoAvaliablePgsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
@@ -86,10 +67,18 @@ import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
+import com.navercorp.nbasearc.confmaster.server.mapping.Param;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
+import com.navercorp.nbasearc.confmaster.server.workflow.DecreaseCopyWorkflow;
+import com.navercorp.nbasearc.confmaster.server.workflow.IncreaseCopyWorkflow;
+import com.navercorp.nbasearc.confmaster.server.workflow.QuorumAdjustmentWorkflow;
+import com.navercorp.nbasearc.confmaster.server.workflow.StartOfTheEpochWorkflow;
 
 @Service
 public class PartitionGroupServerService {
+    
+    @Autowired
+    private ApplicationContext context;
 
     @Autowired
     private WorkflowExecutor workflowExecutor;
@@ -168,13 +157,13 @@ public class PartitionGroupServerService {
                     EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST
                             + PartitionGroup.fullName(clusterName, pgId));
         }
-//
+
         // Do
         PartitionGroupServerData data = new PartitionGroupServerData();
         data.initialize(
                 Integer.parseInt(pgId), pmName, pmIp, backendPort,
                 basePort, basePort + 3, SERVER_STATE_FAILURE,
-                PGS_ROLE_NONE, pg.getData().currentGen(),
+                PGS_ROLE_NONE, Color.RED, -1,
                 HB_MONITOR_NO);
         
         // DB
@@ -364,6 +353,7 @@ public class PartitionGroupServerService {
     public String pgsJoin(String clusterName, String pgsid) {
         // In Memory
         PartitionGroupServer pgs = pgsImo.get(pgsid, clusterName);
+        Logger.info("pgs_join {} HB: {}", pgs, pgs.getData().getHb());
         if (pgs.getData().getHb().equals(HB_MONITOR_YES)) {
             return "-ERR pgs already joined";
         }
@@ -413,41 +403,13 @@ public class PartitionGroupServerService {
             return reply;
         }
         
-        PartitionGroupData pgModified =
-            PartitionGroupData.builder().from(pg.getData())
-                .withCopy(pg.getJoinedPgsList(
-                    pgsImo.getList(
-                        clusterName, pgs.getData().getPgId())).size() + 1).build();
-        PartitionGroupServerData pgsModified = 
-            PartitionGroupServerData.builder().from(pgs.getData())
-                .withHb(HB_MONITOR_YES).build();
-        RedisServerData rsModified = 
-            RedisServerData.builder().from(rs.getData())
-                .withHb(HB_MONITOR_YES).build();
-
         try {
-            List<Op> ops = new ArrayList<Op>();
-            
-            ops.add(pgDao.createUpdatePgOperation(pg.getPath(), pgModified));
-            ops.add(pgsDao.createUpdatePgsOperation(pgs.getPath(), pgsModified));
-            ops.add(pgsDao.createUpdateRsOperation(rs.getPath(), rsModified));
-
-            ZooKeeper zk = zookeeper.getZooKeeper();
-            List<OpResult> results = null;
-            try {
-                results = zk.multi(ops);
-
-                OpResult.SetDataResult rsd = (OpResult.SetDataResult)results.get(0);
-                pgs.setStat(rsd.getStat());
-
-                rsd = (OpResult.SetDataResult)results.get(1);
-                rs.setStat(rsd.getStat());
-                
-                pg.setData(pgModified);
-                pgs.setData(pgsModified);
-                rs.setData(rsModified);
-            } finally {
-                zookeeper.handleResultsOfMulti(results);
+            if (pg.getData().currentGen() == -1 && pg.getData().getCopy() == 0) {
+                StartOfTheEpochWorkflow se = new StartOfTheEpochWorkflow(pg, pgs, context);
+                se.execute();
+            } else {
+                IncreaseCopyWorkflow ic = new IncreaseCopyWorkflow(pgs, pg, context);
+                ic.execute();
             }
         } catch (Exception e) {
             return EXCEPTIONMSG_ZOOKEEPER;
@@ -520,38 +482,29 @@ public class PartitionGroupServerService {
             Logger.info("Role lconn fail. pgs; {}", pgs, e);
             throw e;
         }
-        
-        List<PartitionGroupServer> pgsList =
-                pgsImo.getList(clusterName,  pgs.getData().getPgId());
+
+        PartitionGroup pg = pgImo.get(String.valueOf(pgs.getData().getPgId()), clusterName);
+        List<PartitionGroupServer> pgsList = pg.getJoinedPgsList(
+        		pgsImo.getList(clusterName,  pgs.getData().getPgId()));
         
         if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)) {
-            for (PartitionGroupServer p : pgsList) {
-                PartitionGroupServerData pgsModified = 
-                        PartitionGroupServerData.builder().from(p.getData())
-                            .withRole(PGS_ROLE_NONE).build();
-                
-                pgsDao.updatePgs(p.getPath(), pgsModified);
-                
-                p.setData(pgsModified);
-            }
-            
             // in order to have confmaster put an opinion quickly
             for (PartitionGroupServer pgsInPg : pgsList) {
-                String path = String.format("%s/%s_%s", pgsInPg.getPath(), TEMP_ZNODE_NAME_FOR_CHILDEVENT, config.getIp() + ":" + config.getPort());                
+                String path = String.format("%s/%s_%s", pgsInPg.getPath(), 
+                		TEMP_ZNODE_NAME_FOR_CHILDEVENT, config.getIp() + ":" + config.getPort());                
                 zookeeper.createEphemeralZNode(path);
                 zookeeper.deleteZNode(path, -1);
             }
-            
-            workflowExecutor.performContextContinue(FAILOVER_PGS, pgs);
-        } else {
-            PartitionGroupServerData pgsModified = 
-                    PartitionGroupServerData.builder().from(pgs.getData())
-                        .withRole(PGS_ROLE_NONE).build();
-            
-            pgsDao.updatePgs(pgs.getPath(), pgsModified);
-            
-            pgs.setData(pgsModified);
+
+            workflowExecutor.performContextContinue(ROLE_ADJUSTMENT,
+                    pg, pg.nextWfEpoch(), context);
         }
+        
+        PartitionGroupServerData pgsModified = 
+                PartitionGroupServerData.builder().from(pgs.getData())
+                    .withRole(PGS_ROLE_NONE).build();
+        pgsDao.updatePgs(pgs.getPath(), pgsModified);
+        pgs.setData(pgsModified);
         
         return null;
     }
@@ -565,8 +518,10 @@ public class PartitionGroupServerService {
 
     @CommandMapping(
             name="pgs_leave",
+            arityType=GREATER,
             usage="pgs_leave <cluster_name> <pgsid>")
-    public String pgsLeave(String clusterName, String pgsid) {
+    public String pgsLeave(String clusterName, String pgsid,
+            @Param(type = NULLABLE) String mode) throws Exception {
         // In Memory
         Cluster cluster = clusterImo.get(clusterName);
         if (null == cluster) {
@@ -580,6 +535,8 @@ public class PartitionGroupServerService {
                     EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST 
                             + PartitionGroupServer.fullName(clusterName, pgsid));
         }
+        Logger.info("pgs_leave {} HB: {}", pgs, pgs.getData().getHb());
+
         RedisServer rs = rsImo.get(pgsid, clusterName);
         if (null == rs) {
             throw new IllegalArgumentException(
@@ -619,53 +576,24 @@ public class PartitionGroupServerService {
             return reply;
         }
         
-        final String oldRole = pgs.getData().getRole();
-
-        PartitionGroupData pgModified = 
-            PartitionGroupData.builder().from(pg.getData())
-                .withCopy(pg.getJoinedPgsList(
-                    pgsImo.getList(
-                        clusterName, pgs.getData().getPgId())).size() - 1).build();
-        PartitionGroupServerData pgsModified = 
-            PartitionGroupServerData.builder().from(pgs.getData())
-                .withHb(HB_MONITOR_NO)
-                .withRole(PGS_ROLE_NONE).build();
-        RedisServerData rsModified = 
-                RedisServerData.builder().from(rs.getData())
-                    .withHb(HB_MONITOR_NO).build();
-        try {
-            List<Op> ops = new ArrayList<Op>();
-            
-            ops.add(pgDao.createUpdatePgOperation(pg.getPath(), pgModified));
-            ops.add(pgsDao.createUpdatePgsOperation(pgs.getPath(), pgsModified));
-            ops.add(pgsDao.createUpdateRsOperation(rs.getPath(), rsModified));
-            ops.add(notificationDao.createGatewayAffinityUpdateOperation(cluster));
-
-            ZooKeeper zk = zookeeper.getZooKeeper();
-            List<OpResult> results = null;
-            try {
-                results = zk.multi(ops);
-
-                OpResult.SetDataResult rsd = (OpResult.SetDataResult)results.get(0);
-                pgs.setStat(rsd.getStat());
-
-                rsd = (OpResult.SetDataResult)results.get(1);
-                rs.setStat(rsd.getStat());
-                
-                pg.setData(pgModified);
-                pgs.setData(pgsModified);
-                rs.setData(rsModified);
-            } finally {
-                zookeeper.handleResultsOfMulti(results);
-            }
-        } catch (Exception e) {
+		List<PartitionGroupServer> joinedPgsList = pg
+				.getJoinedPgsList(pgsImo.getList(pg.getClusterName(), Integer.valueOf(pg.getName())));
+		DecreaseCopyWorkflow dc = new DecreaseCopyWorkflow(pgs, pg, mode, context);
+		try {
+			dc.execute();
+		} catch (MgmtZooKeeperException e) {
+            Logger.error("pgs_leave fail. {}", pgs, e);
             return EXCEPTIONMSG_ZOOKEEPER;
-        }
+		} catch (MgmtNoAvaliablePgsException e) {
+			Logger.error("pgs_leave fail {}, PG.COPY: {}, PG.D: {}", 
+					new Object[]{pgs, pg.getData().getCopy(), pg.getD(joinedPgsList)}, e);
+			return EXCEPTIONMSG_NO_AVAILABLE_PGS;
+		}
 
-        if (oldRole.equals(PGS_ROLE_SLAVE)) {
-            workflowExecutor.perform(SET_QUORUM, clusterName,
-                    String.valueOf(pgs.getData().getPgId()));
-        }
+		joinedPgsList.remove(pgs);
+        QuorumAdjustmentWorkflow qa = new QuorumAdjustmentWorkflow(pg, true,
+                context);
+		qa.execute();
         
         String cmd = String.format("pgs_del %s %d", pgsid, pgs.getData().getPgId());
         reply = broadcast.request(clusterName, gwList, cmd, GW_RESPONSE_OK, executor);
@@ -712,7 +640,7 @@ public class PartitionGroupServerService {
     @LockMapping(name="pgs_leave")
     public void pgsLeaveLock(HierarchicalLockHelper lockHelper, String clusterName, String pgsid) {
         lockHelper.root(READ).cluster(READ, clusterName).pgList(READ)
-                .pgsList(READ).pg(READ, null).pgs(WRITE, pgsid).gwList(READ)
+                .pgsList(READ).pg(WRITE, null).pgs(WRITE, pgsid).gwList(READ)
                 .gw(WRITE, ALL);
     }
 
@@ -752,16 +680,20 @@ public class PartitionGroupServerService {
     
     @CommandMapping(
             name="pgs_sync",
-            usage="pgs_sync <cluster_name> <pgsid>")
-    public String pgsSync(String clusterName, String pgsid) {
+            usage="pgs_sync <cluster_name> <pgsid> <mode>")
+    public String pgsSync(String clusterName, String pgsid, String mode) {
         if (LeaderState.isLeader()) {
-            return workLeader(clusterName, pgsid);
+            return workLeader(clusterName, pgsid, mode);
         } else {
             return workFollower(clusterName, pgsid);
         }
     }
     
-    public String workLeader(String clusterName, String pgsid) {
+    public String workLeader(String clusterName, String pgsid, String mode) {
+        if (!mode.equals(FORCED)) {
+            return EXCEPTIONMSG_NOT_FORCED_MODE;
+        }
+        
         // In Memory
         PartitionGroupServer pgs = pgsImo.get(pgsid, clusterName);
         RedisServer rs = rsImo.get(pgsid, clusterName);
@@ -777,12 +709,18 @@ public class PartitionGroupServerService {
 
         StringBuilder sb = new StringBuilder();
         final PartitionGroupServer.RealState smrState = pgs.getRealState();
-        final String rsState = rs.getRealState();
+        final String rsState = rs.replPing();
+        
+        Color color = YELLOW;
+        if ((smrState.getRole().equals(PGS_ROLE_MASTER) || smrState.getRole().equals(PGS_ROLE_SLAVE)) 
+                && rsState.equals(SERVER_STATE_NORMAL)) {
+            color = GREEN;
+        }
 
         PartitionGroupServerData pgsModified = 
             PartitionGroupServerData.builder().from(pgs.getData())
                 .withRole(smrState.getRole())
-                .withState(smrState.getState())
+                .withColor(color)
                 .withStateTimestamp(smrState.getStateTimestamp()).build();
         RedisServerData rsModified = 
             RedisServerData.builder().from(rs.getData())
