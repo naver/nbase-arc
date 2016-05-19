@@ -110,6 +110,7 @@
 #define REDIS_MAX_RDB_BACKUPS 24
 #define REDIS_RDB_ARC_MAX_HEADERS 16
 #define REDIS_OBJ_BIO_DELETE_MIN_ELEMS 100
+#define REDIS_GETDUMP_DEFAULT_NET_LIMIT_MB 30
 #endif
 
 #define REDIS_DEFAULT_REPL_BACKLOG_SIZE (1024*1024)    /* 1mb */
@@ -1127,7 +1128,7 @@ int clusterMain(int argc, char **argv);
 
 /* cluster-util.c -- Cluster Util */
 int clusterUtilMain(int argc, char **argv);
-int getdump(char *source_addr, int source_port, char *filename, char *range);
+int getdump(char *source_addr, int source_port, char *filename, char *range, int net_limit);
 
 /* dump-util.c -- Dump Util */
 int dumpUtilMain(int argc, char **argv);

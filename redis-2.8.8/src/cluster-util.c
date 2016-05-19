@@ -29,6 +29,7 @@ struct dumpState {
     int fd;
     int aofpos;
     int tps_hz, opcount;
+    long net_limit_bytes_hz, net_avail;
     int ret, send_done;
     int cronloops;
     int flags;
@@ -39,15 +40,21 @@ struct dumpState {
 /* Usage */
 static void clusterUtilUsage() {
     fprintf(stderr,"Usage: \n");
-    fprintf(stderr,"       ./cluster-util --playdump <source rdb filename> <target address> <port> <tps>\n");
-    fprintf(stderr,"       ./cluster-util --getdump <source address> <port> <target rdb filename> <partition range(inclusive)>\n");
-    fprintf(stderr,"       ./cluster-util --getandplay <source address> <port> <target address> <port> <partition range(inclusive)> <tps>\n");
-    fprintf(stderr,"       ./cluster-util --rangedel <address> <port> <partition range(inclusive)> <tps>\n");
+    fprintf(stderr,"       ./cluster-util --playdump <source rdb filename> <target address> <port> <TPS> [<bandwidth(MB/s)>]\n");
+    fprintf(stderr,"       ./cluster-util --getdump <source address> <port> <target rdb filename> <partition range(inclusive)> [<bandwidth(MB/s)>]\n");
+    fprintf(stderr,"       ./cluster-util --getandplay <source address> <port> <target address> <port> <partition range(inclusive)> <TPS> [<bandwidth(MB/s)>]\n");
+    fprintf(stderr,"       ./cluster-util --rangedel <address> <port> <partition range(inclusive)> <TPS> [<bandwidth(MB/s)>]\n");
+    fprintf(stderr,"\n");
+    fprintf(stderr,"       * If ommited, default bandwidth limit is 30MB/s\n");
     fprintf(stderr,"Examples:\n");
     fprintf(stderr,"       ./cluster-util --playdump dump.rdb localhost 6379 30000\n");
+    fprintf(stderr,"       ./cluster-util --playdump dump.rdb localhost 6379 30000 30\n");
     fprintf(stderr,"       ./cluster-util --getdump localhost 6379 dump.rdb 0-8191\n");
+    fprintf(stderr,"       ./cluster-util --getdump localhost 6379 dump.rdb 0-8191 30\n");
     fprintf(stderr,"       ./cluster-util --getandplay localhost 6379 localhost 7379 0-8191 30000\n");
+    fprintf(stderr,"       ./cluster-util --getandplay localhost 6379 localhost 7379 0-8191 30000 30\n");
     fprintf(stderr,"       ./cluster-util --rangedel localhost 6379 0-1024 30000\n");
+    fprintf(stderr,"       ./cluster-util --rangedel localhost 6379 0-1024 30000 30\n");
     exit(1);
 }
 
@@ -221,7 +228,7 @@ static int getDelCommandFromRdb(rio *rdb, rio *aof, int *count) {
         decrRefCount(val);
         return REDIS_RDB_DB_SMR_MSTIME;
     }
-    
+
     if (!compareStringObjects(key, shared.db_migrate_slot)
         || !compareStringObjects(key, shared.db_migclear_slot)) {
         decrRefCount(key);
@@ -261,7 +268,7 @@ static void playdump_rqst(aeEventLoop *el, int fd, void *data, int mask)
             }
             ds->opcount += count;
             if (ds->opcount >= ds->tps_hz) break;
-        } while (ret != REDIS_ERR && ret != REDIS_RDB_OPCODE_EOF && ds->aof.io.buffer.pos < NBASE_ARC_KS_SIZE);
+        } while (ret != REDIS_ERR && ret != REDIS_RDB_OPCODE_EOF && ds->aof.io.buffer.pos < REDIS_IOBUF_LEN);
 
         if (ret == REDIS_ERR) {
             goto err;
@@ -293,7 +300,13 @@ static void playdump_rqst(aeEventLoop *el, int fd, void *data, int mask)
         ds->aofpos = 0;
         if (ds->opcount >= ds->tps_hz || ret == REDIS_RDB_OPCODE_EOF) {
             aeDeleteFileEvent(el, fd, AE_WRITABLE);
+            return;
         }
+    }
+
+    ds->net_avail -= nw;
+    if (ds->net_avail <= 0) {
+        aeDeleteFileEvent(el, fd, AE_WRITABLE);
     }
 
     return;
@@ -335,14 +348,6 @@ static void playdump_resp(aeEventLoop *el, int fd, void *data, int mask) {
 
 static int playdump_cron(struct aeEventLoop *el, long long id, void *data) {
     struct dumpState *ds = (struct dumpState *) data;
-    if (ds->opcount >= ds->tps_hz && !ds->send_done) {
-        if (aeCreateFileEvent(el, ds->fd, AE_WRITABLE, playdump_rqst, ds) == AE_ERR) {
-            ds->ret = REDIS_ERR;
-            aeDeleteFileEvent(el, ds->fd, AE_READABLE);
-            aeDeleteFileEvent(el, ds->fd, AE_WRITABLE);
-            aeStop(el);
-        }
-    }
 
     if (!(ds->cronloops%server.hz)) {
         ds->cursize = ftello(ds->fp);
@@ -351,14 +356,30 @@ static int playdump_cron(struct aeEventLoop *el, long long id, void *data) {
         } else if (ds->flags == PLAYDUMP_RANGEDEL) {
             redisLog(REDIS_NOTICE, "delete %lld%% done", (long long)ds->cursize*100/ds->totalsize);
         }
-
     }
+
+    if (ds->send_done) {
+        return 1000/server.hz;
+    }
+
+
+	// Cron resets tps/network limit and enables writable file events.
+	// We can simply call aeCreateFileEvent everytime cron executes, because it's
+	// possible to call aeCreateFileEvent with fd which is already registered.
     ds->opcount = 0;
+    ds->net_avail = ds->net_limit_bytes_hz;
+	if (aeCreateFileEvent(el, ds->fd, AE_WRITABLE, playdump_rqst, ds) == AE_ERR) {
+		ds->ret = REDIS_ERR;
+		aeDeleteFileEvent(el, ds->fd, AE_READABLE);
+		aeDeleteFileEvent(el, ds->fd, AE_WRITABLE);
+		aeStop(el);
+	}
+
     ds->cronloops++;
     return 1000/server.hz;
 }
 
-static int playdump(char *filename, char *target_addr, int target_port, int tps, int flags) {
+static int playdump(char *filename, char *target_addr, int target_port, int tps, int net_limit, int flags) {
     int rdbver;
     char magic[10];
     FILE *fp;
@@ -408,17 +429,19 @@ static int playdump(char *filename, char *target_addr, int target_port, int tps,
             target_addr, target_port, neterr);
         return REDIS_ERR;
     }
-        
+
     /* initialize aof */
     ds.readbuf = sdsempty();
-    ds.readbuf = sdsMakeRoomFor(ds.readbuf, 8192); 
+    ds.readbuf = sdsMakeRoomFor(ds.readbuf, REDIS_IOBUF_LEN);
     aofbuf = sdsempty();
-    aofbuf = sdsMakeRoomFor(aofbuf, 8192);
+    aofbuf = sdsMakeRoomFor(aofbuf, REDIS_IOBUF_LEN);
     rioInitWithBuffer(&ds.aof, aofbuf);
     ds.fp = fp;
     ds.fd = fd;
     ds.tps_hz = tps / server.hz;
     ds.opcount = 0;
+    ds.net_limit_bytes_hz = net_limit * 1024 * 1024 / server.hz;
+    ds.net_avail = ds.net_limit_bytes_hz;
     ds.aofpos = 0;
     ds.send_done = 0;
     ds.ret = REDIS_OK;
@@ -463,14 +486,15 @@ loaderr:
 }
 
 #define REPL_MAX_WRITTEN_BEFORE_FSYNC (1024*1024*8) /* 8 MB */
-int getdump(char *source_addr, int source_port, char *filename, char *range) {
+int getdump(char *source_addr, int source_port, char *filename, char *range, int net_limit) {
     char tmpfile[256];
     int dfd, maxtries = 5;
     int fd;
     char neterr[ANET_ERR_LEN];
     char buf[4096];
     int len;
-    
+    long net_limit_bytes_duration, net_avail, last_ts, remain_ts, duration;
+
     /* connect to source redis server */
     fd = anetTcpConnect(neterr, source_addr, source_port);
     if (fd == ANET_ERR) {
@@ -563,6 +587,12 @@ int getdump(char *source_addr, int source_port, char *filename, char *range) {
         "SOURCE <-> TARGET sync: receiving %ld bytes from source",
         server.repl_transfer_size);
 
+    /* Set initial network limit and timestamp */
+    duration = 1000 / server.hz;
+    net_limit_bytes_duration = net_limit * 1024 * 1024 / server.hz;
+    net_avail = net_limit_bytes_duration;
+    last_ts = mstime();
+
     /* Read bulk data */
     do {
         off_t left = server.repl_transfer_size - server.repl_transfer_read;
@@ -596,7 +626,27 @@ int getdump(char *source_addr, int source_port, char *filename, char *range) {
                 server.repl_transfer_last_fsync_off, sync_size);
             server.repl_transfer_last_fsync_off += sync_size;
         }
-    } while (server.repl_transfer_read != server.repl_transfer_size);
+
+        /* Receiving from source redis is done. Exit loop */
+        if (server.repl_transfer_read == server.repl_transfer_size) {
+            break;
+        }
+
+        /* Check network limit */
+        // Adjust available network limit
+        net_avail -= nread;
+        if (net_avail <= 0) {
+            // Check whether time exceeds duration
+            remain_ts = last_ts + duration - mstime();
+            if (remain_ts > 0) {
+                // Time doesn't exceed duration, but network limit has been reached.
+                // Sleep remaining time and reset network limit
+                usleep(remain_ts * 1000);
+            }
+			last_ts = mstime();
+			net_avail = net_limit_bytes_duration;
+        }
+    } while (1);
 
     if (syncReadLine(fd,buf,1024,server.repl_syncio_timeout*1000) == -1) {
         redisLog(REDIS_WARNING,
@@ -633,13 +683,18 @@ static int playdumpCommand(int argc, sds *argv) {
     char *filename;
     char *target_addr;
     int target_port;
-    int tps;
+    int tps, net_limit;
 
     /* parameter */
     filename = (char *) argv[1];
     target_addr = (char *) argv[2];
     target_port = atoi(argv[3]);
     tps = atoi(argv[4]);
+    net_limit = REDIS_GETDUMP_DEFAULT_NET_LIMIT_MB;
+    /* Check bandwidth option. */
+    if (argc == 6) {
+		net_limit = atoi(argv[5]);
+    }
 
     if (target_port <= 0) {
         redisLog(REDIS_WARNING, "Negative number of target port in playdump command");
@@ -651,7 +706,12 @@ static int playdumpCommand(int argc, sds *argv) {
         return REDIS_ERR;
     }
 
-    return playdump(filename, target_addr, target_port, tps, PLAYDUMP_LOAD);
+    if (net_limit <= 0) {
+        redisLog(REDIS_WARNING, "Negative number of bandwidth in playdump command");
+        return REDIS_ERR;
+    }
+
+    return playdump(filename, target_addr, target_port, tps, net_limit, PLAYDUMP_LOAD);
 }
 
 /* get dump Command
@@ -662,12 +722,19 @@ static int getdumpCommand(int argc, char **argv) {
     char *source_addr;
     int source_port;
     char *range;
-    
+    int net_limit;
+
     /* parameter */
     source_addr = (char *) argv[1];
     source_port = atoi(argv[2]);
     filename = (char *) argv[3];
     range = (char *) argv[4];
+    net_limit = REDIS_GETDUMP_DEFAULT_NET_LIMIT_MB;
+    /* Check bandwidth option. */
+    if (argc == 6) {
+		net_limit = atoi(argv[5]);
+    }
+
     if (source_port <= 0) {
         redisLog(REDIS_WARNING, "Negative number of source port in getdump command");
         return REDIS_ERR;
@@ -678,7 +745,12 @@ static int getdumpCommand(int argc, char **argv) {
         return REDIS_ERR;
     }
 
-    return getdump(source_addr, source_port, filename, range);
+    if (net_limit <= 0) {
+        redisLog(REDIS_WARNING, "Negative number of bandwidth in playdump command");
+        return REDIS_ERR;
+    }
+
+    return getdump(source_addr, source_port, filename, range, net_limit);
 }
 
 /* get and play Command
@@ -687,9 +759,9 @@ static int getandplayCommand(int argc, char **argv) {
     char filename[256];
     char *source_addr, *target_addr;
     int source_port, target_port;
-    int tps;
+    int tps, net_limit;
     char *range;
-    
+
     /* parameter */
     source_addr = (char *) argv[1];
     source_port = atoi(argv[2]);
@@ -697,14 +769,24 @@ static int getandplayCommand(int argc, char **argv) {
     target_port = atoi(argv[4]);
     range = (char *) argv[5];
     tps = atoi(argv[6]);
+    net_limit = REDIS_GETDUMP_DEFAULT_NET_LIMIT_MB;
+    /* Check bandwidth option. */
+    if (argc == 8) {
+		net_limit = atoi(argv[7]);
+    }
 
     if (source_port <= 0 || target_port <= 0) {
         redisLog(REDIS_WARNING, "Negative number of port in getandplay command");
         return REDIS_ERR;
     }
-    
+
     if (tps <= 0) {
         redisLog(REDIS_WARNING, "Negative number of tps in getandplay command");
+        return REDIS_ERR;
+    }
+
+    if (net_limit <= 0) {
+        redisLog(REDIS_WARNING, "Negative number of bandwidth in playdump command");
         return REDIS_ERR;
     }
 
@@ -715,12 +797,12 @@ static int getandplayCommand(int argc, char **argv) {
 
     /* tempfile */
     snprintf(filename,256,"temp-getandplay-%d.rdb", (int) getpid());
-    if (getdump(source_addr, source_port, filename, range) != REDIS_OK) {
+    if (getdump(source_addr, source_port, filename, range, net_limit) != REDIS_OK) {
         unlink(filename);
         return REDIS_ERR;
     }
 
-    if (playdump(filename, target_addr, target_port, tps, PLAYDUMP_LOAD) != REDIS_OK) {
+    if (playdump(filename, target_addr, target_port, tps, net_limit, PLAYDUMP_LOAD) != REDIS_OK) {
         unlink(filename);
         return REDIS_ERR;
     }
@@ -734,7 +816,7 @@ static int getandplayCommand(int argc, char **argv) {
 static int rangedelCommand(int argc, char **argv) {
     char filename[256];
     char *addr;
-    int port, tps;
+    int port, tps, net_limit;
     char *range;
 
     /* parameter */
@@ -742,6 +824,11 @@ static int rangedelCommand(int argc, char **argv) {
     port = atoi(argv[2]);
     range = (char *) argv[3];
     tps = atoi(argv[4]);
+    net_limit = REDIS_GETDUMP_DEFAULT_NET_LIMIT_MB;
+    /* Check bandwidth option. */
+    if (argc == 6) {
+		net_limit = atoi(argv[5]);
+    }
 
     if (port <= 0) {
         redisLog(REDIS_WARNING, "Negative number of port in rangedel command");
@@ -760,12 +847,12 @@ static int rangedelCommand(int argc, char **argv) {
 
     /* tempfile */
     snprintf(filename,256,"temp-rangedel-%d.rdb", (int) getpid());
-    if (getdump(addr, port, filename, range) != REDIS_OK) {
+    if (getdump(addr, port, filename, range, net_limit) != REDIS_OK) {
         unlink(filename);
         return REDIS_ERR;
     }
 
-    if (playdump(filename, addr, port, tps, PLAYDUMP_RANGEDEL) != REDIS_OK) {
+    if (playdump(filename, addr, port, tps, net_limit, PLAYDUMP_RANGEDEL) != REDIS_OK) {
         unlink(filename);
         return REDIS_ERR;
     }
@@ -784,13 +871,13 @@ static int executeCommandFromOptions(sds options) {
     argv = sdssplitargs(options,&argc);
     sdstolower(argv[0]);
 
-    if (!strcasecmp(argv[0],"playdump") && argc == 5) {
+    if (!strcasecmp(argv[0],"playdump") && (argc == 5 || argc == 6)) {
         ret = playdumpCommand(argc, argv);
-    } else if (!strcasecmp(argv[0],"getdump") && argc == 5) {
+    } else if (!strcasecmp(argv[0],"getdump") && (argc == 5 || argc == 6)) {
         ret = getdumpCommand(argc, argv);
-    } else if (!strcasecmp(argv[0],"getandplay") && argc == 7) {
+    } else if (!strcasecmp(argv[0],"getandplay") && (argc == 7 || argc == 8)) {
         ret = getandplayCommand(argc, argv);
-    } else if (!strcasecmp(argv[0],"rangedel") && argc == 5) {
+    } else if (!strcasecmp(argv[0],"rangedel") && (argc == 5 || argc == 6)) {
         ret = rangedelCommand(argc, argv);
     } else {
         clusterUtilUsage();
