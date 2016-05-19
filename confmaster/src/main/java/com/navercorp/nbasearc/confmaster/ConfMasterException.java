@@ -23,7 +23,6 @@ import java.util.List;
 
 import org.apache.zookeeper.OpResult;
 
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
 import com.navercorp.nbasearc.confmaster.server.mapping.WorkflowCaller;
 
 @SuppressWarnings("serial")
@@ -95,30 +94,10 @@ public class ConfMasterException extends Exception {
         }
     }
     
-    public static class MgmtUnkownRoleException extends Exception {
-        private final String path;
-        private final String ip;
-        private final int port;
-        private final String role;
-        
-        public MgmtUnkownRoleException(String path, String ip, int port, String role) {
-            this.path = path;
-            this.ip = ip;
-            this.port = port;
-            this.role = role;
-        }
-        
-        @Override
-        public String getMessage() {
-            return getClass().getName() + ". path: " + path + ", ip: " + ip
-                    + ", port: " + port + ", role: " + role;
-        }
-    }
-    
-    public static class MgmtUnexpectedStateTransitionException extends Exception {
+    public static class MgmtRoleChangeException extends Exception {
         private final String msg;
         
-        public MgmtUnexpectedStateTransitionException(String msg) {
+        public MgmtRoleChangeException(String msg) {
             this.msg = msg;
         }
         
@@ -127,11 +106,11 @@ public class ConfMasterException extends Exception {
             return getClass().getName() + ". " + msg;
         }
     }
-    
-    public static class MgmtRoleChangeException extends Exception {
+
+    public static class MgmtSetquorumException extends Exception {
         private final String msg;
         
-        public MgmtRoleChangeException(String msg) {
+        public MgmtSetquorumException(String msg) {
             this.msg = msg;
         }
         
@@ -213,5 +192,8 @@ public class ConfMasterException extends Exception {
         public MgmtHbException(String message) {
             super(message);
         }
+    }
+    
+    public static class MgmtNoAvaliablePgsException extends Exception {
     }
 }

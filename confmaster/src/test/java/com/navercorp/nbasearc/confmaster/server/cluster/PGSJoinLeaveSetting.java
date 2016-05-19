@@ -47,6 +47,8 @@ public class PGSJoinLeaveSetting {
     
     CommandExecutor commandTemplate;
     
+    final long atoSec = 5L;
+    
     public void initialize(ApplicationContext context)throws Exception {
         hbProcessor = new EventSelector(47);
         config = context.getBean(Config.class);
@@ -76,38 +78,29 @@ public class PGSJoinLeaveSetting {
         
         assertEquals(pgs.getData(), pgsModified);
         assertEquals(rs.getData(), rsModified);
-
-        // Check watch event
-        verify(mock.getPgsWatcher(), timeout(10000).times(1)).onChangedEvent((WatchedEvent)anyObject());
-        verify(mock.getRsWatcher(), timeout(10000).times(1)).onChangedEvent((WatchedEvent)anyObject());
-        verify(mock.getPgsHbcSession(), timeout(10000).times(1)).start();
-        verify(mock.getRsHbcSession(), timeout(10000).times(1)).start();
+        
+        if (mock != null) {
+            verify(mock.getPgsHbcSession(), timeout(atoSec * 1000).times(1)).start();
+            verify(mock.getRsHbcSession(), timeout(atoSec * 1000).times(1)).start();
+        }
     }
     
-    public void pgsLeave(PartitionGroupServer pgs, RedisServer rs, PGSComponentMock mock) throws Exception {
-        // Prepare expected data
-        PartitionGroupServerData pgsModified = 
-                PartitionGroupServerData.builder().from(pgs.getData())
-                    .withHb(HB_MONITOR_NO).build();
-
-        RedisServerData rsModified = 
-            RedisServerData.builder().from(rs.getData())
-                .withHb(HB_MONITOR_NO).build();
-        
+    public void pgsLeave(PartitionGroupServer pgs, RedisServer rs,
+            PGSComponentMock mock, String mode) throws Exception {        
         // Leave PGS
-        Future<JobResult> future = commandTemplate.perform("pgs_leave " + pgs.getClusterName() + " " + pgs.getName(), null);
+        Future<JobResult> future = commandTemplate.perform(
+                "pgs_leave " + pgs.getClusterName() + " " + pgs.getName() + " "
+                        + mode, null);
         JobResult jobResult = future.get();
-        assertEquals(S2C_OK, jobResult.getMessages().get(0));
         
-        assertEquals(pgs.getData(), pgsModified);
-        assertEquals(rs.getData(), rsModified);
+        assertEquals(S2C_OK, jobResult.getMessages().get(0));
+        assertEquals(HB_MONITOR_NO, pgs.getData().getHb());
+        assertEquals(HB_MONITOR_NO, rs.getData().getHB());
 
-        verify(mock.getPgsWatcher(), timeout(10000).times(2)).onChangedEvent((WatchedEvent)anyObject());
-        verify(mock.getRsWatcher(), timeout(10000).times(2)).onChangedEvent((WatchedEvent)anyObject());
-        verify(mock.getPgsHbcSession(), timeout(10000).times(1)).start();
-        verify(mock.getPgsHbcSession(), timeout(10000).times(1)).stop();
-        verify(mock.getRsHbcSession(), timeout(10000).times(1)).start();
-        verify(mock.getRsHbcSession(), timeout(10000).times(1)).stop();
+        if (mock != null) {
+            verify(mock.getPgsWatcher(), timeout(atoSec * 1000).atLeast(1)).onChangedEvent((WatchedEvent)anyObject());
+            verify(mock.getRsWatcher(), timeout(atoSec * 1000).atLeast(1)).onChangedEvent((WatchedEvent)anyObject());
+        }
     }
 }
 

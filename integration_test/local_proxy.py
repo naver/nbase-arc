@@ -49,15 +49,7 @@ class TestLocalProxy(unittest.TestCase):
         if default_cluster.finalize(self.cluster) is not 0:
             util.log('failed to test_local_proxy.finalize')
 
-    def test_local_proxy64(self):
-        util.print_frame()
-        self.__test_local_proxy(64)
-
-    def test_local_proxy32(self):
-        util.print_frame()
-        self.__test_local_proxy(32)
-
-    def __test_local_proxy(self, arch=64):
+    def test_local_proxy(self, arch=64):
         util.print_frame()
 
         # Clean server log file

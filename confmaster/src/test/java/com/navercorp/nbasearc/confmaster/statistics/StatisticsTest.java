@@ -22,13 +22,27 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.ContextConfiguration;
+import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Log;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
+import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.statistics.Statistics;
 
+@RunWith(SpringJUnit4ClassRunner.class)
+@ContextConfiguration("classpath:applicationContext-nozk.xml")
 public class StatisticsTest {
 
+    @Autowired
+    Config config;
+    
+    @Autowired
+    ThreadPool executor;
+    
     @Test
     public void slowCommandLog() throws SecurityException,
             NoSuchFieldException, IllegalArgumentException,

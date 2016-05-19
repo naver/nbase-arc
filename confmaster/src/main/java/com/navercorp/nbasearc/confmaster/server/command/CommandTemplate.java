@@ -164,7 +164,7 @@ public class CommandTemplate implements Callable<JobResult> {
             }
             break;
         case GREATER:
-            if (caller.getParamLengthWithoutNullable() >= arity) {
+            if (caller.getParamLengthWithoutNullable() > arity) {
                 throw new MgmtCommandWrongArgumentException(caller.getUsage());
             }
             break;

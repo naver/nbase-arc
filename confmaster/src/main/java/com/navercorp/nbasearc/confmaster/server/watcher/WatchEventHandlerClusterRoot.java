@@ -20,7 +20,6 @@ import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
 
 import java.util.List;
 
-import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.WatchedEvent;
 import org.springframework.context.ApplicationContext;

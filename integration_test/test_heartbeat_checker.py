@@ -303,7 +303,7 @@ class TestHeartbeatChecker( unittest.TestCase ):
             before_cnt_redis = util.get_clients_count_of_redis(server['ip'], server['redis_port'])
             before_cnt_smr = util.get_clients_count_of_smr(server['smr_mgmt_port'])
 
-            cmd = 'pgs_leave %s %d' % (self.cluster['cluster_name'], server['id'])
+            cmd = 'pgs_leave %s %d forced' % (self.cluster['cluster_name'], server['id'])
             ret = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
             jobj = json.loads(ret)
             self.assertEqual( jobj['state'], 'success', 'failed : cmd="%s", reply="%s"' % (cmd, ret[:-2]) )
@@ -488,7 +488,7 @@ class TestHeartbeatChecker( unittest.TestCase ):
             before_cnt_redis = util.get_clients_count_of_redis(server['ip'], server['redis_port'])
             before_cnt_smr = util.get_clients_count_of_smr(server['smr_mgmt_port'])
 
-            cmd = 'pgs_leave %s %d\r\npgs_del %s %d' % (self.cluster['cluster_name'], server['id'], self.cluster['cluster_name'], server['id'])
+            cmd = 'pgs_leave %s %d forced\r\npgs_del %s %d' % (self.cluster['cluster_name'], server['id'], self.cluster['cluster_name'], server['id'])
             util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
 
         for server in self.cluster['servers']:

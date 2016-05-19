@@ -19,12 +19,10 @@ package com.navercorp.nbasearc.confmaster.server.watcher;
 import static org.apache.log4j.Level.DEBUG;
 import static org.apache.log4j.Level.INFO;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.log4j.Level;
-import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;

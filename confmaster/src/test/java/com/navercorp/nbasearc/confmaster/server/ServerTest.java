@@ -42,7 +42,6 @@ import org.codehaus.jackson.map.JsonMappingException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -53,7 +52,7 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.config.Config;
-import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.server.ClusterContollerServer;
 import com.navercorp.nbasearc.confmaster.server.command.ClusterLifeCycleCommander;
 
@@ -109,7 +108,7 @@ public class ServerTest extends BasicSetting {
                             .makeOperations(Thread.currentThread().getId());
 
                     // Make Socket
-                    BlockingSocket socket = new BlockingSocket(config.getIp(),
+                    BlockingSocketImpl socket = new BlockingSocketImpl(config.getIp(),
                             config.getPort(), ping, config.getDelim(), config.getCharset());
 
                     // Send command and Check reply
@@ -169,7 +168,7 @@ public class ServerTest extends BasicSetting {
     
     @Test(expected=IOException.class)
     public void clientSessionInputBufferFull() throws Exception {
-        BlockingSocket socket = new BlockingSocket(config.getIp(),
+        BlockingSocketImpl socket = new BlockingSocketImpl(config.getIp(),
                 config.getPort(), ping, config.getDelim(), config.getCharset());
         
         StringBuilder buffer = new StringBuilder(config.getServerClientBufferSize());
@@ -203,12 +202,12 @@ public class ServerTest extends BasicSetting {
     /**
      * @return returns a list of connected sockets.
      */
-    public List<BlockingSocket> createConnections(int connectionCount, final SocketAddress addr)
+    public List<BlockingSocketImpl> createConnections(int connectionCount, final SocketAddress addr)
             throws InterruptedException, ExecutionException {
-        List<BlockingSocket> cons = new ArrayList<BlockingSocket>();
+        List<BlockingSocketImpl> cons = new ArrayList<BlockingSocketImpl>();
         for (int i = 0; i < connectionCount; i++) {
             try {
-                BlockingSocket socket = new BlockingSocket(config.getIp(), config.getPort(),
+                BlockingSocketImpl socket = new BlockingSocketImpl(config.getIp(), config.getPort(),
                         ping, config.getDelim(), config.getCharset());
     
                 String ret = socket.execute("ping");
@@ -231,7 +230,7 @@ public class ServerTest extends BasicSetting {
         SocketAddress addr = new InetSocketAddress("localhost", config.getPort());
         
         // Under limitation
-        List<BlockingSocket> ulCons = createConnections(config.getServerClientMax(), addr);
+        List<BlockingSocketImpl> ulCons = createConnections(config.getServerClientMax(), addr);
         assertEquals(
                 "Not enough established connections. expected :64, established :" + ulCons.size(), 
                 64, ulCons.size());
@@ -241,7 +240,7 @@ public class ServerTest extends BasicSetting {
                 ulCons.size() == server.getSessionCount());
         
         // Over limitation
-        List<BlockingSocket> olCons = createConnections(config.getServerClientMax(), addr);
+        List<BlockingSocketImpl> olCons = createConnections(config.getServerClientMax(), addr);
         assertTrue(
                 "Limit connection fail. expected : less than 64, server side :" + server.getSessionCount()
                     + ", ulCons :" + ulCons.size() + ", olCons :" + olCons.size(),
@@ -277,7 +276,7 @@ public class ServerTest extends BasicSetting {
             @Override
             public List<String> call() {
                 try {
-                    BlockingSocket sock = new BlockingSocket(config.getIp(),
+                    BlockingSocketImpl sock = new BlockingSocketImpl(config.getIp(),
                             config.getPort(), ping, config.getDelim(), config.getCharset());
 
                     sock.send("\r\n\r\n");

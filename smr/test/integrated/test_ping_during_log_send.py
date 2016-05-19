@@ -97,11 +97,9 @@ class TestPingDuringLogSend (unittest.TestCase):
       print "MASTER ==========>", master_response_times
       print "SLAVE ==========>", slave_response_times
       for rt in master_response_times:
-	assert rt < 1000
-	assert sum(master_response_times)/len(master_response_times) < 10
+	assert rt < 100
       for rt in slave_response_times:
-	assert rt < 1000
-	assert sum(slave_response_times)/len(slave_response_times) < 10
+	assert rt < 100
 
     finally:
       # Util.tstop('Check output!')

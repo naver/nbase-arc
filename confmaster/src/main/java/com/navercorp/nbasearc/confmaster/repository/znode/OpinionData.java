@@ -27,7 +27,7 @@ import org.codehaus.jackson.annotate.JsonPropertyOrder;
         getterVisibility=Visibility.NONE, 
         setterVisibility=Visibility.NONE)
 @JsonIgnoreProperties(ignoreUnknown=true)
-@JsonPropertyOrder({"name", "opinion", "version", "state_timestamp"})
+@JsonPropertyOrder({"name", "opinion", "version", "state_timestamp", "creation_time"})
 public class OpinionData {
     
     @JsonProperty("name")
@@ -38,6 +38,8 @@ public class OpinionData {
     private int version;
     @JsonProperty("state_timestamp")
     private long stateTimestamp;
+    @JsonProperty("creation_time")
+    private long creationTime;
 
     public String getName() {
         return name;
@@ -70,6 +72,14 @@ public class OpinionData {
     public void setStatetimestamp(long stateTimestamp) {
         this.stateTimestamp = stateTimestamp;
     }
+
+	public long getCreationTime() {
+		return creationTime;
+	}
+
+	public void setCreationTime(long creationTime) {
+		this.creationTime = creationTime;
+	}
     
     @Override
     public boolean equals(Object obj) {
@@ -92,6 +102,9 @@ public class OpinionData {
         }
         if (stateTimestamp != rhs.stateTimestamp) {
             return false;
+        }
+        if (creationTime != rhs.creationTime) {
+        	return false;
         }
         return true;
     }

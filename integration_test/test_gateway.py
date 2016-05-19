@@ -56,12 +56,12 @@ class TestGateway( unittest.TestCase ):
         return 0
 
     def test_pgs_add_and_del_repeatedly( self ):
-        util.print_frame()
+       util.print_frame()
 
-        execution_count_master = 0
-        execution_count_slave = 0
-        old_target = None
-        for cnt in range( 50 ):
+       execution_count_master = 0
+       execution_count_slave = 0
+       old_target = None
+       for cnt in range( 50 ):
             target = random.choice( self.cluster['servers'] )
             while target == old_target:
                 target = random.choice( self.cluster['servers'] )
@@ -108,13 +108,21 @@ class TestGateway( unittest.TestCase ):
             res = gw.read_until( '\r\n' )
             self.assertEqual( res, '+OK\r\n', 'failed to set values to gw(%s:%d). cmd:%s, res:%s' % (ip, port, cmd[:-2], res[:-2]) )
 
-        # attach pgs from cluster
+        # attach pgs to cluster
         cmd = 'pgs_join %s %d\r\n' % (upgrade_server['cluster_name'], upgrade_server['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
         jobj = json.loads(ret)
         self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         time.sleep( 3 )
+
+        stable = False
+        for i in xrange(20):
+            stable = util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'])
+            if stable:
+                break;
+            time.sleep(0.5)
+        self.assertTrue(stable, 'Unstable cluster')
 
         # check new values
         redis = redis_mgmt.Redis( upgrade_server['id'] )

@@ -18,7 +18,7 @@ package com.navercorp.nbasearc.confmaster.server.watcher;
 
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.FAILOVER_PGS;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.PGS_STATE_DECISION;
 
 import org.apache.zookeeper.WatchedEvent;
 import org.springframework.context.ApplicationContext;
@@ -55,7 +55,7 @@ public class WatchEventHandlerPgs extends WatchEventHandler {
             pgs.getHbc().urgent();
         }
 
-        workflowExecutor.perform(FAILOVER_PGS, pgs);
+        workflowExecutor.perform(PGS_STATE_DECISION, pgs);
     }
 
     @Override

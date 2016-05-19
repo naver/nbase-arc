@@ -30,6 +30,7 @@ import com.navercorp.nbasearc.confmaster.context.ContextType;
 public class LogHistory {
     
     private ContextType type = ContextType.CC;
+    private MsgDecorator decorator = null;
     
     private final Logger logger = Logger.getLogger("confmasterLogger");
     private final List<Log> logs = new ArrayList<Log>();
@@ -92,11 +93,19 @@ public class LogHistory {
     }
     
     private String decorateMessage(String msg) {
-        return String.format("%s %s", type.toString(), msg);
+        if (decorator == null) {
+            return String.format("%s %s", type.toString(), msg);
+        } else {
+            return String.format("%s %s", type.toString(), decorator.decorateMessage(msg));
+        }
     }
 
     public void setContextType(ContextType type) {
         this.type = type;
+    }
+
+    public void setMsgDecorator(MsgDecorator decorator) {
+        this.decorator = decorator;
     }
 
 }

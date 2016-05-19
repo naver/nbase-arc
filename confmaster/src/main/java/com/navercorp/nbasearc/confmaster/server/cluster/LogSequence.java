@@ -24,14 +24,17 @@ import com.navercorp.nbasearc.confmaster.logger.Logger;
 
 public class LogSequence {
     
-    private long min;
-    private long logCommit;
-    private long max;
-    private long beCommit;
+    long min;
+    long logCommit;
+    long max;
+    long beCommit;
+    final PartitionGroupServer pgs;
 
-    public LogSequence() {}
+    public LogSequence(PartitionGroupServer pgs) {
+        this.pgs = pgs;
+    }
     
-    public void initialize(PartitionGroupServer pgs) throws IOException {
+    public void initialize() throws IOException {
         try {
             String reply = pgs.executeQuery("getseq log");
             Map<String, String> map = new LinkedHashMap<String, String>();
@@ -85,6 +88,10 @@ public class LogSequence {
     public String toString() {
         return "min:" + getMin() + " commit:" + getLogCommit() + " max:"
                 + getMax() + " be_sent:" + getBeCommit();
+    }
+
+    public PartitionGroupServer getPgs() {
+        return pgs;
     }
 
 }

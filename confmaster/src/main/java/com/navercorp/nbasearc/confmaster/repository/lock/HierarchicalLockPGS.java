@@ -47,7 +47,7 @@ public class HierarchicalLockPGS extends HierarchicalLock {
         if (!pgLock.isLocked() && pgID == null) {
             PartitionGroupServer pgs = getHlh().getPgsImo().get(pgsID, clusterName);
             if (pgs == null) {
-                String message = EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST
+                String message = EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST
                         + PartitionGroupServer.fullName(clusterName, pgsID);
                 Logger.error(message);
                 throw new IllegalArgumentException(message);

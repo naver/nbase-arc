@@ -36,6 +36,13 @@ public class ZkOpinionDao implements OpinionDao {
     private ZooKeeperHolder zookeeper;
 
     private final MemoryObjectMapper mapper = new MemoryObjectMapper();
+
+    @Override
+    public OpinionData getOpinion(final String path)
+            throws MgmtZooKeeperException, NoNodeException {
+        byte data[] = zookeeper.getData(path, null);
+        return mapper.readValue(data, OpinionData.class);
+    }
     
     @Override
     public List<OpinionData> getOpinions(final String path)

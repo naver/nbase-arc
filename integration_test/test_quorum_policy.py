@@ -31,7 +31,6 @@ import json
 
 class TestQuorumPolicy( unittest.TestCase ):
     cluster = config.clusters[0]
-    quorum_policy = [int(i) for i in config.clusters[0]['quorum_policy'].split(":")]
     leader_cm = config.clusters[0]['servers'][0]
 
     @classmethod
@@ -77,7 +76,7 @@ class TestQuorumPolicy( unittest.TestCase ):
 
         master, slave1, slave2 = self.get_mss()
 
-        expected = self.quorum_policy[1]
+        expected = 2
         max_try = 20
         for i in range( 0, max_try ):
             quorum = util.get_quorum( master )
@@ -91,7 +90,7 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertEqual( ret, 0, 'failed to shutdown smr, server:%d' % slave1['id'] )
         time.sleep( 1 )
 
-        expected = self.quorum_policy[1]
+        expected = 1
         max_try = 20
         for i in range( 0, max_try ):
             quorum = util.get_quorum( master )
@@ -105,7 +104,7 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertEqual( ret, 0, 'failed to shutdown smr, server:%d' % slave2['id'] )
         time.sleep( 1 )
 
-        expected = self.quorum_policy[0]
+        expected = 0
         max_try = 20
         for i in range( 0, max_try ):
             quorum = util.get_quorum( master )
@@ -126,7 +125,7 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (slave1['id']) )
         time.sleep( 1 )
 
-        expected = self.quorum_policy[1]
+        expected = 1
         max_try = 20
         for i in range( 0, max_try ):
             quorum = util.get_quorum( master )
@@ -147,7 +146,7 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertEquals( ret, 0, 'failed to role change. smr_id:%d' % (slave2['id']) )
         time.sleep( 1 )
 
-        expected = self.quorum_policy[1]
+        expected = 2
         max_try = 20
         for i in range( 0, max_try ):
             quorum = util.get_quorum( master )
@@ -199,15 +198,15 @@ class TestQuorumPolicy( unittest.TestCase ):
 
         # check quorum policy
         quorum_of_haning_master = util.get_quorum( m )
-        self.assertEqual( self.quorum_policy[1], quorum_of_haning_master,
-                          'invalid quorum of haning master, expected:%d, but:%d' %( self.quorum_policy[1], quorum_of_haning_master) )
+        self.assertEqual( 2, quorum_of_haning_master,
+                          'invalid quorum of haning master, expected:%d, but:%d' %(2, quorum_of_haning_master) )
         util.log( 'succeeded : quorum of haning master=%d' % quorum_of_haning_master )
 
         # check quorum policy
         quorum_of_new_master = util.get_quorum( new_master )
         self.assertNotEqual( None, quorum_of_new_master, 'failed : find new master' )
-        self.assertEqual( self.quorum_policy[1], quorum_of_new_master ,
-                          'invalid quorum of new master, expected:%d, but:%d' % (self.quorum_policy[1], quorum_of_new_master) )
+        self.assertEqual( 1, quorum_of_new_master ,
+                          'invalid quorum of new master, expected:%d, but:%d' % (1, quorum_of_new_master) )
         util.log( 'succeeded : quorum of new master=%d' % quorum_of_new_master )
 
         return 0
@@ -230,52 +229,76 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertNotEqual( s2, None, 'slave2 is None.' )
 
         # detach pgs from cluster
-        cmd = 'pgs_leave %s %d\r\n' % (m['cluster_name'], m['id'])
+        cmd = 'pgs_leave %s %d forced\r\n' % (m['cluster_name'], m['id'])
         ret = util.cm_command( self.leader_cm['ip'], self.leader_cm['cm_port'], cmd )
         jobj = json.loads(ret)
         self.assertEqual( jobj['msg'], '+OK', 'failed : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
         util.log( 'succeeded : cmd="%s", reply="%s"' % (cmd[:-2], ret[:-2]) )
 
+        # check quorum policy
+        quorum_of_haning_master = util.get_quorum( m )
+        self.assertEqual(2, quorum_of_haning_master,
+                          'invalid quorum of left master, expected:%d, but:%d' % (2, quorum_of_haning_master) )
+        util.log( 'succeeded : quorum of left master=%d' % quorum_of_haning_master )
+
         # check if pgs is removed
-        success = False
-        for try_cnt in range( 10 ):
-            redis = redis_mgmt.Redis( m['id'] )
-            ret = redis.connect( m['ip'], m['redis_port'] )
-            self.assertEquals( ret, 0, 'failed : connect to smr%d(%s:%d)' % (m['id'], m['ip'], m['redis_port']) )
-            util.log( 'succeeded : connect to smr%d(%s:%d)' % (m['id'], m['ip'], m['redis_port']) )
+        r = util.get_role_of_server(m)
+        if r != c.ROLE_MASTER:
+            success = False
+            for try_cnt in range( 10 ):
+                redis = redis_mgmt.Redis( m['id'] )
+                ret = redis.connect( m['ip'], m['redis_port'] )
+                self.assertEquals( ret, 0, 'failed : connect to smr%d(%s:%d)' % (m['id'], m['ip'], m['redis_port']) )
+                util.log( 'succeeded : connect to smr%d(%s:%d)' % (m['id'], m['ip'], m['redis_port']) )
 
-            redis.write( 'info stats\r\n' )
-            for i in range( 6 ):
-                redis.read_until( '\r\n' )
-            res = redis.read_until( '\r\n' )
-            self.assertNotEqual( res, '', 'failed : get reply of "info stats" from redis%d(%s:%d)' % (m['id'], m['ip'], m['redis_port']) )
-            util.log( 'succeeded : get reply of "info stats" from redis%d(%s:%d), reply="%s"' % (m['id'], m['ip'], m['redis_port'], res[:-2]) )
-            no = int( res.split(':')[1] )
-            if no <= 100:
-                success = True
-                break
-            time.sleep( 1 )
+                redis.write( 'info stats\r\n' )
+                for i in range( 6 ):
+                    redis.read_until( '\r\n' )
+                res = redis.read_until( '\r\n' )
+                self.assertNotEqual( res, '', 'failed : get reply of "info stats" from redis%d(%s:%d)' % (m['id'], m['ip'], m['redis_port']) )
+                util.log( 'succeeded : get reply of "info stats" from redis%d(%s:%d), reply="%s"' % (m['id'], m['ip'], m['redis_port'], res[:-2]) )
+                no = int( res.split(':')[1] )
+                if no <= 100:
+                    success = True
+                    break
 
-        self.assertEquals( success, True, 'failed : pgs does not removed.' )
-        util.log( 'succeeded : pgs is removed' )
+                time.sleep( 1 )
+
+            self.assertEquals( success, True, 'failed : pgs does not removed.' )
+        util.log( 'pgs is removed' )
 
         # check states of all pgs in pg
+        for i in xrange(10):
+            for s in self.cluster['servers']:
+                smr_info = util.get_smr_info( s, self.leader_cm )
+                cc_role = smr_info['smr_Role']
+                cc_hb = smr_info['hb']
+                if cc_hb == 'N':
+                    continue
+
+                real_role = util.get_role_of_server( s )
+                real_role = util.roleNumberToChar( real_role )
+                if real_role != cc_role:
+                    time.sleep(0.5)
+                    continue
+
         for s in self.cluster['servers']:
-            real_role = util.get_role_of_server( s )
-            real_role = util.roleNumberToChar( real_role )
             smr_info = util.get_smr_info( s, self.leader_cm )
             cc_role = smr_info['smr_Role']
             cc_hb = smr_info['hb']
             if cc_hb == 'N':
                 continue
+
+            real_role = util.get_role_of_server( s )
+            real_role = util.roleNumberToChar( real_role )
             self.assertEqual( real_role, cc_role,
                               'failed : each role is difference, real=%s, cc=%s' % (real_role, cc_role) )
             util.log( 'succeeded : a role of real pgs is the same with a role in cc, real=%s, cc=%s' % (real_role, cc_role) )
 
         # check quorum policy
         quorum_of_haning_master = util.get_quorum( m )
-        self.assertEqual( self.quorum_policy[1], quorum_of_haning_master,
-                          'invalid quorum of left master, expected:%d, but:%d' %( self.quorum_policy[1], quorum_of_haning_master) )
+        self.assertEqual(2, quorum_of_haning_master,
+                          'invalid quorum of left master, expected:%d, but:%d' % (2, quorum_of_haning_master) )
         util.log( 'succeeded : quorum of left master=%d' % quorum_of_haning_master )
 
         # 'role lconn' to master
@@ -335,8 +358,8 @@ class TestQuorumPolicy( unittest.TestCase ):
         # check quorum policy
         quorum_of_new_master = util.get_quorum( new_master )
         self.assertNotEqual( None, quorum_of_new_master, 'failed : find new master' )
-        self.assertEqual( self.quorum_policy[1], quorum_of_new_master ,
-                          'invalid quorum of new master, expected:%d, but:%d' % (self.quorum_policy[1], quorum_of_new_master) )
+        self.assertEqual( 1, quorum_of_new_master ,
+                          'invalid quorum of new master, expected:%d, but:%d' % (1, quorum_of_new_master) )
         util.log( 'succeeded : quorum of new master=%d' % quorum_of_new_master )
 
         # shutdown load generators

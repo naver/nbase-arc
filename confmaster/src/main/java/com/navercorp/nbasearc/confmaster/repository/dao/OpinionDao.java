@@ -25,6 +25,9 @@ import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
 
 public interface OpinionDao {
 
+    OpinionData getOpinion(final String path)
+            throws MgmtZooKeeperException, NoNodeException;
+    
     List<OpinionData> getOpinions(final String path)
             throws MgmtZooKeeperException, NoNodeException;
 

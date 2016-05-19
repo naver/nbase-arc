@@ -18,35 +18,26 @@ package com.navercorp.nbasearc.confmaster;
 
 import java.util.concurrent.CountDownLatch;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionSupport;
 
-@Component
 public class GracefulTerminator extends Thread {
 
-    @Autowired
     private LeaderElectionSupport electionSupport;
-
-    @Autowired
-    private ZooKeeperHolder zookeeper;
-    
     private volatile boolean terminated = false;
-    
     private final CountDownLatch latch = new CountDownLatch(1);
+    
+    public GracefulTerminator(LeaderElectionSupport electionSupport) {
+        this.electionSupport = electionSupport;
+    }
         
     public boolean isTerminated() {
         return terminated;
     }
 
     public void terminate() {
-        // Yield the leader or an offer for other ClusterConstoller.
+        // Yield the leader
         electionSupport.stop();
-                
-        zookeeper.release();
         
         latch.countDown();
     }

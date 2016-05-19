@@ -25,6 +25,7 @@ import testbase
 import redis_mgmt
 import time
 import telnet
+import random
 
 
 def block_network(cluster, mgmt_ip, mgmt_port):
@@ -58,6 +59,9 @@ def unblock_network(cluster, mgmt_ip, mgmt_port, final_state):
         time.sleep(1)
 
     return True
+
+def is_pgs_normal(pgs):
+    return pgs['active_role'] == pgs['mgmt_role'] and (pgs['mgmt_role'] == 'M' or pgs['mgmt_role'] == 'S') and pgs['color'] == 'GREEN'
 
 class TestNetworkIsolation(unittest.TestCase):
     def setUp(self):
@@ -193,12 +197,12 @@ class TestNetworkIsolation(unittest.TestCase):
                 final_state = []
                 util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
 
-                state_consistency = True
+                all_green = True
                 for s in final_state:
-                    if s['active_role'] != s['mgmt_role']:
-                        state_consistency = False
+                    if is_pgs_normal(s) == False:
+                        all_green = False
 
-                if state_consistency:
+                if all_green:
                     ok = True
                     break
                 time.sleep(1)
@@ -207,13 +211,6 @@ class TestNetworkIsolation(unittest.TestCase):
         # Check state
         self.assertNotEqual(initial_state, None, 'initial_state is None')
         self.assertNotEqual(final_state, None, 'final_state is None')
-
-        initial_state = sorted(initial_state, key=lambda x: int(x['pgs_id']))
-        final_state = sorted(final_state, key=lambda x: int(x['pgs_id']))
-        for i in range(len(final_state)):
-            msg = 'ts (%d)%d -> (%d)%d' % (initial_state[i]['pgs_id'], initial_state[i]['active_ts'], final_state[i]['pgs_id'], final_state[i]['active_ts'])
-            util.log(msg)
-            self.assertEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
 
         # Shutdown cluster
         ret = default_cluster.finalize( cluster )
@@ -308,7 +305,7 @@ class TestNetworkIsolation(unittest.TestCase):
                     if s['pgs_id'] == 1:
                         continue
 
-                    if s['active_role'] != s['mgmt_role']:
+                    if is_pgs_normal(s) == False:
                         state_consistency = False
 
                 if state_consistency:
@@ -434,7 +431,7 @@ class TestNetworkIsolation(unittest.TestCase):
                     if s['pgs_id'] == 1:
                         continue
 
-                    if s['active_role'] != s['mgmt_role']:
+                    if is_pgs_normal(s) == False:
                         state_consistency = False
 
                 if state_consistency:
@@ -447,13 +444,6 @@ class TestNetworkIsolation(unittest.TestCase):
         self.assertNotEqual(initial_state, None, 'initial_state is None')
         self.assertNotEqual(final_state, None, 'final_state is None')
 
-        initial_state = sorted(initial_state, key=lambda x: int(x['pgs_id']))
-        final_state = sorted(final_state, key=lambda x: int(x['pgs_id']))
-        for i in range(len(final_state)):
-            msg = 'ts (%d)%d -> (%d)%d' % (initial_state[i]['pgs_id'], initial_state[i]['active_ts'], final_state[i]['pgs_id'], final_state[i]['active_ts'])
-            util.log(msg)
-            self.assertEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
-
         # Shutdown cluster
         ret = default_cluster.finalize( cluster )
         self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
@@ -465,7 +455,7 @@ class TestNetworkIsolation(unittest.TestCase):
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
-    def test_4_mgmt_is_isolated_with_slave_failover(self):
+    def test_4_mgmt_is_isolated_with_red_failover(self):
         util.print_frame()
 
         out = util.sudo('iptables -L')
@@ -553,8 +543,11 @@ class TestNetworkIsolation(unittest.TestCase):
                 time.sleep(1)
             self.assertTrue(ok, 'Fail, state transition')
 
+            pgs_list = util.get_pgs_info_list(mgmt_ip, mgmt_port, cluster)
+            reds = filter(lambda x: x['color'] == 'RED', pgs_list)
+
             # Shutdown
-            server = cluster['servers'][1]
+            server = cluster['servers'][random.choice(reds)['pgs_id']]
             util.log( 'shutdown pgs%d while hanging.' % server['id'] )
             ret = testbase.request_to_shutdown_smr( server )
             self.assertEqual( ret, 0, 'failed to shutdown smr. id:%d' % server['id'] )
@@ -587,10 +580,10 @@ class TestNetworkIsolation(unittest.TestCase):
 
                 state_consistency = True
                 for s in final_state:
-                    if s['pgs_id'] == 1:
+                    if s['pgs_id'] == server['id']:
                         continue
 
-                    if s['active_role'] != s['mgmt_role']:
+                    if is_pgs_normal(s) == False:
                         state_consistency = False
 
                 if state_consistency:
@@ -644,186 +637,14 @@ class TestNetworkIsolation(unittest.TestCase):
         for i in range(len(final_state)):
             msg = 'ts (%d)%d -> (%d)%d' % (initial_state[i]['pgs_id'], initial_state[i]['active_ts'], final_state[i]['pgs_id'], final_state[i]['active_ts'])
             util.log(msg)
-            if initial_state[i]['pgs_id'] != 1:
-                self.assertEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
+            if initial_state[i]['pgs_id'] == 1:
+                self.assertNotEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
 
         self.assertTrue(util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, check_quorum=True), 'failed to check cluster state')
 
         # Shutdown cluster
         ret = default_cluster.finalize( cluster )
         self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
-
-    def test_5_mgmt_is_isolated_with_master_failover(self):
-        util.print_frame()
-
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
-        util.log('out.succeeded : %s' % out.succeeded)
-
-        # Add forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1', config.clusters)[0]
-        util.log(util.json_to_str(cluster))
-
-        self.leader_cm = cluster['servers'][0]
-
-        # MGMT
-        mgmt_ip = cluster['servers'][0]['real_ip']
-        mgmt_port = cluster['servers'][0]['cm_port']
-
-        # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
-
-        # Print initial state of cluster
-        util.log('\n\n\n ### INITIAL STATE OF CLUSTER ### ')
-        initial_state = []
-        self.assertTrue(util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, initial_state, check_quorum=True), 'failed to check cluster state')
-
-        # Network isolation test
-        for loop_cnt in range(3):
-            master, slave1, slave2 = util.get_mss(cluster)
-            self.assertNotEquals(master, None, 'there is no master')
-            self.assertNotEquals(slave1, None, 'there is no slave1')
-            self.assertNotEquals(slave2, None, 'there is no slave2')
-
-            # Block network
-            util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % loop_cnt)
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
-
-            for i in range(4):
-                util.log('waiting... %d' % (i + 1))
-                time.sleep(1)
-
-            # Check cluster state
-            ok = False
-            for i in range(10):
-                isolated_states = []
-                util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, isolated_states, check_quorum=True)
-                time.sleep(1)
-
-                state_transition_done = True
-                for s in isolated_states:
-                    if s['ip'] != '127.0.0.100':
-                        continue
-
-                    if s['active_role'] != '?' or s['mgmt_role'] != 'N':
-                        state_transition_done = False
-
-                if state_transition_done :
-                    ok = True
-                    break
-                time.sleep(1)
-            self.assertTrue(ok, 'Fail, state transition')
-
-            # Shutdown master
-            util.log( 'shutdown pgs%d while hanging.' % master['id'] )
-            ret = testbase.request_to_shutdown_smr( master )
-            self.assertEqual( ret, 0, 'failed to shutdown smr. id:%d' % master['id'] )
-            ret = testbase.request_to_shutdown_redis( master )
-            self.assertEqual( ret, 0, 'failed to shutdown redis. id:%d' % master['id'] )
-
-            # Check state F
-            max_try = 20
-            expected = 'F'
-            for i in range( 0, max_try):
-                util.log('MGMT_IP:%s, MGMT_PORT:%d' % (mgmt_ip, mgmt_port))
-                state = util._get_smr_state( master['id'], cluster['cluster_name'], mgmt_ip, mgmt_port )
-                if expected == state:
-                    break;
-                time.sleep( 1 )
-            self.assertEqual( expected , state,
-                               'master%d - state:%s, expected:%s' % (master['id'], state, expected) )
-            util.log( 'succeeded : pgs%d state changed to F.' % master['id'] )
-
-            # Unblock network
-            util.log('\n\n\n ### UNBLOCK NETWORK, %d ### ' % loop_cnt)
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
-
-            # Check cluster state
-            ok = False
-            for i in range(7):
-                final_state = []
-                util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, final_state, check_quorum=True)
-
-                state_consistency = True
-                for s in final_state:
-                    if s['pgs_id'] == master['id']:
-                        continue
-
-                    if s['active_role'] != s['mgmt_role']:
-                        state_consistency = False
-
-                if state_consistency:
-                    ok = True
-                    break
-                time.sleep(1)
-            self.assertTrue(ok, 'Fail, state consistency')
-
-            # Recovery
-            util.log( 'restart pgs%d.' % master['id'] )
-            ret = testbase.request_to_start_smr( master )
-            self.assertEqual( ret, 0, 'failed to start smr. id:%d' % master['id'] )
-
-            ret = testbase.request_to_start_redis( master )
-            self.assertEqual( ret, 0, 'failed to start redis. id:%d' % master['id'] )
-
-            wait_count = 20
-            ret = testbase.wait_until_finished_to_set_up_role( master, wait_count )
-            self.assertEqual( ret, 0, 'failed to role change. smr_id:%d' % (master['id']) )
-
-            redis = redis_mgmt.Redis( master['id'] )
-            ret = redis.connect( master['ip'], master['redis_port'] )
-            self.assertEqual( ret, 0, 'failed to connect to redis' )
-
-            ok = False
-            for i in xrange(5):
-                ok = util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, check_quorum=True)
-                if ok:
-                    break
-                else:
-                    time.sleep(1)
-
-            self.assertTrue(ok, 'failed to check cluster state')
-
-        # Check state
-        self.assertNotEqual(initial_state, None, 'initial_state is None')
-        self.assertNotEqual(final_state, None, 'final_state is None')
-
-        initial_state = sorted(initial_state, key=lambda x: int(x['pgs_id']))
-        final_state = sorted(final_state, key=lambda x: int(x['pgs_id']))
-        for i in range(0, 3):
-            msg = 'ts (%d)%d -> (%d)%d' % (initial_state[i]['pgs_id'], initial_state[i]['active_ts'], final_state[i]['pgs_id'], final_state[i]['active_ts'])
-            util.log(msg)
-            self.assertNotEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
-
-        for i in range(3, 6):
-            msg = 'ts (%d)%d -> (%d)%d' % (initial_state[i]['pgs_id'], initial_state[i]['active_ts'], final_state[i]['pgs_id'], final_state[i]['active_ts'])
-            util.log(msg)
-            self.assertEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
-
-        self.assertTrue(util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, check_quorum=True), 'failed to check cluster state')
-
-        # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
-
-        # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
     def test_6_mgmt_is_isolated_with_lconn(self):
         util.print_frame()
@@ -936,7 +757,7 @@ class TestNetworkIsolation(unittest.TestCase):
                     if s['pgs_id'] == 1:
                         continue
 
-                    if s['active_role'] != s['mgmt_role']:
+                    if is_pgs_normal(s) == False:
                         state_consistency = False
 
                 if state_consistency:

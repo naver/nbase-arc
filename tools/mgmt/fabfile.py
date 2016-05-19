@@ -378,7 +378,12 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
             return
 
     # PGS Leave
-    if cm.pgs_leave(cluster_name, pgs_id, ip, redis_port, host) != True:
+    if remain_data == False and remain_mgmt_conf == False:
+        forced_leave = True
+    else:
+        forced_leave = False
+
+    if cm.pgs_leave(cluster_name, pgs_id, ip, redis_port, host, forced=forced_leave) != True:
         warn(red("[%s] PGS Leave fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, smr_base_port)))
         return False
 

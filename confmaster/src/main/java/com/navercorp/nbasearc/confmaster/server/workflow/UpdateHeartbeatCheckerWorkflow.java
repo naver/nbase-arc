@@ -16,9 +16,8 @@
 
 package com.navercorp.nbasearc.confmaster.server.workflow;
 
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.FAILOVER_COMMON;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.FAILOVER_PGS;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.SET_QUORUM;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.COMMON_STATE_DECISION;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.PGS_STATE_DECISION;
 
 import java.util.List;
 
@@ -34,12 +33,10 @@ import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.server.cluster.FailureDetector;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
-import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
 import com.navercorp.nbasearc.confmaster.server.imo.FailureDetectorImo;
 import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
@@ -50,7 +47,6 @@ public class UpdateHeartbeatCheckerWorkflow {
     private final ZooKeeperHolder zookeeper;
     
     private final FailureDetectorImo fdImo;
-    private final PartitionGroupImo pgImo;
     private final PartitionGroupServerImo pgsImo;
     private final GatewayImo gwImo;
     private final RedisServerImo rsImo; 
@@ -63,7 +59,6 @@ public class UpdateHeartbeatCheckerWorkflow {
         this.workflowExecutor = context.getBean(WorkflowExecutor.class);
 
         this.fdImo = context.getBean(FailureDetectorImo.class);
-        this.pgImo = context.getBean(PartitionGroupImo.class);
         this.pgsImo = context.getBean(PartitionGroupServerImo.class);
         this.gwImo = context.getBean(GatewayImo.class);
         this.rsImo = context.getBean(RedisServerImo.class);
@@ -87,28 +82,22 @@ public class UpdateHeartbeatCheckerWorkflow {
             Logger.error("Update the number of heartbeat checkers fail.", e);
         }
         
-        // PG
-        List<PartitionGroup> pgList = pgImo.getAll();
-        for (PartitionGroup pg : pgList) {
-            workflowExecutor.perform(SET_QUORUM, pg.getClusterName(), pg.getName());
-        }
-        
         // PGS
         List<PartitionGroupServer> pgsList = pgsImo.getAll();
         for (PartitionGroupServer pgs : pgsList) {
-            workflowExecutor.perform(FAILOVER_PGS, pgs);
+            workflowExecutor.perform(PGS_STATE_DECISION, pgs);
         }
         
         // GW
         List<Gateway> gwList = gwImo.getAll();
         for (Gateway gw : gwList) {
-            workflowExecutor.perform(FAILOVER_COMMON, gw);
+            workflowExecutor.perform(COMMON_STATE_DECISION, gw);
         }
         
         // RS
         List<RedisServer> rsList = rsImo.getAll();
         for (RedisServer rs : rsList) {
-            workflowExecutor.perform(FAILOVER_COMMON, rs);
+            workflowExecutor.perform(COMMON_STATE_DECISION, rs);
         }
         
         return null;

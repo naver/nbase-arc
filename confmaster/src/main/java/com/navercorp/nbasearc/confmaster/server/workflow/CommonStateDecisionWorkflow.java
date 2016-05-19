@@ -47,7 +47,7 @@ import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
 import com.navercorp.nbasearc.confmaster.server.imo.FailureDetectorImo;
 import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
 
-public class FailoverCommonWorkflow {
+public class CommonStateDecisionWorkflow {
     
     private ZooKeeperHolder zookeeper;
     private HeartbeatTarget target;
@@ -64,7 +64,7 @@ public class FailoverCommonWorkflow {
     private final WorkflowLogDao workflowLogDao;
     private final NotificationDao notificationDao;
 
-    protected FailoverCommonWorkflow(HeartbeatTarget target, ApplicationContext context) {
+    protected CommonStateDecisionWorkflow(HeartbeatTarget target, ApplicationContext context) {
         this.target = target;
         this.path = target.getPath();
         
@@ -87,7 +87,7 @@ public class FailoverCommonWorkflow {
             Logger.error("This workflow is not for a pgs.");
             return null;
         }
-        Logger.info("Failover start. {}", target);
+        Logger.info("begin {}", target);
         
         GatherOpinionsResult gatherOpinionsResult = gatherOpinions();
         if (gatherOpinionsResult == null) {
@@ -211,30 +211,28 @@ public class FailoverCommonWorkflow {
             newState = Constant.SERVER_STATE_NORMAL;
         }
 
-        Logger.info("PATH:" + target.getTargetOfHeartbeatPath() + ",  STAT:" + newState);
-
         if (newState.equals(Constant.SERVER_STATE_FAILURE)) {
             workflowLogDao.log(jobID,
                             Constant.SEVERITY_MAJOR,
                             "CommonFailureDetectionWorkflow",
                             Constant.LOG_TYPE_WORKFLOW,
                             target.getClusterName(),
-                            "State changed. " + target + ", " + target.getState() + "->" + newState,
+                            "state changed. " + target + ", " + target.getView() + "->" + newState,
                             String.format(
                                     "{\"type\":\"%s\",\"id\":%s,\"old_state\":\"%s\",\"new_state\":\"%s\"}",
                                     target.getNodeType(), target.getName(),
-                                    target.getState(), newState));
+                                    target.getView(), newState));
         } else if (newState.equals(Constant.SERVER_STATE_NORMAL)) {
             workflowLogDao.log(jobID,
                             Constant.SEVERITY_MODERATE,
                             "CommonFailureDetectionWorkflow",
                             Constant.LOG_TYPE_WORKFLOW,
                             target.getClusterName(),
-                            "State changed. " + target + ", " + target.getState() + "->" + newState,
+                            "state changed. " + target + ", " + target.getView() + "->" + newState,
                             String.format(
                                     "{\"type\":\"%s\",\"id\":%s,\"old_state\":\"%s\",\"new_state\":\"%s\"}",
                                     target.getNodeType(), target.getName(),
-                                    target.getState(), newState));
+                                    target.getView(), newState));
         }
 
         return new MakeDecisionResult(true, newState);

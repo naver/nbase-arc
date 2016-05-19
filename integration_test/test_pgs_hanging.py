@@ -247,7 +247,7 @@ class TestPGSHanging( unittest.TestCase ):
             role = util.get_role_of_server( s1 )
             if role == c.ROLE_SLAVE:
                 ts_after = util.get_timestamp_of_pgs( s1 )
-                if ts_after != -1 and ts_before == ts_after:
+                if ts_after != -1 and ts_before != ts_after:
                     success = True
                     break
             time.sleep( 1 )
@@ -365,13 +365,13 @@ class TestPGSHanging( unittest.TestCase ):
                 util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], state)
                 s2_state = filter(lambda s: s['pgs_id'] == s2['id'], state)[0]
                 role = s2_state['active_role']
-                if role == 'M':
+                if role != 'M':
                     success = False
                     break
                 time.sleep( 1 )
 
             util.log( '' )
-            util.log( 'It expects %s:%d is a slave, it can not transit to a master because it violate copy-quorum. (c:3, q:1, a:1)' )
+            util.log( 'It expects that pgs2 is a master. PG.COPY: 3, PG.Q: 2' )
             util.log( '' )
             util.log_server_state( self.cluster )
 
@@ -592,46 +592,14 @@ class TestPGSHanging( unittest.TestCase ):
 
         time.sleep( 10 )
 
-        # wait for forced master election
-        success = False
-        master = None
-        for i in range( 20 ):
-            role = util.get_role_of_server( s1 )
-            ts = util.get_timestamp_of_pgs( s1 )
-            if role == c.ROLE_MASTER and ts == s1_ts:
-                master = s1
-                success = True
+        # check consistency
+        ok = False
+        for try_cnt in xrange(20):
+            ok = util.check_cluster(self.cluster['cluster_name'], self.mgmt_ip, self.mgmt_port)
+            if ok:
                 break
-            role = util.get_role_of_server( s2 )
-            ts = util.get_timestamp_of_pgs( s2 )
-            if role == c.ROLE_MASTER and ts == s2_ts:
-                master = s2
-                success = True
-                break
-            role = util.get_role_of_server( m )
-            ts = util.get_timestamp_of_pgs( m )
-            if role == c.ROLE_MASTER and ts == m_ts:
-                master = m
-                success = True
-                break
-            time.sleep( 1 )
-
-        m_ts = util.get_timestamp_of_pgs( m )
-        s1_ts = util.get_timestamp_of_pgs( s1 )
-        s2_ts = util.get_timestamp_of_pgs( s2 )
-
-        self.assertEqual( success, True, 'failed to forced master election' )
-
-        servers = [m, s1, s2]
-        for s in servers:
-            if s != master:
-                for i in range( 20 ):
-                    role = util.get_role_of_server( s )
-                    if role == c.ROLE_SLAVE:
-                        success = True
-                        break
-                    time.sleep( 1 )
-                self.assertEqual( success, True, 'failed to rejoin as a slave, %s:%d' % (s['ip'], s['smr_mgmt_port']) )
+            time.sleep(0.5)
+        self.assertTrue(ok, 'Unstable cluster state')
 
         util.log( 'server state transition after hang' )
         util.log_server_state( self.cluster )

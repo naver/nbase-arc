@@ -17,15 +17,9 @@
 package com.navercorp.nbasearc.confmaster;
 
 import static com.jayway.awaitility.Awaitility.await;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_NO;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_NONE;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_SLAVE;
-import static com.navercorp.nbasearc.confmaster.Constant.S2C_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_FAILURE;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_NORMAL;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.apache.log4j.Level.DEBUG;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -40,23 +34,30 @@ import static org.mockito.Mockito.when;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.Constant;
+import com.navercorp.nbasearc.confmaster.Constant.Color;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBResult;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBResultProcessor;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.heartbeat.HeartbeatChecker;
-import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
-import com.navercorp.nbasearc.confmaster.logger.Logger;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.repository.dao.ClusterBackupScheduleDao;
+import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
+import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
 import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkNotificationDao;
 import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.repository.znode.ClusterData;
@@ -86,9 +87,8 @@ import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionHandler;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
-import com.navercorp.nbasearc.confmaster.server.workflow.FailoverPGSWorkflowTest.MasterChecker;
-import com.navercorp.nbasearc.confmaster.server.workflow.FailoverPGSWorkflowTest.RoleChecker;
 
 public class BasicSetting {
 
@@ -131,12 +131,18 @@ public class BasicSetting {
     protected ZkWorkflowLogDao workflowLogDao;
     @Autowired
     protected ClusterBackupScheduleDao clusterBackupScheduleDao;
+    @Autowired
+    protected PartitionGroupDao pgDao;
+    @Autowired
+    protected PartitionGroupServerDao pgsDao;
     
     @Autowired
     protected ConfmasterService confmasterService;
 
     @Autowired 
     private HBResultProcessor hbcProc;
+    
+    final protected long assertionTimeout = 5000L;  
     
     final protected String ok = S2C_OK;
     final protected long timeout = 10000000L;
@@ -183,16 +189,17 @@ public class BasicSetting {
         pgsDatas[0] = new PartitionGroupServerData();
         pgsDatas[0].initialize(Integer.valueOf(pgName), pmName, pmData.getIp(),
                 8109, 8100, 8103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                pgData.currentGen(), HB_MONITOR_NO);
+                Color.RED, pgData.currentGen(), HB_MONITOR_NO);
         pgsDatas[1] = new PartitionGroupServerData();
         pgsDatas[1].initialize(Integer.valueOf(pgName), pmName, pmData.getIp(),
-                8109, 8100, 8103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                pgData.currentGen(), HB_MONITOR_NO);
+                9109, 9100, 9103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
+                Color.RED, pgData.currentGen(), HB_MONITOR_NO);
         pgsDatas[2] = new PartitionGroupServerData();
         pgsDatas[2].initialize(Integer.valueOf(pgName), pmName, pmData.getIp(),
-                8109, 8100, 8103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                pgData.currentGen(), HB_MONITOR_NO);
+                10109, 10100, 10103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
+                Color.RED, pgData.currentGen(), HB_MONITOR_NO);
     }
+    protected static PGSComponentMock[] pgsMockups = new PGSComponentMock[3];
     
     // Gateway
     protected static String gwName = "1";
@@ -233,31 +240,27 @@ public class BasicSetting {
     }
     
     public void after() throws Exception {
-        try {
-            executor.release();
-            
-            confmasterService.release();
-            
-            LeaderState.init();
-            
-            zookeeper.deleteAllZNodeRecursive();
-            
-            zookeeper.release();
-        } finally {
-            Logger.flush(DEBUG);
-        }
+        executor.release();
+        
+        confmasterService.release();
+        
+        LeaderState.init();
+        
+        zookeeper.deleteAllZNodeRecursive();
+        
+        zookeeper.release();
     }
 
-    public JobResult doCommand(String line) throws Exception {
+    public JobResult tryCommand(String line) throws Exception {
         Future<JobResult> future = commandExecutor.perform(line, null);
-        try {
-            JobResult result = future.get(timeout, TimeUnit.MILLISECONDS);
-            assertNotNull(result);
-            return result;
-        } catch (Exception e) {
-            e.printStackTrace();
-            throw e;
-        }
+        JobResult result = future.get(timeout, TimeUnit.MILLISECONDS);
+        return result;
+    }
+    
+    public JobResult doCommand(String line) throws Exception {
+        JobResult result = tryCommand(line);
+        assertNotNull(result);
+        return result;
     }
     
     public void pmAdd(String pmName, String pmIp) throws Exception {
@@ -425,6 +428,9 @@ public class BasicSetting {
     }
     
     public void deletePgs(int index, boolean isLastPgs) throws Exception {
+        if (getPgs(index).getData().getHb().equals(HB_MONITOR_YES)) {
+            joinLeave.pgsLeave(getPgs(index), getRs(index), pgsMockups[index], FORCED);
+        }
         pgsDel(pgsNames[index], isLastPgs);
     }
     
@@ -470,42 +476,51 @@ public class BasicSetting {
         setPgs(spy(getPgs(id)));
         
         // Create mocks for PGS
-        PGSComponentMock mockup = new PGSComponentMock(getPgs(id), getRs(id)); 
+        pgsMockups[id] = new PGSComponentMock(getPgs(id), getRs(id)); 
 
         // Mock Heartbeat Session Handler
         final HBSessionHandler handler = mock(HBSessionHandler.class);
         doNothing().when(handler).handleResult(anyString(), anyString());
         getPgs(id).getHbc().setHandler(handler);
-        
-        // PGS Join
-        joinLeave.pgsJoin(getPgs(id), getRs(id), mockup);
+    }
+
+    public void joinPgs(int id) throws Exception {
+        joinLeave.pgsJoin(getPgs(id), getRs(id), pgsMockups[id]);
     }
     
     public void testRoleNone(PartitionGroupServer pgs) throws Exception {
         // Mock up PGS '0' to be in LCONN state
         final String pingResp = "";
         mockSocket(pgs, pingResp);
-        mockHeartbeatResult(pgs, SERVER_STATE_FAILURE, pingResp);
+        mockHeartbeatResult(pgs, PGS_ROLE_NONE, pingResp);
         
         // It expects that PGS '0' becomes a master.
-        await("failure detected.").atMost(5, SECONDS).until(new RoleChecker(pgs, PGS_ROLE_NONE));
+        await("failure detected - check role").atMost(assertionTimeout, SECONDS).until(new RoleValidator(pgs, PGS_ROLE_NONE));
+        await("failure detected - check color.").atMost(assertionTimeout, SECONDS).until(new ColorValidator(pgs, RED));
 
         // Mock up PGS '0' to be a MASTER
         mockSocket(pgs, "");
+    }
+
+    public void mockPgsNone(PartitionGroupServer pgs) throws Exception {
+        // Mock up PGS '0' to be in LCONN state
+        final String pingResp = "";
+        mockSocket(pgs, pingResp);
+        mockHeartbeatResult(pgs, PGS_ROLE_NONE, pingResp);    
     }
     
     public void mockPgsLconn(PartitionGroupServer pgs) throws Exception {
         // Mock up PGS '0' to be in LCONN state
         final String pingResp = "+OK 1 1400000000";
         mockSocket(pgs, pingResp);
-        mockHeartbeatResult(pgs, SERVER_STATE_NORMAL, pingResp);    
+        mockHeartbeatResult(pgs, PGS_ROLE_LCONN, pingResp);    
     }
     
     public PartitionGroupServer waitRoleMaster(List<PartitionGroupServer> pgsList) throws Exception {
-        MasterChecker condition = new MasterChecker(pgsList);
+        MasterFinder condition = new MasterFinder(pgsList);
         
         // It expects that PGS '0' becomes a master.
-        await("test for role master.").atMost(5, SECONDS).until(condition);
+        await("test for role master.").atMost(assertionTimeout, SECONDS).until(condition);
 
         // Mock up PGS '0' to be a MASTER
         mockSocket(condition.getMaster(), "+OK 2 1400000000");
@@ -514,31 +529,221 @@ public class BasicSetting {
     
     public void waitRoleSlave(PartitionGroupServer pgs) throws Exception {
         // It expects that PGS becomes a slave.
-        await("test for role slave.").atMost(5, SECONDS).until(
-                new RoleChecker(pgs, PGS_ROLE_SLAVE));
+        await("test for role slave.").atMost(assertionTimeout, SECONDS).until(
+                new RoleValidator(pgs, PGS_ROLE_SLAVE));
 
         // Mock up PGS to be a SLAVE
         mockSocket(pgs, "+OK 3 1400000000");
     }
     
-    public void mockSocket(PartitionGroupServer pgs, String pingResp) throws IOException {
-        BlockingSocket msock = mock(BlockingSocket.class);
+    public void mockSocket(PartitionGroupServer pgs, final String pingResp) throws IOException {
+        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
         pgs.setServerConnection(msock);
-        when(msock.execute(anyString())).thenReturn(S2C_OK);
-        when(msock.execute("getseq log")).thenReturn(
-                "+OK log min:0 commit:0 max:0 be_sent:0");
-        when(msock.execute("ping")).thenReturn(pingResp);
+        when(msock.execute(anyString())).thenAnswer(new Answer<String>() {
+            Integer quorum = new Integer(0);
+
+            public String answer(InvocationOnMock invocation) throws Throwable {
+                String cmd = (String) invocation.getArguments()[0];
+                if (cmd.equals("getquorum")) {
+                    return String.valueOf(quorum);
+                } else if (cmd.split(" ")[0].equals("setquorum")) {
+                    quorum = Integer.parseInt(cmd.split(" ")[1]);
+                    return S2C_OK;
+                } else if (cmd.equals("getseq log")) {
+                    return "+OK log min:0 commit:0 max:0 be_sent:0";
+                } else if (cmd.equals(PGS_PING)) {
+                    return pingResp;
+                }
+                return S2C_OK;
+            }
+        });
+        
+        BlockingSocketImpl msockRs = mock(BlockingSocketImpl.class);
+        RedisServer rs = getRs(Integer.valueOf(pgs.getName()));
+        rs.setServerConnection(msockRs);
+        when(msockRs.execute(REDIS_PING)).thenReturn(REDIS_PONG);
+        when(msockRs.execute(REDIS_REP_PING)).thenReturn(REDIS_PONG);
     }
     
-    private void mockHeartbeatResult(PartitionGroupServer pgs, String state, String pingResp) throws Exception {
+    protected MimicSMR mimic(PartitionGroupServer pgs) {
+        MimicSMR m = new MimicSMR();
+        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
+        try {
+            when(msock.execute(anyString())).thenAnswer(m);
+        } catch (IOException e) {
+        }
+        pgs.setServerConnection(msock);
+        
+        try {
+            BlockingSocketImpl msockRs = mock(BlockingSocketImpl.class);
+            RedisServer rs = getRs(Integer.valueOf(pgs.getName()));
+            rs.setServerConnection(msockRs);
+            when(msockRs.execute(REDIS_PING)).thenReturn(REDIS_PONG);
+            when(msockRs.execute(REDIS_REP_PING)).thenReturn(REDIS_PONG);
+        } catch (IOException e) {
+        }
+        
+        return m;
+    }
+    
+    protected void mockHeartbeatResult(PartitionGroupServer pgs, String role, String pingResp) throws Exception {
         HBResult result = new HBResult(
-                state, 
+                role, 
                 pgs, 
                 pingResp, 
                 pgs.getData().getPmIp(),
                 pgs.getData().getSmrMgmtPort(), 
                 pgs.getHbc().getID());
         hbcProc.proc(result, false);
+    }
+
+    protected void validateNormal(PartitionGroupServer pgs, PartitionGroup pg, String role, int mgen) {
+        assertEquals(GREEN, pgs.getData().getColor());
+        assertEquals(role, pgs.getData().getRole());
+        assertEquals(SERVER_STATE_NORMAL, pgs.getData().getState());
+        assertEquals(HB_MONITOR_YES, pgs.getData().getHb());
+        assertEquals(mgen, pgs.getData().getMasterGen());
+        assertEquals(mgen, pg.getData().currentGen());
+    }
+    
+    public static class RoleColorValidator implements Callable<Boolean> {
+        private final PartitionGroupServer pgs;
+        private final String role;
+        private final Color color;
+        
+        public RoleColorValidator(PartitionGroupServer pgs, String role, Color color) {
+            this.pgs = pgs;
+            this.role = role;
+            this.color = color;
+        }
+        
+        public Boolean call() throws Exception {
+            if (pgs.getData().getRole().equals(role)
+                    && pgs.getData().getColor() == color) {
+                return true;
+            }
+            return false;
+        }
+    } 
+    
+    public static class MasterFinder implements Callable<Boolean> {
+        private final List<PartitionGroupServer> pgsList;
+        private PartitionGroupServer master;
+        
+        public MasterFinder(List<PartitionGroupServer> pgsList) {
+            this.pgsList = pgsList;
+        }
+        
+        public Boolean call() throws Exception {
+            for (PartitionGroupServer pgs : pgsList) {
+                if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)
+                        && pgs.getData().getColor() == GREEN) {
+                    setMaster(pgs);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public PartitionGroupServer getMaster() {
+            return master;
+        }
+
+        private void setMaster(PartitionGroupServer master) {
+            this.master = master;
+        }
+    }
+    
+    public static class SlaveFinder implements Callable<Boolean> {
+        private final List<PartitionGroupServer> pgsList;
+        private final Set<PartitionGroupServer> slaves;
+        
+        public SlaveFinder(List<PartitionGroupServer> pgsList) {
+            this.pgsList = pgsList;
+            this.slaves = new HashSet<PartitionGroupServer>();
+        }
+        
+        public Boolean call() throws Exception {
+            for (PartitionGroupServer pgs : pgsList) {
+                if (pgs.getData().getRole().equals(PGS_ROLE_SLAVE)
+                        && pgs.getData().getColor() == GREEN) {
+                    addSlave(pgs);
+                }
+            }
+            return slaves.size() > 0;
+        }
+        
+        public boolean isSlave(PartitionGroupServer hint) {
+            if (slaves.contains(hint)) {
+                return true;
+            }
+            return false;
+        }
+        
+        public Set<PartitionGroupServer> getSlaves() {
+            return slaves;
+        }
+
+        private void addSlave(PartitionGroupServer slave) {
+            slaves.add(slave);
+        }
+    }
+    
+    public static class RoleValidator implements Callable<Boolean> {
+        private final PartitionGroupServer pgs;
+        private final String role;
+        
+        public RoleValidator(PartitionGroupServer pgs, String role) {
+            this.pgs = pgs;
+            this.role = role;
+        }
+        
+        public Boolean call() throws Exception {
+            return pgs.getData().getRole().equals(role);
+        }
+    }
+
+    public static class ColorValidator implements Callable<Boolean> {
+        private final PartitionGroupServer pgs;
+        private final Color color;
+        
+        public ColorValidator(PartitionGroupServer pgs, Color color) {
+            this.pgs = pgs;
+            this.color = color;
+        }
+        
+        public Boolean call() throws Exception {
+            return pgs.getData().getColor().equals(color);
+        }
+    }
+    
+    public static class StateValidator implements Callable<Boolean> {
+        private final PartitionGroupServer pgs;
+        private final String state;
+        
+        public StateValidator(PartitionGroupServer pgs, String state) {
+            this.pgs = pgs;
+            this.state = state;
+        }
+        
+        public Boolean call() throws Exception {
+            System.out.println("m(" + pgs.getData().getState() + "), e(" + state + ")");
+            return pgs.getData().getState().equals(state);
+        }
+    }
+    
+    public static class QuorumValidator implements Callable<Boolean> {
+        private final MimicSMR master;
+        private final int quorum;
+        
+        public QuorumValidator(MimicSMR master, int quorum) {
+            this.master = master;
+            this.quorum = quorum;
+        }
+        
+        public Boolean call() throws Exception {
+            return quorum == Integer.valueOf(master.execute("getquorum"));
+        }
     }
     
 }

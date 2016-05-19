@@ -59,8 +59,8 @@ public class Statistics {
     
     private static long SLOW_HEARTBEAT;
     private static long STAT_INTERVAL;
-    private static ThreadPool jobExecutor; 
-
+    private static ThreadPool jobExecutor;
+    
     public static void initialize(Config config, ThreadPool executor) {
         SLOW_HEARTBEAT = config.getHeartbeatNioSlowloop();
         STAT_INTERVAL = config.getStatisticsInterval();
@@ -187,7 +187,7 @@ public class Statistics {
         }
     }
     
-    public static void statistics() {        
+    public static void statistics() {
         Logger.info("HB(CNT:"
                 + countOfHeartbeat
                 + ", MIN:"

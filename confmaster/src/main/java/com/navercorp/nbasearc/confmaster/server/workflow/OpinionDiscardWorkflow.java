@@ -18,7 +18,6 @@ package com.navercorp.nbasearc.confmaster.server.workflow;
 
 import org.springframework.context.ApplicationContext;
 
-import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
@@ -40,12 +39,6 @@ public class OpinionDiscardWorkflow {
     }
     
     public String execute(ThreadPool executor) throws MgmtZooKeeperException {
-        if (getTarget().getHB().equals(Constant.HB_MONITOR_YES)) {
-            Logger.debug(getTarget().getNodeType().toString()
-                    + getTarget().getName() + " is a target of heartbeat.");
-            return null;
-        }
-
         HBRefData refData = getTarget().getRefData();
         if (!refData.isSubmitMyOpinion()) {
             // Ignore it
@@ -61,6 +54,7 @@ public class OpinionDiscardWorkflow {
             throw e;
         }
 
+        Logger.info("Delete opinion {} {}", path, target.getFullName());
         refData.setSubmitMyOpinion(false);
         
         return null;
