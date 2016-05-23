@@ -223,7 +223,7 @@ public class GatewayService {
     @LockMapping(name="gw_del")
     public void gwDelLock(HierarchicalLockHelper lockHelper,
             String clusterName, String gwid) {
-        lockHelper.root(READ).cluster(READ, clusterName).gwList(WRITE).gw(WRITE, ALL);
+        lockHelper.root(READ).cluster(READ, clusterName).gwList(WRITE).gw(WRITE, gwid);
         HierarchicalLockPMList lockPMList = lockHelper.pmList(READ);
         Gateway gw = gwImo.get(gwid, clusterName);
         lockPMList.pm(WRITE, gw.getData().getPmName());

@@ -94,10 +94,10 @@ public class ConfMasterException extends Exception {
         }
     }
     
-    public static class MgmtRoleChangeException extends Exception {
+    public static class MgmtSmrCommandException extends Exception {
         private final String msg;
         
-        public MgmtRoleChangeException(String msg) {
+        public MgmtSmrCommandException(String msg) {
             this.msg = msg;
         }
         

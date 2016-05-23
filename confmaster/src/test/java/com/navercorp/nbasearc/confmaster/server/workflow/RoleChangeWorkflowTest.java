@@ -1,3 +1,19 @@
+/*
+ * Copyright 2015 Naver Corp.
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ * 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.navercorp.nbasearc.confmaster.server.workflow;
 
 import static com.jayway.awaitility.Awaitility.await;
@@ -17,6 +33,8 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.server.JobResult;
+import com.navercorp.nbasearc.confmaster.server.ClientSessionHandler.ReplyFormatter;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
@@ -27,6 +45,7 @@ import com.navercorp.nbasearc.confmaster.server.mimic.MimicPGS;
 public class RoleChangeWorkflowTest extends BasicSetting {
 
     MimicPGS mimics[] = new MimicPGS[MAX_PGS];
+    ReplyFormatter replyFormatter = new ReplyFormatter();
     
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -185,10 +204,10 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         
         RoleChangeWorkflow rc = new RoleChangeWorkflow(getPg(), getPgs(2), context);
         rc.execute();
-        assertTrue(rc
-                .getResultString()
-                .contains(
-                        "-ERR role change fail. EXCEPTION: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtRoleChangeException. test_cluster/pg:0/pgs:2 has no recent logs"));
+        assertTrue(rc.getResultString().contains(
+                        "-ERR role change fail. masterHint: test_cluster/pg:0/pgs:2, "
+                                + "exception: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtSmrCommandException. "
+                                + "test_cluster/pg:0/pgs:2 has no recent logs"));
         
         // Recovery
         MasterFinder mf = new MasterFinder(getPgsList()); 
@@ -219,10 +238,10 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         
         RoleChangeWorkflow rc = new RoleChangeWorkflow(getPg(), getPgs(1), context);
         rc.execute();
-        assertTrue(rc
-                .getResultString()
-                .contains(
-                        "-ERR role change fail. EXCEPTION: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtRoleChangeException. test_cluster/pg:0/pgs:1 has no recent logs"));
+        assertTrue(rc.getResultString().contains(
+                        "-ERR role change fail. masterHint: test_cluster/pg:0/pgs:1, "
+                                + "exception: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtSmrCommandException. "
+                                + "test_cluster/pg:0/pgs:1 has no recent logs"));
         
         // Recovery
         MasterFinder mf = new MasterFinder(getPgsList()); 
@@ -246,5 +265,57 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         rc.execute();
         assertEquals("{\"master\":1,\"role_slave_error\":[]}", rc.getResultString());
     }
+
+    @Test
+    public void modifyPgQuorum() throws Exception {
+        init(2);
+        
+        // pg_if fail
+        JobResult result = doCommand("pg_iq " + clusterName + " " + pgName);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR not enough available pgs.\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("pg_iq xx" + clusterName + " " + pgName);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xxtest_cluster\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("pg_iq " + clusterName + " 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pg does not exist. test_cluster/pg:99\"}\r\n",
+                formatReply(result, null));
+
+        // pg_dq success
+        result = doCommand("pg_dq " + clusterName + " " + pgName);
+        assertEquals("{\"state\":\"success\",\"msg\":\"+OK\"}\r\n",
+                formatReply(result, null));
+
+        // pg_dq fail
+        result = doCommand("pg_dq " + clusterName + " " + pgName);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR invalid quorum.\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("pg_dq xx" + clusterName + " " + pgName);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xxtest_cluster\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("pg_dq " + clusterName + " 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pg does not exist. test_cluster/pg:99\"}\r\n",
+                formatReply(result, null));
+        
+        // pg_iq success
+        result = doCommand("pg_iq " + clusterName + " " + pgName);
+        assertEquals("{\"state\":\"success\",\"msg\":\"+OK\"}\r\n",
+                formatReply(result, null));
+
+        // Usage pg_iq
+        result = doCommand("pg_iq");
+        assertEquals("pg_iq <cluster_name> <pg_id>\r\n", 
+                formatReply(result, null));
+
+        // Usage pg_dq
+        result = doCommand("pg_dq");
+        assertEquals("pg_dq <cluster_name> <pg_id>\r\n", 
+                formatReply(result, null));
+    }
+    
     
 }

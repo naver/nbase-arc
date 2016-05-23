@@ -42,6 +42,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import org.codehaus.jackson.JsonProcessingException;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,6 +69,7 @@ import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerDa
 import com.navercorp.nbasearc.confmaster.repository.znode.PhysicalMachineData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.ClientSessionHandler.ReplyFormatter;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
 import com.navercorp.nbasearc.confmaster.server.cluster.PGSComponentMock;
@@ -98,7 +101,7 @@ public class BasicSetting {
     protected ZooKeeperHolder zookeeper;
     
     @Autowired
-    protected LeaderElectionHandler leaderElectoin;
+    protected LeaderElectionHandler leaderElection;
     
     @Autowired
     protected HeartbeatChecker heartbeatChecker;
@@ -141,6 +144,9 @@ public class BasicSetting {
 
     @Autowired 
     private HBResultProcessor hbcProc;
+
+    ReplyFormatter replyFormatter = new ReplyFormatter();
+    ObjectMapper objectMapper = new ObjectMapper();
     
     final protected long assertionTimeout = 5000L;  
     
@@ -234,7 +240,7 @@ public class BasicSetting {
         
         confmasterService.loadAll();
 
-        leaderElectoin.becomeLeader();
+        leaderElection.becomeLeader();
 
         joinLeave.initialize(context);
     }
@@ -596,6 +602,15 @@ public class BasicSetting {
                 pgs.getHbc().getID());
         hbcProc.proc(result, false);
     }
+    
+    public String formatReply(JobResult result, String leader)
+            throws JsonProcessingException, IOException {
+        String json = replyFormatter.get(result, leader);
+        if (json.startsWith("{")) {
+            objectMapper.readTree(json);
+        }
+        return json;
+    };
 
     protected void validateNormal(PartitionGroupServer pgs, PartitionGroup pg, String role, int mgen) {
         assertEquals(GREEN, pgs.getData().getColor());

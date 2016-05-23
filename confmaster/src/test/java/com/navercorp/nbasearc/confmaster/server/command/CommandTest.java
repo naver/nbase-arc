@@ -17,10 +17,7 @@
 package com.navercorp.nbasearc.confmaster.server.command;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
@@ -44,7 +41,6 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
-import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
@@ -98,22 +94,74 @@ public class CommandTest extends BasicSetting {
                 clusterBackupScheduleDao.loadClusterBackupSchedule(clusterName);
         assertFalse("check appdata after appdata_set", backupSchedule.getBackupSchedules().isEmpty());
         
+        // Usage
+        result = doCommand("appdata_set");
+        assertEquals(
+                "appdata_set <cluster_name> backup <backup_id> <daemon_id> <period> <base_time> <holding period(day)> <net_limit(MB/s)> <output_format> [<service url>]\r\n"
+                        + "Ex) appdata_set c1 backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("appdata_set xx" + clusterName + "xx backup " + backupScheduleId + 
+                " 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xxtest_clusterxx\"}\r\n", 
+                formatReply(result, null));
+        
         // Get
         result = doCommand("appdata_get " + clusterName + " backup all");
         String expected = backupSchedule.toString();
         assertEquals("check appdata_get result.", expected, result.getMessages().get(0));
+
+        // Usage
+        result = doCommand("appdata_get");
+        assertEquals("appdata_get <cluster_name> backup <backup_id>\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("appdata_get xx" + clusterName + "xx backup all");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xx"
+                        + clusterName + "xx\"}\r\n",
+                formatReply(result, null));
         
         // Del
         result = doCommand("appdata_del " + clusterName + " backup " + backupScheduleId);
         assertEquals("check appdata_del resutl.", ok, result.getMessages().get(0));
         backupSchedule = clusterBackupScheduleDao.loadClusterBackupSchedule(clusterName);
         assertTrue("check appdata after appdata_del", backupSchedule.getBackupSchedules().isEmpty());
+        
+        // Usage
+        result = doCommand("appdata_del");
+        assertEquals("appdata_del <cluster_name> backup <backup_id>\r\n"
+                + "Ex) appdata_del c1 backup 1\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("appdata_del xx" + clusterName + "xx backup all");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xx"
+                        + clusterName + "xx\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
     public void pmAdd() throws Exception {
-        pmAdd("pm_add_01.test", "127.0.0.121");
+        String pmName1 = "pm_add_01.test"; 
+        
+        // Add
+        pmAdd(pmName1, "127.0.0.121");
         pmAdd("pm_add_02.test", "127.0.0.122");
+        
+        // Usage
+        JobResult result = doCommand("pm_add");
+        assertEquals("pm_add <pm_name> <pm_ip>\r\n"
+                + "add a physical machine\r\n",
+                formatReply(result, null));
+
+        // Fail
+        result = doCommand("pm_add " + pmName1 + " 127.0.0.121");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR duplicated pm\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
@@ -123,29 +171,69 @@ public class CommandTest extends BasicSetting {
         pmDel("pm_add_01.test");
         PhysicalMachine pm = pmImo.get("pm_add_02.test");
         assertNotNull("check pm after deleting another pm.", pm);
+        
+        // Del
         pmDel("pm_add_02.test");
+        
+        // Usage
+        JobResult result = doCommand("pm_del");
+        assertEquals("pm_del <pm_name>\r\n" + "delete a physical machine\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pm_del 1111");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pm does not exist. pm:1111\"}\r\n",
+                formatReply(result,  null));
     }
     
     @Test
     public void clusterAdd() throws Exception {
-        clusterAdd("c1", "0:1");
+        String clusterName1 = "c1";
+        
+        // Add
+        clusterAdd(clusterName1, "0:1");
         clusterAdd("c2", "0:1:2");
         clusterAdd("c3", "0:1:2:3");
         clusterAdd("c4", "0:1:2:3:4");
         clusterAdd("c5", "0:1:5");
+        
+        // Usage
+        JobResult result = doCommand("cluster_add");
+        assertEquals("cluster_add <cluster_name> <quorum policy>\r\n"
+                + "Ex) cluster_add cluster1 0:1\r\n" + "add a new cluster\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("cluster_add " + clusterName1 + " 0:1");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR duplicated cluster\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
     public void clusterAddWrongQuorum() throws Exception {
         JobResult result = doCommand("cluster_add c1 0:1:0");
-        assertEquals("perform cluster_add with illegal artuments.", 1, result.getExceptions().size());
-        assertTrue(result.getExceptions().get(0) instanceof MgmtCommandWrongArgumentException);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR Invalid quorum policy\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
     public void clusterDel() throws Exception {
-        clusterAdd("c1", "0:1");
-        clusterDel("c1");
+        String clusterName = "c1";
+        
+        // Del
+        clusterAdd(clusterName, "0:1");
+        clusterDel(clusterName);
+        
+        // Usage
+        JobResult result = doCommand("cluster_del");
+        assertEquals("cluster_del <cluster_name>\r\n"
+                + "Ex) cluster_del cluster1\r\n" + "delete a new cluster\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("cluster_del c1");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. c1\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
@@ -153,6 +241,10 @@ public class CommandTest extends BasicSetting {
         JobResult result = doCommand("cluster_del c1");
         assertEquals("perform cluster_del not existing.", 1, result.getExceptions().size());
         assertTrue(result.getExceptions().get(0) instanceof IllegalArgumentException);
+
+        result = doCommand("cluster_del c1");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. c1\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -164,6 +256,10 @@ public class CommandTest extends BasicSetting {
         JobResult result = doCommand("cluster_del " + clusterName);
         assertEquals("perform cluster_del not empty.", 1, result.getExceptions().size());
         assertTrue(result.getExceptions().get(0) instanceof IllegalArgumentException);
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR the cluster has a pg or more. "
+                        + clusterName + "\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -175,11 +271,18 @@ public class CommandTest extends BasicSetting {
 
     @Test
     public void clusterDelHasGw() throws Exception {
+        for (int i = 0; i < MAX_PGS; i++) {
+            deletePgs(i, i == (MAX_PGS - 1));
+        }
+        deletePg();
+        
         gwAdd("10", clusterName);
         
         JobResult result = doCommand("cluster_del " + clusterName);
         assertEquals("perform cluster_del not empty.", 1, result.getExceptions().size());
         assertTrue(result.getExceptions().get(0) instanceof IllegalArgumentException);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR the cluster has a gw or more. "
+                        + clusterName + "\"}\r\n", formatReply(result, null));
     }
     
     @Test
@@ -207,12 +310,23 @@ public class CommandTest extends BasicSetting {
         pgsIdList.add(2);
         assertEquals(pgsIdList, ((HashMap<String, Object>)pgInfo.get(0).get("pg_data")).get("pgs_ID_List"));
         assertEquals(0, gwInfo.size());
+        
+        // Usage
+        result = doCommand("cluster_info");
+        assertEquals("cluster_info <cluster_name>\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("cluster_info xx" + clusterName);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xx"
+                        + clusterName + "\"}\r\n", formatReply(result, null));
     }
     
     @Test
     public void clusterList() throws Exception {
         JobResult result = doCommand("cluster_ls");
-        assertEquals("check result of cluster_ls", "{\"list\":[\"test_cluster\"]}", result.getMessages().get(0));
+        assertEquals("check result of cluster_ls",
+                "{\"list\":[\"test_cluster\"]}", result.getMessages().get(0));
     }
     
     @Test
@@ -228,6 +342,19 @@ public class CommandTest extends BasicSetting {
     public void pgsAdd() throws Exception {
         pgsAdd("10", pgName, clusterName, 7010);
         pgsAdd("11", pgName, clusterName, 7020);
+        
+        // Usage
+        JobResult result = doCommand("pgs_add");
+        assertEquals("pgs_add <cluster_name> <pgsid> <pgid> <pm_name> <pm_ip> <base_port> <backend_port>\r\n", 
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pgs_add " + clusterName + " 10 " + pgName + " " + pmName
+                + " 127.0.0.1 7000 7009");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR duplicated. cluster: "
+                        + clusterName + ", pgs: " + 10 + "\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
@@ -236,12 +363,39 @@ public class CommandTest extends BasicSetting {
         pgsAdd("11", pgName, clusterName, 7020);
         pgsDel("10", false);
         pgsDel("11", true);
+        
+        // Usage
+        JobResult result = doCommand("pgs_del");
+        assertEquals("pgs_del <cluster_name> <pgsid>\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pgs_del " + clusterName + " 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pgs does not exist. "
+                + clusterName + "/pgs:99\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
     public void gwAdd() throws Exception {
         gwAdd("10", clusterName);
         gwAdd("11", clusterName);
+        
+        // Usage
+        JobResult result = doCommand("gw_add");
+        assertEquals("gw_add <cluster_name> <gwid> <pm_name> <pm_ip> <port>\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("gw_add " + clusterName + " 10 " + pmName + " 127.0.0.1 6000");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR duplicated. cluster: "
+                        + clusterName + ", gw: 10\"}\r\n",
+                formatReply(result, null));
+        
+        result = doCommand("gw_add " + clusterName + " 12 local 127.0.0.1 6000");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pm does not exist. pm:local\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -258,6 +412,18 @@ public class CommandTest extends BasicSetting {
         gwAdd("11", clusterName);
         gwDel("10", clusterName);
         gwDel("11", clusterName);
+        
+        // Usage
+        JobResult result = doCommand("gw_del");
+        assertEquals("gw_del <cluster_name> <gwid>\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("gw_del " + clusterName + " 10");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR gateway does not exist. "
+                        + clusterName + "/gw:10\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
@@ -273,6 +439,19 @@ public class CommandTest extends BasicSetting {
         GatewayData gwData = new GatewayData();
         gwData.initialize(pmName, pmData.getIp(), 6000, SERVER_STATE_FAILURE, HB_MONITOR_YES);
         assertEquals("check result of gw_info", gwData.toString(), result.getMessages().get(0));
+        
+        // Usage
+        result = doCommand("gw_info");
+        assertEquals("gw_info <cluster_name> <gw_id>\r\n"
+                + "get information of a Gateway\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("gw_info " + clusterName + " 99");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR gateway does not exist. "
+                        + clusterName + "/gw:99\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
@@ -350,6 +529,18 @@ public class CommandTest extends BasicSetting {
         assertTrue(pg.getData().getMasterGenMap().isEmpty());
         assertEquals(new Integer(0), pg.getData().getCopy());
         assertEquals(new Integer(0), pg.getData().getCopy());
+        
+        // Usage
+        JobResult result = doCommand("pg_add");
+        assertEquals(
+                "pg_add <cluster_name> <pgid>\r\n" + 
+                "add a single partition group\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pg_add " + clusterName + " " + pgId);
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR duplicated pgid\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -364,6 +555,18 @@ public class CommandTest extends BasicSetting {
         pgsDel("11", true);
         
         pgDel(pgId, clusterName);
+        
+        // Usage
+        JobResult result = doCommand("pg_del");
+        assertEquals("pg_del <cluster_name> <pgid>\r\n" + 
+                "delete a single partition group\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pg_del " + clusterName + " 10");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pg does not exist. "
+                + clusterName + "/pg:10\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -377,6 +580,25 @@ public class CommandTest extends BasicSetting {
             PartitionGroupData.builder().from(new PartitionGroupData()).build();
         
         assertEquals("check result of pg_info", pgInfo.toString(), result.getMessages().get(0));
+        
+        // Usage
+        result = doCommand("pg_info");
+        assertEquals(
+                "pg_info <cluster_name> <pg_id>\r\n" + 
+                "get information of a Partition Group\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pg_info " + clusterName + " 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pg does not exist. "
+                + clusterName + "/pg:99\"}\r\n",
+                formatReply(result, null));
+        
+        result = doCommand("pg_info " + clusterName + "xx 99");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. "
+                        + clusterName + "xx\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -400,6 +622,18 @@ public class CommandTest extends BasicSetting {
         hbcRefData.setZkData(PGS_ROLE_NONE, 0, 0);
         String pgsInfoAll = "{\"MGMT\":" + pgsData + ",\"HBC\":" + hbcRefData + "}";
         assertEquals("check result of pgs_info_all", pgsInfoAll, result.getMessages().get(0));
+
+        // Usage
+        result = doCommand("pgs_info_all");
+        assertEquals("pgs_info_all <cluster_name> <pgs_id>\r\n"
+                + "get all information of a Partition Group Server\r\n",
+                formatReply(result, null));
+
+        // Fail
+        result = doCommand("pgs_info_all " + clusterName + " 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pgs does not exist. "
+                + clusterName + "/pgs:99\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -409,6 +643,18 @@ public class CommandTest extends BasicSetting {
         pgsData.initialize(0, pmName, pmData.getIp(), 8109, 8100, 8103,
                 SERVER_STATE_FAILURE, PGS_ROLE_NONE, Color.RED, -1, HB_MONITOR_NO);
         assertEquals("check result of pgs_info", pgsData.toString(), result.getMessages().get(0));
+
+        // Usage
+        result = doCommand("pgs_info");
+        assertEquals("pgs_info <cluster_name> <pgs_id>\r\n"
+                + "get information of a Partition Group Server\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pgs_info " + clusterName + " 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pgs does not exist. "
+                + clusterName + "/pgs:99\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -435,6 +681,17 @@ public class CommandTest extends BasicSetting {
         JobResult result = doCommand("pgs_ls " + clusterName);
         String pgsList = "{\"list\":[\"0\", \"1\", \"2\"]}";
         assertEquals("check result of pgs_ls", pgsList, result.getMessages().get(0));
+        
+        // Usage
+        result = doCommand("pgs_ls");
+        assertEquals("pgs_ls <cluster_name>\r\n"
+                + "show a list of Partition Group Servers\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("pgs_ls aaaa");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. aaaa\"}\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -470,6 +727,18 @@ public class CommandTest extends BasicSetting {
         PhysicalMachine pm = pmImo.get(pmName);
         String pmInfo = "{\"pm_info\":" + pmData + ", \"cluster_list\":" + pm.getClusterListString(pmClusterImo) + "}";
         assertEquals("check result of pm_info", pmInfo, result.getMessages().get(0));
+        
+        // Usage
+        result = doCommand("pm_info");
+        assertEquals("pm_info <pm_name>\r\n"
+                + "get information of a Physical Machine\r\n",
+                formatReply(result, null));
+
+        // Fail
+        result = doCommand("pm_info aaaaaa");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR pm does not exist. pm:aaaaaa\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test
@@ -482,6 +751,27 @@ public class CommandTest extends BasicSetting {
     @Test
     public void slotSetPg() throws Exception {
         slotSetPg(clusterName, pgName);
+        
+        // Usage
+        JobResult result = doCommand("slot_set_pg");
+        assertEquals("slot_set_pg <cluster_name> <pg_range_inclusive> <pgid>\r\n" + 
+                "Ex) slot_set_pg cluster1 0:8191 1\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("slot_set_pg aaaaa 0:8191 0");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. aaaaa\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("slot_set_pg " + clusterName + " 0:8192 0");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR bad pg range:0:8192 (try to slot_set_pg)\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("slot_set_pg " + clusterName + " 0:8191 99");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pg does not exist. "
+                + clusterName + "/pg:99\"}\r\n", formatReply(result, null));
     }
 
     @Test
@@ -505,14 +795,24 @@ public class CommandTest extends BasicSetting {
                 worklog.get("severity").equals(SEVERITY_MODERATE) || 
                 worklog.get("severity").equals(SEVERITY_MINOR));
         assertNotNull(worklog.get("msg"));
+        
+        // Usage
+        result = doCommand("worklog_get");
+        assertEquals("worklog_get <start log number> <end log number>\r\n"
+                + "get workflow logs\r\n", formatReply(result, null));
     }
 
     @Test
     public void worklogHead() throws Exception {
-        // TODO : elaboration
         JobResult result = doCommand("worklog_head 1");
         assertNotNull("check result of worklog_head", result.getMessages().get(0));
         assertTrue("check result of worklog_head", result.getExceptions().isEmpty());
+        
+        // Usage
+        result = doCommand("worklog_head");
+        assertEquals("worklog_head <the number of logs>\r\n"
+                + "get and delete workflow logs from beginning\r\n",
+                formatReply(result, null));
     }
 
     @Test
@@ -521,6 +821,43 @@ public class CommandTest extends BasicSetting {
         JobResult result = doCommand("worklog_info");
         assertNotNull("check result of worklog_info", result.getMessages().get(0));
         assertTrue("check result of worklog_info", result.getExceptions().isEmpty());
+    }
+    
+    @Test
+    public void opWf() throws Exception {
+        JobResult result = doCommand("op_wf " + clusterName + " " + pgName + " RA false forced");
+        assertEquals("{\"state\":\"success\",\"msg\":\"+OK\"}\r\n",
+                formatReply(result, null));
+
+        // Usage
+        result = doCommand("op_wf");
+        assertEquals("op_wf <cluster_name> <pg_id> <wf> <cascading> forced\r\n"
+                + "wf: RA, QA, ME, YJ, BJ, MG\r\n",
+                formatReply(result, null));
+        
+        // Fail
+        result = doCommand("op_wf " + clusterName + " " + pgName + " AA false forced");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR not supported workflow.\"}\r\n",
+                formatReply(result, null));
+        
+        result = doCommand("op_wf xx" + clusterName + " " + pgName + " AA false forced");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR cluster does not exist. xx" + clusterName + "\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("op_wf " + clusterName + " " + "99" + " AA false forced");
+        assertEquals("{\"state\":\"error\",\"msg\":\"-ERR pg does not exist. " + clusterName + "/pg:99\"}\r\n",
+                formatReply(result, null));
+
+        result = doCommand("op_wf " + clusterName + " " + pgName + " AA invalid forced");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR Failed to convert from type java.lang.String to type boolean for value 'invalid';"
+                        + " nested exception is java.lang.IllegalArgumentException: Invalid boolean value 'invalid'\"}\r\n",
+                formatReply(result, null));
+        
+        result = doCommand("op_wf " + clusterName + " " + pgName + " AA false not-forced");
+        assertEquals(
+                "{\"state\":\"error\",\"msg\":\"-ERR not in forced mode.\"}\r\n",
+                formatReply(result, null));
     }
     
     @Test

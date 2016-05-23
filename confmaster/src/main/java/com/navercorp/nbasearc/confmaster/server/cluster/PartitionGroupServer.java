@@ -29,7 +29,7 @@ import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.helpers.MessageFormatter;
 import org.springframework.context.ApplicationContext;
 
-import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtRoleChangeException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
@@ -428,7 +428,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
     
     private void roleMasterCmdResult(String cmd, String reply, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtRoleChangeException {
+            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         // Make information for logging
         String infoFmt = 
                 "{\"PGS\":{},\"IP\":\"{}\",\"PORT\":\"{}\",\"CMD\":\"{}\",\"REPLY\":\"{}\"}";
@@ -442,7 +442,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     "master election fail. {}, cmd: \"{}\", reply: \"{}\"", 
                     new Object[]{this, cmd, reply}, 
                     infoFmt, infoArgs);
-            throw new MgmtRoleChangeException("Role master fail. "
+            throw new MgmtSmrCommandException("Role master fail. "
                     + MessageFormatter.arrayFormat(infoFmt, infoArgs));
         } else {
             workflowLogDao.log(jobID,
@@ -457,7 +457,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     public void roleMaster(PartitionGroup pg,
             LogSequence logSeq,
             int quorum, long jobID, WorkflowLogDao workflowLogDao)
-            throws MgmtRoleChangeException {
+            throws MgmtSmrCommandException {
         final String cmd = "role master " + getName() + " " + quorum
                 + " " + logSeq.getMax();
         
@@ -478,7 +478,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "master election fail. {}, cmd: \"{}\", e: \"{}\"", 
                     new Object[]{this, cmd, e.getMessage()});
-            throw new MgmtRoleChangeException("Master election Error. " + e.getMessage());
+            throw new MgmtSmrCommandException("Master election Error. " + e.getMessage());
         }
     }
     
@@ -495,7 +495,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     public RoleMasterZkResult roleMasterZk(PartitionGroup pg,
             List<PartitionGroupServer> pgsList, LogSequence logSeq, int quorum,
             long jobID, WorkflowLogDao workflowLogDao)
-            throws MgmtRoleChangeException {
+            throws MgmtSmrCommandException {
         try {
             PartitionGroupData pgM = 
                 PartitionGroupData.builder().from(pg.getData())
@@ -521,12 +521,12 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "master election success but update zookeeper error. {}, e: \"{}\"", 
                     this, e.getMessage());
-            throw new MgmtRoleChangeException("Role master zookeeper Error, " + e.getMessage());
+            throw new MgmtSmrCommandException("Role master zookeeper Error, " + e.getMessage());
         }
     }
     
     private void roleSlaveCmdResult(String cmd, String reply, Color color, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtRoleChangeException {
+            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         // Make information for logging
         String infoFmt = 
                 "{\"PGS\":{},\"IP\":\"{}\",\"PORT\":\"{}\",\"CMD\":\"{}\",\"REPLY\":\"{}\"}";
@@ -543,7 +543,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     "slave join fail. {}, cmd: \"{}\", color: {}, reply: \"{}\"",
                     new Object[]{this, cmd, color, reply},
                     infoFmt, infoArgs);
-            throw new MgmtRoleChangeException("Slave join Fail. " + 
+            throw new MgmtSmrCommandException("Slave join Fail. " + 
                     MessageFormatter.arrayFormat(infoFmt, infoArgs));
         } else {
             workflowLogDao.log(jobID,
@@ -557,7 +557,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
 
     public void roleSlave(PartitionGroup pg, LogSequence targetLogSeq,
             PartitionGroupServer master, Color color, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtRoleChangeException {
+            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         // Make 'role slave' command
         String cmd = "role slave " + getName() + " "
                 + master.getData().getPmIp() + " "
@@ -580,7 +580,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "Slave join error. {}, cmd: \"{}\", color: {}, exception: \"{}\"",
                     new Object[]{this, cmd, color, e.getMessage()});
-            throw new MgmtRoleChangeException("Slave join Error. " + e.getMessage());
+            throw new MgmtSmrCommandException("Slave join Error. " + e.getMessage());
         }
     }
 
@@ -593,7 +593,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
     
     public RoleSlaveZkResult roleSlaveZk(long jobID, int mGen, Color color,
-            WorkflowLogDao workflowLogDao) throws MgmtRoleChangeException {
+            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         PartitionGroupServerData pgsM = 
             PartitionGroupServerData.builder().from(getData())
                 .withMasterGen(mGen)
@@ -609,26 +609,26 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "slave join success, but update zookeeper error. {}, e: \"{}\"", 
                     this, e.getMessage());
-            throw new MgmtRoleChangeException("Slave join Error, " + e.getMessage());
+            throw new MgmtSmrCommandException("Slave join Error, " + e.getMessage());
         }
     }
     
-    public void roleLconn() throws IOException, MgmtRoleChangeException {
+    public void roleLconn() throws MgmtSmrCommandException {
         try {
             String reply = executeQuery("role lconn");
             if (!reply.equals(S2C_OK) && !reply.equals(S2C_ALREADY_LCONN)) {
-                throw new MgmtRoleChangeException(
+                throw new MgmtSmrCommandException(
                         "role lconn fail. " + this + ", reply: \"" + reply + "\"");
             }
             Logger.info("role lconn success. {}, reply: \"{}\"", this, reply);
         } catch (IOException e) {
-            Logger.warn("role lconn fail. {}", this, e);
-            throw e;
+            Logger.warn("role lconn fail. {} {}", this, e.getMessage());
+            throw new MgmtSmrCommandException("Role lconn Error. " + e.getMessage());
         }
     }
 
     public RoleLconnZkResult roleLconnZk(long jobID, Color color, WorkflowLogDao workflowLogDao) 
-                    throws MgmtRoleChangeException {        
+                    throws MgmtSmrCommandException {        
         try {
             PartitionGroupServerData pgsM = 
                 PartitionGroupServerData.builder().from(getData())
@@ -641,7 +641,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "role lconn sucess but update zookeeper error. {}, e: \"{}\"", 
                     this, e.getMessage());
-            throw new MgmtRoleChangeException("Role lconn zookeeper Error, " + e.getMessage());
+            throw new MgmtSmrCommandException("Role lconn zookeeper Error, " + e.getMessage());
         }
     }
 
@@ -653,7 +653,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
 
-    public void setquorum(int q) throws IOException, MgmtSetquorumException {
+    public void setquorum(int q) throws MgmtSetquorumException {
         final String cmd = "setquorum " + q;
         try {
             String reply = executeQuery(cmd);
@@ -665,8 +665,9 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             }
             Logger.info("setquorum success. {}, q: {}", this, q);
         } catch (IOException e) {
-            Logger.warn("setquorum fail. " + this + ", cmd: " + cmd, e);
-            throw e;
+            final String msg = "setquorum fail. " + this + ", cmd: " + cmd + ", exception: " + e.getMessage();
+            Logger.warn(msg);
+            throw new MgmtSetquorumException(msg);
         }
     }
     

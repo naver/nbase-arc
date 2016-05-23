@@ -105,7 +105,7 @@ public class PartitionGroupService {
             MgmtZooKeeperException, NoNodeException {
         // Check
         if (null != pgImo.get(pgId, clusterName)) {
-            throw new MgmtCommandWrongArgumentException("-ERR duplicated pgid");
+            return "-ERR duplicated pgid";
         }
         
         // In Memory
@@ -252,7 +252,7 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="pg_ls",
-            usage="pg_ls <cluster_name>\r\n")
+            usage="pg_ls <cluster_name>")
     public String pgLs(String clusterName) throws KeeperException,
             InterruptedException {
         // In Memory
@@ -381,7 +381,7 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="pg_iq",
-            usage="pg_iq <cluster_name> <pg_id>\r\n")
+            usage="pg_iq <cluster_name> <pg_id>")
     public String pgIq(String clusterName, String pgId) throws Exception {
         // In Memory
         PartitionGroup pg = pgImo.get(pgId, clusterName);
@@ -406,7 +406,7 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="pg_dq",
-            usage="pg_dq <cluster_name> <pg_id>\r\n")
+            usage="pg_dq <cluster_name> <pg_id>")
     public String pgDq(String clusterName, String pgId) throws Exception {
         // In Memory
         PartitionGroup pg = pgImo.get(pgId, clusterName);
@@ -434,7 +434,7 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name = "op_wf", usage = "op_wf <cluster_name> <pg_id> <wf> <cascading> forced\r\n"
-            + "wf: RA, QA, ME, YJ, BJ, MG\r\n")
+            + "wf: RA, QA, ME, YJ, BJ, MG")
     public String opWf(String clusterName, String pgId, String wf, boolean cascading, String mode) throws Exception {
         if (!mode.equals(FORCED)) {
             return EXCEPTIONMSG_NOT_FORCED_MODE;
@@ -450,6 +450,7 @@ public class PartitionGroupService {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
         }
         
+        wf = wf.toUpperCase();
         try {
             if (wf.equals("RA")) {
                 RoleAdjustmentWorkflow ra = new RoleAdjustmentWorkflow(pg,

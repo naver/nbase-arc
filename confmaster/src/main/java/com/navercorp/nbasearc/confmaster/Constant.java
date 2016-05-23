@@ -41,7 +41,7 @@ public class Constant {
     public static final String HB_MONITOR_YES = "Y";
     public static final String HB_MONITOR_NO = "N";
 
-    public static final String EXCEPTIONMSG_INTERNAL_ERROR = "Internal server error.";
+    public static final String EXCEPTIONMSG_INTERNAL_ERROR = "-ERR Internal server error.";
     public static final String EXCEPTIONMSG_ZOOKEEPER = "-ERR zookeeper exception";
     public static final String EXCEPTIONMSG_WRONG_NUMBER_ARGUMENTS = "-ERR wrong number of arguments";
     public static final String EXCEPTIONMSG_INCONSISTENCE = "-ERR zookeeper znode structure is inconsistent with memory.";
@@ -54,6 +54,9 @@ public class Constant {
     public static final String EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST = "-ERR pg does not exist. ";
     public static final String EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST = "-ERR pgs does not exist. ";
 
+    public static final String EXCEPTIONMSG_DUPLICATED_PM = "-ERR duplicated pm";
+    public static final String EXCEPTIONMSG_DUPLICATED_CLUSTER = "-ERR duplicated cluster";
+
     public static final String EXCEPTIONMSG_PHYSICAL_MACHINE_CLUSTER_DOES_NOT_EXIST = "-ERR cluster does not in pm. ";
     public static final String EXCEPTIONMSG_PG_NOT_EMPTY = "-ERR the pg has a pgs or more. ";
     public static final String EXCEPTIONMSG_CLUSTER_HAS_GW = "-ERR the cluster has a gw or more. ";
@@ -61,6 +64,7 @@ public class Constant {
     public static final String EXCEPTIONMSG_CLUSTER_HAS_PGS = "-ERR the cluster has a pgs or more. ";
 
     public static final String EXCEPTIONMSG_NO_AVAILABLE_PGS = "-ERR there will be no available pgs.";
+    public static final String EXCEPTIONMSG_INVALID_QUORUM = "-ERR invalid quorum.";
     
     public static final String EXCEPTIONMSG_NOT_SUPPORTED_WF = "-ERR not supported workflow.";
     public static final String EXCEPTIONMSG_NOT_FORCED_MODE = "-ERR not in forced mode.";

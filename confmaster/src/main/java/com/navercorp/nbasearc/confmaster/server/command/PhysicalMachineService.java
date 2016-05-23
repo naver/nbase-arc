@@ -16,7 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
-import static com.navercorp.nbasearc.confmaster.Constant.S2C_OK;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
 
@@ -61,7 +61,7 @@ public class PhysicalMachineService {
             throws MgmtZooKeeperException, NodeExistsException, NoNodeException {
         // Check
         if (pmDao.pmExist(pmName)) {
-            return "-ERR duplicated id";
+            return EXCEPTIONMSG_DUPLICATED_PM;
         }
 
         // Prepare
@@ -95,7 +95,7 @@ public class PhysicalMachineService {
         // Check
         PhysicalMachine pm = pmImo.get(pmName);
         if (pm == null) {
-            return "-ERR pm does not exist";
+            return EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST;
         }
         
         // In Memory
@@ -159,7 +159,7 @@ public class PhysicalMachineService {
         
         // Check
         if (pm == null) {
-            return "-ERR pm does not exist.";
+            return EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST;
         }
 
         // Do
