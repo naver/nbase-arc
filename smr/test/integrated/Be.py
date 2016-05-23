@@ -25,11 +25,13 @@ class BE(Proc.Proc):
   def start(self, args, sin=None, sout=None, serr=None):
     super(BE, self).start(args, sin, sout, serr)
     # Note can't connect to the Be before its restart recovery is finished
+    # And it's local SMR has acting role (MASTER | SLAVE)
+    # users must call be.init_conn at proper point
     # self.init_conn()
 
   def checked_return(self, resp, also_val = True):
     segs = resp[0].split()
-    if segs[0] != '+OK':
+    if segs[0] != '+OK' and segs[0] != '+PONG':
       raise resp[0]
     elif also_val:
       return int(segs[1])
@@ -57,7 +59,7 @@ class BE(Proc.Proc):
 
   def ping(self):
     resp = self._conn.do_request("BPING")
-    return self.checked_return(resp)
+    return self.checked_return(resp, False)
 
   def replicated_ping(self):
     resp = self._conn.do_request("PING")

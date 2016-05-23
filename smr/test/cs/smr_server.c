@@ -336,7 +336,7 @@ requestHandler (aeEventLoop * el, int fd, void *data, int mask)
 	}
       else if (strncasecmp (client->ibuf, "BPING\r\n", 7) == 0)
 	{
-	  ret = writefResponse (client, "+OK 0");
+	  ret = writefResponse (client, "+PONG");
 	}
       else if (strncasecmp (client->ibuf, "CKPT\r\n", 6) == 0)
 	{
@@ -647,7 +647,7 @@ processQuery (smrClient * client, char *buf, int bufsz)
     }
   else if (strncasecmp (curr, "PING\r\n", 6) == 0)
     {
-      ret = writefResponse (client, "+OK");
+      ret = writefResponse (client, "+PONG");
     }
   else
     {

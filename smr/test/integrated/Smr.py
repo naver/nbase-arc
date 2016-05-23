@@ -95,6 +95,13 @@ class SMR (Proc.Proc):
       raise Exception(resp[0])
     return seg[1:]
 
+  def delay(self,msec):
+    resp = self._conn.do_request('fi delay sleep 1 %d' % msec)
+    seg = resp[0].split()
+    if seg[0] != '+OK':
+      raise Exception(resp[0])
+    return True
+
   def confset(self,item, value):
     resp = self._conn.do_request('confset %s %s' % (str(item), str(value)))
     seg = resp[0].split()

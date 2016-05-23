@@ -34,7 +34,7 @@ class Conn(object):
       self.bytes_written = 0
       self.bytes_read = 0
 
-  def _lazy_connect(self, timeout = 10000):
+  def lazy_connect(self, timeout = 10000):
     if self._sock is not None:
       return
     sock = None
@@ -96,11 +96,13 @@ class Conn(object):
     return data[:-2]
 
   def _send_request(self, command):
-    self._lazy_connect()
+    self.lazy_connect()
     self._sock.sendall(command + self.end_marker)
     return True
 
-  def do_request(self, command):
+  def do_request(self, command, debug=False):
+    if debug:
+      print('>>>>%s' % command)
     self._send_request(command)
     line = self._read_line()
 
@@ -109,6 +111,8 @@ class Conn(object):
       data = self._read_bulk(length)
     else:
       data = line
+    if debug:
+      print('<<<<%s' % data)
     return data.split(self.end_marker)
 
   def disconnect(self):

@@ -130,6 +130,7 @@ class PgNew:
 	logging.info(self.hist)
 	master.mgen = self.mgen
 	self.master = master
+	master.be.init_conn()
       else:
 	raise Exception('Master election failed (no candidate)')
 
@@ -151,6 +152,7 @@ class PgNew:
       logging.info('\tSLAVE: pgs:%d seq:%d' % (pgs.id, seq))
       pgs.smr.role_slave(pgs.id, self.master.host, self.master.base_port, seq)
       pgs.mgen = self.mgen
+      pgs.be.init_conn()
 
     # adjuist quorum
     curr_quorum = self.master.smr.getquorum()

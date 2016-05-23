@@ -9,4 +9,5 @@ smr/smr-logutil
 test/cs/smr-client
 test/cs/smr-server
 test/integrated/*.pyc
+test/integrated/test_newpg.py.log
 test/unit/test-*

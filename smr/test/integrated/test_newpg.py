@@ -89,7 +89,6 @@ class replicationGroup:
     pgs.smr.wait_role(Smr.SMR.NONE)
     pgs.start_be()
     pgs.smr.wait_role(Smr.SMR.LCONN)
-    pgs.be.init_conn()
     self.pg.add_member(pgs)
 
   def down_pgs(self, i):
@@ -139,8 +138,8 @@ class TestNewPg (unittest.TestCase):
     prev_stat = G.stat(pgsid)
 
     sleep_count = 0
-    while sleep_count < 5:
-      time.sleep(0.1)
+    while sleep_count < 10:
+      time.sleep(0.5)
       stat = G.stat(pgsid)
       if stat['rqst'] > prev_stat['rqst']:
 	return stat['rqst'] - prev_stat['rqst']
