@@ -334,9 +334,9 @@ requestHandler (aeEventLoop * el, int fd, void *data, int mask)
 	  server.curr_client = NULL;
 	  return;
 	}
-      else if (strncasecmp (client->ibuf, "PING\r\n", 6) == 0)
+      else if (strncasecmp (client->ibuf, "BPING\r\n", 7) == 0)
 	{
-	  ret = writefResponse (client, "0");
+	  ret = writefResponse (client, "+PONG");
 	}
       else if (strncasecmp (client->ibuf, "CKPT\r\n", 6) == 0)
 	{
@@ -350,7 +350,7 @@ requestHandler (aeEventLoop * el, int fd, void *data, int mask)
 	    {
 	      log_msg ("failed to rename %s to %s", CKPT_TMP_FILE, CKPT_FILE);
 	    }
-	  ret = writefResponse (client, "0");
+	  ret = writefResponse (client, "+OK 0");
 	}
       else
 	{
@@ -615,7 +615,7 @@ processQuery (smrClient * client, char *buf, int bufsz)
 
       dp = ++curr;
       server.keyspace[key] = crc16 (dp, ep - dp, server.keyspace[key]);
-      ret = writefResponse (client, "%d", server.keyspace[key]);
+      ret = writefResponse (client, "+OK %d", server.keyspace[key]);
     }
   //get <key>
   else if (strncasecmp (curr, "GET ", 4) == 0)
@@ -635,7 +635,7 @@ processQuery (smrClient * client, char *buf, int bufsz)
       key = atoi (kp);
       assert (key >= 0 && key < server.keyspacelen);
 
-      ret = writefResponse (client, "%d", server.keyspace[key]);
+      ret = writefResponse (client, "+OK %d", server.keyspace[key]);
     }
   else if (strncasecmp (curr, "RESET\r\n", 7) == 0)
     {
@@ -643,7 +643,11 @@ processQuery (smrClient * client, char *buf, int bufsz)
 	{
 	  server.keyspace[i] = 0;
 	}
-      ret = writefResponse (client, "0");
+      ret = writefResponse (client, "+OK 0");
+    }
+  else if (strncasecmp (curr, "PING\r\n", 6) == 0)
+    {
+      ret = writefResponse (client, "+PONG");
     }
   else
     {

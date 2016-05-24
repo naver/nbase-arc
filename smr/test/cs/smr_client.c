@@ -747,7 +747,15 @@ response_handler (aeEventLoop * el, int fd, void *data, int mask)
 
   if (sb->cp - sb->buf > 2 && *(sb->cp - 2) == '\r' && *(sb->cp - 1) == '\n')
     {
-      int crc = atoi (sb->buf);
+      int crc;
+
+      if (sb->buf[0] != '+' || sb->buf[1] != 'O' || sb->buf[2] != 'K'
+	  || sb->buf[3] != ' ')
+	{
+	  fprintf (stdout, "-ERR protocol error\n");
+	  abort ();
+	}
+      crc = atoi (&sb->buf[4]);
 
       // update ks_crc
       ks_crc[ws->key] = crc;

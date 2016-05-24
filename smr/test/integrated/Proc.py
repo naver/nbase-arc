@@ -71,14 +71,14 @@ class Proc(object):
     try_count = 0
     conn = None
     e = None
-    while try_count < 30: # 3 sec.
+    while try_count < 60: # 0.5 * 60 = 30 sec.
       try:
         conn = Conn.Conn(self.pgs.host, self.pgs.base_port + self._port_off)
-	conn.do_request('ping')
+	conn.lazy_connect()
 	break
       except:
 	e = sys.exc_info()[0]
-	time.sleep(0.1)
+	time.sleep(0.5)
 	try_count = try_count + 1
 
     if conn == None:
