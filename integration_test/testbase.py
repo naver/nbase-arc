@@ -101,13 +101,13 @@ def cleanup_pgs_log_and_ckpt( cluster_name, server ):
     return 0
 
 
-def request_to_start_cm( id, port ):
-    ret = util.start_confmaster( id, port )
+def request_to_start_cm( id, port, context='' ):
+    ret = util.start_confmaster( id, port, context )
     if ret is not 0:
-        util.log('failed to start_confmaster. id:%d, port:%d' % (id, port))
+        util.log('failed to start_confmaster. id:%d, port:%d, context;"%s"' % (id, port, context))
         return -1
     else:
-        util.log('succeeded to start_confmaster. id:%d, port:%d' % (id, port))
+        util.log('succeeded to start_confmaster. id:%d, port:%d, context:"%s"' % (id, port, context))
 
     return 0
 

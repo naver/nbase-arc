@@ -1142,15 +1142,15 @@ def cmd_to_smr( server, cmd ):
     return cmd_to_smr_addr( server['ip'], server['smr_mgmt_port'], cmd )
 
 
-def cmd_to_smr_addr( ip, port, cmd ):
+def cmd_to_smr_addr( ip, port, cmd, timeout=3 ):
     smr = smr_mgmt.SMR( 'smr' )
-    ret = smr.connect( ip, port )
+    ret = smr.connect( ip, port, timeout )
     if ret is not 0:
         log( 'failed to connect to smr, %s:%d' % (ip, port) )
         return None
 
     smr.write( cmd )
-    response = smr.read_until( '\r\n' )
+    response = smr.read_until( '\r\n', timeout )
     if response is None:
         log( 'error, response from smr:%s:%d is None.' % (ip, port) )
         return None
@@ -1159,7 +1159,7 @@ def cmd_to_smr_addr( ip, port, cmd ):
 
 
 def role_lconn( server ):
-    return role_lconn_addr( server['ip'], server['smr_mgmt_port'], 'role lconn\r\n')
+    return role_lconn_addr( server['ip'], server['smr_mgmt_port'])
 
 
 def role_lconn_addr( ip, port ):
@@ -2098,7 +2098,7 @@ def copy_cm( id ):
     shutil.copy(src, dst)
     os.chmod( dst, stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH )
 
-def start_confmaster( id, port ):
+def start_confmaster( id, port, context ):
     f_properties = open( '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME), 'r' )
     contents = f_properties.read()
     contents = string.replace( contents,
@@ -2112,7 +2112,7 @@ def start_confmaster( id, port ):
 
     f_log_std = open_process_logfile( id, 'cc_std' )
     f_log_err = open_process_logfile( id, 'cc_err' )
-    p = exec_proc_async( cc_dir( id ), './%s' % c.CM_EXEC_SCRIPT, True, None, f_log_std, f_log_err )
+    p = exec_proc_async( cc_dir( id ), './%s %s' % (c.CM_EXEC_SCRIPT, context), True, None, f_log_std, f_log_err )
     proc_mgmt.insert( cc_uid( id ), p )
 
     time.sleep(2)
