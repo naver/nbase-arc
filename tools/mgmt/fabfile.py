@@ -889,13 +889,13 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
     # Get quorum policy
     ret = cluster_json['data']['cluster_info']['Quorum_Policy']
     ret = ret.strip()[1:-1]
-    quorum_policy = [int(n) for n in ret.split(',')]
 
-    num_pgs = cm.get_joined_pgs_count(cluster_name, pg_id)
-    if num_pgs > len(quorum_policy):
-        quorum_value = quorum_policy[len(quorum_policy)-1]
-    else:
-        quorum_value = quorum_policy[num_pgs-1]
+    # Get quorum
+    pg_info = cm.pg_info(cluster_name, pg_id)
+    if pg_info == None:
+        warn(red("[%s] get PG '%d' information from confmaster fail." % (env.host_string, pg_id)))
+        return False
+    quorum_value = pg_info['quorum']
 
     # Get PG and PGS info from Json
     pgs_list = cm.get_pgs_list(cluster_name, pg_id)
