@@ -430,7 +430,7 @@ clusterMain (int argc, char **argv)
       server.smr_init_flags = SMR_INIT_RCKPT;
       if (getdump
 	  (server.ckpt_host, server.ckpt_port, server.rdb_filename,
-	   "0-8191") != REDIS_OK)
+	   "0-8191", REDIS_GETDUMP_DEFAULT_NET_LIMIT_MB) != REDIS_OK)
 	{
 	  exit (1);
 	}
