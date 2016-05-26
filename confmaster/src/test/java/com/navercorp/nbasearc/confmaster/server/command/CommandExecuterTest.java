@@ -67,7 +67,7 @@ public class CommandExecuterTest extends BasicSetting {
 
     final String clusterAddUsage = "cluster_add <cluster_name> <quorum policy>\r\n" +
             "Ex) cluster_add cluster1 0:1\r\n" +
-            "add a new cluster\r\n";
+            "add a new cluster";
     
     @Test
     public void tooManyArguments() throws Exception {

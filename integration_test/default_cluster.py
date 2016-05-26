@@ -21,7 +21,12 @@ import util
 
 def initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
     if conf == None:
-        conf = {'smr_log_delete_delay':86400}
+        conf = {'smr_log_delete_delay':86400,
+                'cm_context':''}
+    if conf.has_key('smr_log_delete_delay') == False:
+        conf['smr_log_delete_delay'] = 86400
+    if conf.has_key('cm_context') == False:
+        conf['cm_context'] = ''
 
     if testbase.cleanup_zookeeper_root() is not 0:
         util.log('failed to cleanup_zookeeper_root')
@@ -37,7 +42,7 @@ def initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
             return -1
 
     for server in cluster['servers']:
-        if testbase.request_to_start_cm( server['id'], server['cm_port'] ) is not 0:
+        if testbase.request_to_start_cm( server['id'], server['cm_port'], conf['cm_context'] ) is not 0:
             util.log('failed to request_to_start_cm')
             return -1
 

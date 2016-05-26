@@ -16,23 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
-import static com.navercorp.nbasearc.confmaster.Constant.ALL;
-import static com.navercorp.nbasearc.confmaster.Constant.ALL_IN_PG;
-import static com.navercorp.nbasearc.confmaster.Constant.APPDATA_TYPE_BACKUP;
-import static com.navercorp.nbasearc.confmaster.Constant.CLUSTER_PHASE_INIT;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_HAS_GW;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_HAS_PG;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_HAS_PGS;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_PING;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_PONG;
-import static com.navercorp.nbasearc.confmaster.Constant.GW_RESPONSE_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
-import static com.navercorp.nbasearc.confmaster.Constant.KEY_SPACE_SIZE;
-import static com.navercorp.nbasearc.confmaster.Constant.LOG_TYPE_COMMAND;
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_MASTER;
-import static com.navercorp.nbasearc.confmaster.Constant.S2C_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_MODERATE;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
 import static com.navercorp.nbasearc.confmaster.server.mapping.ArityType.GREATER;
@@ -48,7 +32,6 @@ import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.Op;
 import org.apache.zookeeper.OpResult;
-import org.slf4j.helpers.MessageFormatter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
@@ -132,11 +115,15 @@ public class ClusterService {
             name="cluster_add",
             usage="cluster_add <cluster_name> <quorum policy>\r\n" +
                     "Ex) cluster_add cluster1 0:1\r\n" +
-                   "add a new cluster\r\n")
+                   "add a new cluster")
     public String clusterAdd(String clusterName, String quorumPolicy)
             throws MgmtCommandWrongArgumentException,
             MgmtZNodeAlreayExistsException, MgmtZooKeeperException,
             NoNodeException {
+        if (clusterImo.get(clusterName) != null) {
+            return EXCEPTIONMSG_DUPLICATED_CLUSTER;
+        }
+        
         Integer keyspaceSize = KEY_SPACE_SIZE;
 
         // Prapare
@@ -154,8 +141,7 @@ public class ClusterService {
                 quorumPolicyAsList.add(Integer.parseInt(item));
                 isValidQuorumPolicy(quorumPolicyAsList);
             } catch (Exception e) {
-                throw new MgmtCommandWrongArgumentException(
-                    MessageFormatter.format("Validate quorum policy fail. {}", quorumPolicy));
+                return "-ERR Invalid quorum policy";
             }
         }
         data.setQuorumPolicy(quorumPolicyAsList);
@@ -195,7 +181,7 @@ public class ClusterService {
             name="cluster_del",
             usage="cluster_del <cluster_name>\r\n" +
                     "Ex) cluster_del cluster1\r\n" +
-                    "delete a new cluster\r\n")
+                    "delete a new cluster")
     public String clusterDel(String clusterName)
             throws MgmtZNodeDoesNotExistException, MgmtZooKeeperException {
         // Check
@@ -263,8 +249,15 @@ public class ClusterService {
             usage="cluster_info <cluster_name>")
     public String clusterInfo(String clusterName) throws InterruptedException,
             KeeperException, IOException {
-        // In Memory
+        // Check
         Cluster cluster = clusterImo.get(clusterName);
+        if (null == cluster) {
+            throw new IllegalArgumentException(
+                    EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
+                            + Cluster.fullName(clusterName));
+        }
+        
+        // In Memory
         List<PartitionGroup> pgList = pgImo.getList(clusterName);
         List<Gateway> gwList = gwImo.getList(clusterName);
         
@@ -315,7 +308,7 @@ public class ClusterService {
     
     @CommandMapping(
             name="cluster_ls",
-            usage="cluster_ls\r\n")
+            usage="cluster_ls")
     public String execute() {
         // In Memory
         List<Cluster> clusters = clusterImo.getAll();
@@ -417,7 +410,7 @@ public class ClusterService {
             name="appdata_set",
             arityType=GREATER,
             usage="appdata_set <cluster_name> backup <backup_id> <daemon_id> <period> <base_time> <holding period(day)> <net_limit(MB/s)> <output_format> [<service url>]\r\n" +
-                    "Ex) appdata_set c1 backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json\r\n")
+                    "Ex) appdata_set c1 backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json")
     public String clusterBackupScheduleSet(String clusterName, String type,
             Integer backupID, Integer daemonID, String minute, String hour,
             String day, String month, String dayOfWeek, String year,
@@ -520,7 +513,7 @@ public class ClusterService {
     
     @CommandMapping(
             name="appdata_get",
-            usage="appdata_get <cluster_name> backup <backup_id>\r\n")
+            usage="appdata_get <cluster_name> backup <backup_id>")
     public String clusterBackupScheduleGet(String clusterName, String type,
             String backupID) throws MgmtZooKeeperException,
             ConfMasterException, NodeExistsException {
@@ -570,7 +563,7 @@ public class ClusterService {
     @CommandMapping(
             name="appdata_del",
             usage="appdata_del <cluster_name> backup <backup_id>\r\n" +
-                    "Ex) appdata_del c1 backup 1\r\n")
+                    "Ex) appdata_del c1 backup 1")
     public String clusterBackupScheduleDel(String clusterName, String type,
             int backupID) throws NoNodeException, MgmtZooKeeperException,
             ConfMasterException {

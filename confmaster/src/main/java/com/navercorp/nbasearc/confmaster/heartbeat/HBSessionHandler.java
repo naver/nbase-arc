@@ -173,10 +173,10 @@ public class HBSessionHandler implements SessionHandler {
         case CONNECTED:
             if (isTimeout()) {
                 session.close();
-            }
-
-            if (!isSentRequest()) {
-                sendPing();
+            } else {
+                if (!isSentRequest()) {
+                    sendPing();
+                }
             }
             break;
         }

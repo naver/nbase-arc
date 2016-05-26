@@ -16,10 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server;
 
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_COMMAND_NOT_FOUND;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_INTERNAL_ERROR;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_WRONG_NUMBER_ARGUMENTS;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_ZOOKEEPER;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -37,8 +34,6 @@ import org.apache.zookeeper.KeeperException;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandNotFoundException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
-import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeAlreayExistsException;
-import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.ClientSession;
 import com.navercorp.nbasearc.confmaster.io.EventSelector;
@@ -232,7 +227,8 @@ public class ClientSessionHandler implements SessionHandler {
         @Override
         public void callback(JobResult result) {
             try {
-                replyJobResult(result);
+                sendBuffer.put(formatter.get(result,
+                        leaderElectionHandler.getCurrentLeaderHost()));
                 if (sendBuffer.remaining() == 0) {
                     Logger.error("Close client {}, due to send-buffer size limit. length: {}",
                             session, sendBuffer.length());
@@ -240,7 +236,7 @@ public class ClientSessionHandler implements SessionHandler {
                 }
             } catch (Exception e) {
                 Logger.error("Reply job result to client fail. {}", session, e);
-                sendBuffer.put(convert(e.getMessage()));
+                sendBuffer.put(formatter.convert(e.toString()));
             } finally {
                 slowLog(result);
 
@@ -268,37 +264,30 @@ public class ClientSessionHandler implements SessionHandler {
                 Logger.error("Log slow command fail.", e);
             }
         }
-        
-        private void replyJobResult(JobResult result) {
-            String reply;
-            
+    }
+
+    public static class ReplyFormatter {
+
+        public String get(JobResult result, String leader) {
             // If command not found.
             for (Throwable e : result.getExceptions()) {
                 if (e instanceof MgmtCommandNotFoundException) {
                     if (LeaderState.isLeader()) {
-                        reply = convert(
-                                EXCEPTIONMSG_COMMAND_NOT_FOUND,
+                        return convert(EXCEPTIONMSG_COMMAND_NOT_FOUND,
                                 ReplyType.NORMAL);
                     } else {
                         try {
-                            reply = convert(
-                                    leaderElectionHandler.getCurrentLeaderHost(),
-                                    ReplyType.REDIRECT);
+                            return convert(leader, ReplyType.REDIRECT);
                         } catch (Exception e2) {
-                            reply = convert(EXCEPTIONMSG_WRONG_NUMBER_ARGUMENTS);
+                            return convert(EXCEPTIONMSG_WRONG_NUMBER_ARGUMENTS);
                         }
                     }
-                    sendBuffer.put(reply);
-                    return;
                 } else if (e instanceof MgmtCommandWrongArgumentException) {
                     // Send usage
-                    sendBuffer.put(((MgmtCommandWrongArgumentException) e).getUsage() + "\r\n");
-                    return;
+                    return ((MgmtCommandWrongArgumentException) e).getUsage() + "\r\n";
                 } else if (e instanceof InvocationTargetException) {
                     // Send usage
-                    // TODO
-                    sendBuffer.put(convert("-" + e.toString(), ReplyType.NORMAL));
-                    return;
+                    return convert("-" + e.toString(), ReplyType.NORMAL);
                 }
             }
             
@@ -311,10 +300,9 @@ public class ClientSessionHandler implements SessionHandler {
             }
             
             if (stringBuilder.length() > 0) {
-                sendBuffer.put(convert(
+                return convert(
                         stringBuilder.substring(0, stringBuilder.length() - 1),
-                        ReplyType.NORMAL));
-                return;
+                        ReplyType.NORMAL);
             }
             
             // If message is null then there is a Exception
@@ -323,49 +311,40 @@ public class ClientSessionHandler implements SessionHandler {
             }
 
             if (stringBuilder.length() > 0) {
-                sendBuffer.put(convert(
+                return convert(
                         stringBuilder.substring(0, stringBuilder.length() - 1),
-                        ReplyType.NORMAL));
-                return;
+                        ReplyType.NORMAL);
             }
             
             // If there is any message to be sent...
-            sendBuffer.put(convert(EXCEPTIONMSG_INTERNAL_ERROR, ReplyType.NORMAL));
+            return convert(EXCEPTIONMSG_INTERNAL_ERROR, ReplyType.NORMAL);
         }
-    }
 
-    public String convert(String reply, ReplyType type) {
-        return formatter.convert(reply, type);
-    }
-    
-    public String convert(String reply) {
-        return formatter.convert(reply, ReplyType.NORMAL);
-    }
-
-    public String convertExceptionToReply(Throwable e) {
-        if (e instanceof KeeperException) {
-            return EXCEPTIONMSG_ZOOKEEPER;
-        } else if (e instanceof InterruptedException) {
-            return EXCEPTIONMSG_INTERNAL_ERROR;
-        } else if (e instanceof MgmtCommandWrongArgumentException) {
-            return e.getMessage();
-        } else if (e instanceof IOException) {
-            return "-ERR Can not convert raw-data to json-format";
-        } else if (e instanceof IllegalArgumentException) {
-            return e.getMessage();
-        } else if (e instanceof MgmtZNodeAlreayExistsException) {
-            return e.getMessage();
-        } else if (e instanceof MgmtZNodeDoesNotExistException) {
-            return e.getMessage();
-        } else if (e instanceof Exception) {
-            return String.format("-ERR %s", e.getMessage());
+        public String convert(String reply) {
+            return convert(reply, ReplyType.NORMAL);
         }
-        return e.getMessage();
-    }
 
-    public class ReplyFormatter {
+        public String convertExceptionToReply(Throwable e) {
+            if (e instanceof KeeperException) {
+                return EXCEPTIONMSG_ZOOKEEPER;
+            } else if (e instanceof InterruptedException) {
+                return EXCEPTIONMSG_INTERNAL_ERROR;
+            } else if (e instanceof IOException) {
+                return "-ERR Can not convert raw-data to json-format";
+            } else {
+                if (e.getMessage().startsWith(ERROR)) {
+                    return e.getMessage();
+                } else {
+                    return String.format("-ERR %s", e.getMessage());
+                }
+            }
+        }
         
         public String convert(String reply, ReplyType type) {
+            if (reply == null) {
+                return "\r\n";
+            }
+            
             if (reply.length() == 0) {
                 return "\r\n";
             }

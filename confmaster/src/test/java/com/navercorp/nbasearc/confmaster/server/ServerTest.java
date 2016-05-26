@@ -80,6 +80,7 @@ public class ServerTest extends BasicSetting {
             super.before();
             server = new ClusterContollerServer(context);
             server.initialize();
+            leaderElection.initialize();
         } catch (Exception e) {
             e.printStackTrace();
             throw e;
@@ -89,6 +90,7 @@ public class ServerTest extends BasicSetting {
     @After
     public void after() throws Exception {
         try {
+            leaderElection.release();
             server.relase();
             super.after();
         } catch (Exception e) {

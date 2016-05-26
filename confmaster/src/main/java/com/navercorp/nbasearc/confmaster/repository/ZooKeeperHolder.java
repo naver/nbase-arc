@@ -100,7 +100,7 @@ public class ZooKeeperHolder {
             try {
                 zk.close();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Logger.error("Close ZooKeeper handle error.", e);
             }
             zk = null;
         }

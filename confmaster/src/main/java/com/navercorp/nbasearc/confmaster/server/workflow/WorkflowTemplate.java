@@ -30,6 +30,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.core.convert.support.DefaultConversionService;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtPrivilegeViolationException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtWorkflowWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
@@ -66,11 +68,22 @@ public class WorkflowTemplate implements Callable<Object> {
             checkPrivilege();
             validRequest();
             lock(lockHelper);
-            execute();
+            execute(); 
         } catch (Exception e) {
-            Logger.error("Exception occur while handle request. message: \"{}\"...", 
-                    workflow, e);
-            Logger.flush(DEBUG);
+            boolean perror = false;
+            if (e.getCause() != null) {
+                if (!(e.getCause() instanceof MgmtSmrCommandException || e.getCause() instanceof MgmtSetquorumException)) {
+                    perror = true;
+                }
+            } else {
+                perror = true;
+            }
+
+            if (perror) {
+                Logger.error("Exception occur while handle request. message: \"{}\"...",
+                        workflow, e);
+                Logger.flush(DEBUG);
+            }
         } finally {
             // Release lock
             try {

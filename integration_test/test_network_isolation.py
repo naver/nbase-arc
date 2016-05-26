@@ -26,6 +26,8 @@ import redis_mgmt
 import time
 import telnet
 import random
+import fi_confmaster
+import load_generator_crc16
 
 
 def block_network(cluster, mgmt_ip, mgmt_port):
@@ -646,7 +648,7 @@ class TestNetworkIsolation(unittest.TestCase):
         ret = default_cluster.finalize( cluster )
         self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
 
-    def test_6_mgmt_is_isolated_with_lconn(self):
+    def test_5_mgmt_is_isolated_with_lconn(self):
         util.print_frame()
 
         out = util.sudo('iptables -L')
@@ -791,7 +793,7 @@ class TestNetworkIsolation(unittest.TestCase):
         ret = default_cluster.finalize( cluster )
         self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
 
-    def test_7_repeat_isolation_and_no_opinion_linepay(self):
+    def test_6_repeat_isolation_and_no_opinion_linepay(self):
         util.print_frame()
 
         out = util.sudo('iptables -L')
@@ -919,6 +921,214 @@ class TestNetworkIsolation(unittest.TestCase):
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.102 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+
+    def test_7_dirty_network_fi(self):
+        util.print_frame()
+        clnts = []
+
+        try:
+            out = util.sudo('iptables -L')
+            util.log('====================================================================')
+            util.log('out : %s' % out)
+            util.log('out.return_code : %d' % out.return_code)
+            util.log('out.stderr : %s' % out.stderr)
+            util.log('out.succeeded : %s' % out.succeeded)
+
+            # Add forwarding role
+            out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
+            self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+            out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
+            self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+
+            cluster_name = 'network_isolation_cluster_1'
+            cluster = filter(lambda x: x['cluster_name'] == cluster_name, config.clusters)[0]
+            util.log(util.json_to_str(cluster))
+
+            self.leader_cm = cluster['servers'][0]
+
+            # MGMT
+            mgmt_ip = cluster['servers'][0]['real_ip']
+            mgmt_port = cluster['servers'][0]['cm_port']
+
+            # Create cluster
+            ret = default_cluster.initialize_starting_up_smr_before_redis( cluster, 
+                    conf={'cm_context':'applicationContext-fi.xml'})
+            self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+
+            # Print initial state of cluster
+            util.log('\n\n\n ### INITIAL STATE OF CLUSTER ### ')
+            initial_state = []
+            self.assertTrue(util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, initial_state, check_quorum=True), 'failed to check cluster state')
+
+            # Start crc16 client
+            for s in cluster['servers']:
+                c = load_generator_crc16.Crc16Client(s['id'], s['ip'], s['gateway_port'], 3000, verbose=False)
+                c.start()
+                clnts.append(c)
+
+            # Network isolation test
+            cmfi = fi_confmaster.ConfmasterWfFi(['ra', 'qa', 'me', 'yj', 'bj', 'mg'], 
+                                                ['lconn', 'slave', 'master', 'setquorum'], [True, False], 1)
+
+            for fi in cmfi:
+                # Block network
+                util.log('\n\n\n ### BLOCK NETWORK, %s ### ' % str(fi))
+                ret = block_network(cluster, mgmt_ip, mgmt_port)
+                self.assertTrue(ret, '[%s] failed to block network.' % str(fi))
+
+                for i in xrange(4):
+                    util.log('waiting... %d' % (i + 1))
+                    time.sleep(1)
+
+                # Check cluster state
+                ok = False
+                for i in xrange(10):
+                    isolated_states = []
+                    util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, isolated_states, check_quorum=True)
+
+                    state_transition_done = True
+                    for s in isolated_states:
+                        if s['ip'] != '127.0.0.100':
+                            continue
+
+                        if s['active_role'] != '?' or s['mgmt_role'] != 'N':
+                            state_transition_done = False
+
+                    if state_transition_done:
+                        ok = True
+                        break
+                    time.sleep(1)
+                self.assertTrue(ok, 'Fail, state transition')
+
+                # Fault injection
+                try:
+                    self.assertTrue(fi_confmaster.fi_add(fi, 1, mgmt_ip, mgmt_port), 
+                            "Confmaster command fail. fi: %s" % str(fi))
+                except ValueError as e:
+                    self.fail("Confmaster command error. cmd: \"%s\", reply: \"%s\"" % (cmd, reply))
+
+                # Unblock network
+                util.log('\n\n\n ### UNBLOCK NETWORK, %s ### ' % str(fi))
+                ret = unblock_network(cluster, mgmt_ip, mgmt_port, None)
+                self.assertTrue(ret, '[%s] failed to unblock network.' % str(fi))
+
+                for i in xrange(4):
+                    util.log('waiting... %d' % (i + 1))
+                    time.sleep(1)
+
+                # Check cluster state
+                ok = False
+                for i in xrange(10):
+                    isolated_states = []
+                    ok = util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, isolated_states, check_quorum=True)
+                    if ok:
+                        break
+                    time.sleep(1)
+                self.assertTrue(ok, '[%s] Fail. unstable cluster.' % str(fi))
+
+                check_cluster = False
+
+                # 'bj', 'slave'
+                if fi[0] == 'bj' and fi[1] == 'slave':
+                    m, s1, s2 = util.get_mss(cluster)
+                    ret = util.role_lconn(s1)
+                    self.assertEqual("+OK\r\n", ret, '[%s] role lconn fail.' % str(fi))
+                    check_cluster = True
+                # 'me', 'lconn'
+                elif fi[0] == 'me' and fi[1] == 'lconn':
+                    m, s1, s2 = util.get_mss(cluster)
+                    ret = util.role_lconn(m)
+                    self.assertEqual("+OK\r\n", ret, '[%s] role lconn fail.' % str(fi))
+                    check_cluster = True
+                # 'qa', 'setquorum'
+                elif fi[0] == 'qa' and fi[1] == 'setquorum':
+                    m, s1, s2 = util.get_mss(cluster)
+
+                    # shutdown
+                    ret = testbase.request_to_shutdown_smr(s1)
+                    self.assertEqual(0, ret, '[%s] failed to shutdown smr%d' % (str(fi), s1['id']))
+                    ret = testbase.request_to_shutdown_redis(s1)
+                    self.assertEqual(0, ret, '[%s] failed to shutdown redis%d' % (str(fi), s1['id']))
+
+                    # Check quorum
+                    q = -1
+                    for q_cnt in xrange(20):
+                        q = util.get_quorum(m)
+                        if q == 1:
+                            break
+                        time.sleep(1)
+                    self.assertEquals(1, q, "[%s] check quorum fail." % str(fi))
+
+                    # Modify quorum
+                    ret = util.cmd_to_smr_addr(m['ip'], m['smr_mgmt_port'], 'setquorum 0\r\n')
+                    self.assertEqual("+OK\r\n", ret, '[%s] "setquorum 0" fail.' % str(fi))
+
+                    # Check quorum
+                    q = -1
+                    for q_cnt in xrange(20):
+                        q = util.get_quorum(m)
+                        if q == 1:
+                            break
+                        time.sleep(1)
+                    self.assertEquals(1, q, "[%s] check quorum fail." % str(fi))
+
+                    # recovery
+                    ret = testbase.request_to_start_smr(s1)
+                    self.assertEqual(0, ret, '[%s] failed to start smr' % str(fi))
+                    ret = testbase.request_to_start_redis(s1, max_try=120)
+                    self.assertEqual(0, ret, '[%s] failed to start redis' % str(fi))
+                    ret = testbase.wait_until_finished_to_set_up_role(s1, 11)
+                    self.assertEqual(0, ret, '[%s] failed to role change. smr_id:%d' % (str(fi), s1['id']))
+
+                    check_cluster = True
+
+                # 'setquorum'
+                elif fi[1] == 'setquorum':
+                    m, s1, s2 = util.get_mss(cluster)
+                    ret = util.cmd_to_smr_addr(s1['ip'], s1['smr_mgmt_port'], 'fi delay sleep 1 8000\r\n', timeout=20)
+                    self.assertEqual("+OK\r\n", ret, '[%s] "fi delay sleep 1 8000" fail. ret: "%s"' % (str(fi), ret))
+                    check_cluster = True
+
+                if check_cluster:
+                    # Check cluster state
+                    ok = False
+                    for i in xrange(20):
+                        isolated_states = []
+                        ok = util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, isolated_states, check_quorum=True)
+                        if ok:
+                            break
+                        time.sleep(1)
+                    self.assertTrue(ok, '[%s] Fail. unstable cluster.' % str(fi))
+
+                if fi[0] != 'bj':
+                    # Check fault injection
+                    ok = False
+                    for i in xrange(10):
+                        count = fi_confmaster.fi_count(fi, mgmt_ip, mgmt_port)
+                        if count == 0:
+                            ok = True
+                            break
+                        time.sleep(0.5)
+                    self.assertTrue(ok, "[%s] fail. failt injection had not been triggered." % str(fi))
+
+            # Shutdown cluster
+            ret = default_cluster.finalize( cluster )
+            self.assertEqual(ret, 0, '[%s] failed to TestMaintenance.finalize' % str(fi))
+
+            # Delete forwarding role
+            out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
+            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+            out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
+            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+
+            for c in clnts:
+                self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
+
+        finally:
+            for c in clnts:
+                c.quit()
+            for c in clnts:
+                c.join()
 
 def checkLastState(mgmt_ip, mgmt_port, cluster_name, pgs_id, state):
     pgs = util.get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id)
