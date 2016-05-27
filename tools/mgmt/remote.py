@@ -661,13 +661,13 @@ def get_quorum(master):
             conn.close()
 
 
-def check_quorum(pg_data, quorum):
+def check_quorum(pgs_list, quorum):
     print magenta("\n[%s] Check quorum value" % env.host_string)
     master_found = False
 
     try:
         # Find master
-        for pgs_id, pgs_data in pg_data.items():
+        for pgs_id, pgs_data in pgs_list.items():
             ip = pgs_data['ip'].encode('ascii')
             smr_base_port = pgs_data['smr_base_port']
             

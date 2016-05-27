@@ -270,7 +270,7 @@ public class RoleChangeWorkflowTest extends BasicSetting {
     public void modifyPgQuorum() throws Exception {
         init(2);
         
-        // pg_if fail
+        // pg_iq fail
         JobResult result = doCommand("pg_iq " + clusterName + " " + pgName);
         assertEquals("{\"state\":\"error\",\"msg\":\"-ERR not enough available pgs.\"}\r\n",
                 formatReply(result, null));

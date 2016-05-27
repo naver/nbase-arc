@@ -1100,16 +1100,15 @@ class TestNetworkIsolation(unittest.TestCase):
                         time.sleep(1)
                     self.assertTrue(ok, '[%s] Fail. unstable cluster.' % str(fi))
 
-                if fi[0] != 'bj':
-                    # Check fault injection
-                    ok = False
-                    for i in xrange(10):
-                        count = fi_confmaster.fi_count(fi, mgmt_ip, mgmt_port)
-                        if count == 0:
-                            ok = True
-                            break
-                        time.sleep(0.5)
-                    self.assertTrue(ok, "[%s] fail. failt injection had not been triggered." % str(fi))
+                # Check fault injection
+                ok = False
+                for i in xrange(10):
+                    count = fi_confmaster.fi_count(fi, mgmt_ip, mgmt_port)
+                    if count == 0:
+                        ok = True
+                        break
+                    time.sleep(0.5)
+                self.assertTrue(ok, "[%s] fail. failt injection had not been triggered." % str(fi))
 
             # Shutdown cluster
             ret = default_cluster.finalize( cluster )

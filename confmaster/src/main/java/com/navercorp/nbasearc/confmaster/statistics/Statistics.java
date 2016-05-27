@@ -54,7 +54,7 @@ public class Statistics {
     private static long maxElapsedTimeForCommand = -1L;
     
     /* Job */
-    private static long jobCompleted = 0L;
+    private static long jobRunning = 0L;
     private static long jobWaiting = 0L;
     
     private static long SLOW_HEARTBEAT;
@@ -129,7 +129,7 @@ public class Statistics {
         
         if (minElapsedTimeForWorkflow == -1L) {
             minElapsedTimeForWorkflow = elapsedTime;
-        } else if (minElapsedTimeForWorkflow < elapsedTime) {
+        } else if (minElapsedTimeForWorkflow > elapsedTime) {
             minElapsedTimeForWorkflow = elapsedTime;
         }
         
@@ -168,7 +168,7 @@ public class Statistics {
     }
     
     private static void updateJobStat() {
-        jobCompleted = jobExecutor.getCompletedTaskCount();
+        jobRunning = jobExecutor.getActiveCount();
         jobWaiting = jobExecutor.getQSize();
     }
     
@@ -206,7 +206,7 @@ public class Statistics {
                 + (totalElapsedTimeForWorkflow / (countOfWorkflow == 0 ? 1
                         : countOfWorkflow))
                 + ", RUN:" 
-                + jobCompleted
+                + jobRunning
                 + ", WAIT:" 
                 + jobWaiting
                 + "), CMD(CNT:" 

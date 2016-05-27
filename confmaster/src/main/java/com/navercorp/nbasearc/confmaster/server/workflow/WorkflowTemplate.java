@@ -39,6 +39,7 @@ import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.WorkflowCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType;
+import com.navercorp.nbasearc.confmaster.statistics.Statistics;
 
 public class WorkflowTemplate implements Callable<Object> {
     
@@ -63,6 +64,7 @@ public class WorkflowTemplate implements Callable<Object> {
     @Override
     public Object call() {
         HierarchicalLockHelper lockHelper = new HierarchicalLockHelper(context);
+        final Long start = System.currentTimeMillis();
         
         try {
             checkPrivilege();
@@ -100,6 +102,8 @@ public class WorkflowTemplate implements Callable<Object> {
                 LoggerFactory.getLogger(getClass()).error(
                         "Exception occur while flush logs in WorkflowTemplate.", e);
             }
+
+            Statistics.updateElapsedTimeForWorkflows(System.currentTimeMillis() - start);
         }
         
         return null;
