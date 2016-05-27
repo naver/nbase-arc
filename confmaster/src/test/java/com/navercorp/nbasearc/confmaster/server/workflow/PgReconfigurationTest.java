@@ -238,6 +238,7 @@ public class PgReconfigurationTest extends BasicSetting {
         }
     }
     
+    @Test
     public void masterElection() throws Exception {
         // Initialize
         createCluster();
@@ -383,7 +384,7 @@ public class PgReconfigurationTest extends BasicSetting {
         await("reconfiguration for slave.").atMost(assertionTimeout, SECONDS).until(slaveFinder);
         assertEquals(1, slaveFinder.getSlaves().size());
         for (PartitionGroupServer slv : slaveFinder.getSlaves()) {
-            validateNormal(slv, pg, PGS_ROLE_SLAVE, 3);
+            validateNormal(slv, pg, PGS_ROLE_SLAVE, 4);
         }
     }
 

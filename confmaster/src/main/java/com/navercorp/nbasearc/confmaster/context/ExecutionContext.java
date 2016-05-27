@@ -50,8 +50,8 @@ public class ExecutionContext<T> implements Context<T> {
         } finally {
             // Continue if there is next job.
             if (ContextChain.hasNextJob()) {
-                ReservedCall<T> call = ContextChain.pollNextJob();                
-                ExecutionContext<T> ec = new ExecutionContext<T>(call.getCall(), type, pool);
+                ReservedCall call = ContextChain.pollNextJob();                
+                ExecutionContext<Object> ec = new ExecutionContext<Object>(call.getCall(), type, pool);
                 ec.setLogHistory(Logger.popLogHistory());
                 pool.performDelayed(ec, call.getDelay(), call.getTimeUnit());
             }

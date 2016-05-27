@@ -39,6 +39,7 @@ import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerDa
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
+import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
@@ -49,6 +50,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
     final ZooKeeperHolder zookeeper;
     final PartitionGroupServerDao pgsDao;
     final PartitionGroupServerImo pgsImo;
+    final PartitionGroupImo pgImo;
     final RedisServerImo rsImo;
     
     final MGSetquorum setquorum;
@@ -65,6 +67,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
         this.zookeeper = context.getBean(ZooKeeperHolder.class);
         this.pgsDao = context.getBean(PartitionGroupServerDao.class);
         this.pgsImo = context.getBean(PartitionGroupServerImo.class);
+        this.pgImo = context.getBean(PartitionGroupImo.class);
         this.rsImo = context.getBean(RedisServerImo.class);
         
         this.setquorum = context.getBean(MGSetquorum.class);
@@ -130,6 +133,11 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     @Override
     protected void onSuccess() throws Exception {
+        if (pgImo.get(pg.getName(), pg.getClusterName()) == null) {
+            Logger.info("pg does not exist. exit workflow. {}", pg);
+            return;
+        }
+
         int numGreen = 0;
         for (PartitionGroupServer pgs : joinedPgsList) {
             if (pgs.getData().getColor() == GREEN) {
@@ -159,6 +167,11 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     @Override
     protected void onException(long nextEpoch, Exception e) {
+        if (pgImo.get(pg.getName(), pg.getClusterName()) == null) {
+            Logger.info("pg does not exist. exit workflow. {}", pg);
+            return;
+        }
+
         wfExecutor.performDelayed(ROLE_ADJUSTMENT,
                 config.getServerJobWorkflowPgReconfigDelay(),
                 TimeUnit.MILLISECONDS, pg, nextEpoch, context);

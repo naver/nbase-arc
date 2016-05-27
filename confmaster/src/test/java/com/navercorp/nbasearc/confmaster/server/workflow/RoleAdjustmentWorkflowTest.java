@@ -205,21 +205,14 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
         
         ra = new RoleAdjustmentWorkflow(getPg(), false, context);
         ra.execute();
-        
-        validateNormal(p1, pg, PGS_ROLE_MASTER, 0);
-        assertEquals("1", mimics[0].mSmr.execute("getquorum"));
-        validateNormal(p2, pg, PGS_ROLE_SLAVE, 0);
 
-        // Slave1 fail and RA
-        mimics[1].mSmr.execute("role none");
-        p2.setData(PartitionGroupServerData.builder().from(p2.getData())
-                .withRole(PGS_ROLE_NONE).build());
-        
-        ra = new RoleAdjustmentWorkflow(getPg(), false, context);
-        ra.execute();
-        
-        validateNormal(p1, pg, PGS_ROLE_MASTER, 0);
-        assertEquals("0", mimics[0].mSmr.execute("getquorum"));
+        // RA/toRed make master lconn.
+        assertEquals(BLUE, p1.getData().getColor());
+        assertEquals(PGS_ROLE_LCONN, p1.getData().getRole());
+        assertEquals(SERVER_STATE_LCONN, p1.getData().getState());
+        assertEquals(HB_MONITOR_YES, p1.getData().getHb());
+        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(0, pg.getData().currentGen());
     }
     
 }

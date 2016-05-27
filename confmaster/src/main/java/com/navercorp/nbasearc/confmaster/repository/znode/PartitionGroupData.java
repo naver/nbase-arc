@@ -16,6 +16,8 @@
 
 package com.navercorp.nbasearc.confmaster.repository.znode;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;

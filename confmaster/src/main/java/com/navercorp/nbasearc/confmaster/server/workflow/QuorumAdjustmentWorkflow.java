@@ -32,6 +32,9 @@ import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
+/*
+ * Dead workflow. This workflow does nothing since RA/toRed makes master lconn.
+ */
 public class QuorumAdjustmentWorkflow extends CascadingWorkflow {
     final ApplicationContext context;
     final Config config;

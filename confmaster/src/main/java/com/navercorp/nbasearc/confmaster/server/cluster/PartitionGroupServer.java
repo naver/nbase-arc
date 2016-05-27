@@ -352,6 +352,37 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
+    public long getNewMasterRewindCseq(LogSequence logSeq) {
+        if (getData().getOldMasterSmrVersion().equals(SMR_VERSION_101)) {
+            Logger.info("new master rewind cseq: {}, om: {}",
+                    logSeq.getLogCommit(), getData().getOldMasterSmrVersion());
+            return logSeq.getLogCommit();
+        } else {
+            Logger.info("new master rewind cseq: {}, om: {}",
+                    logSeq.getLogCommit(), getData().getOldMasterSmrVersion());
+            return logSeq.getMax();
+        }
+    }
+    
+    public long getSlaveJoinSeq(LogSequence logSeq) {
+        if (getData().getOldMasterSmrVersion().equals(SMR_VERSION_101)) {
+            if (getData().getOldRole().equals(PGS_ROLE_MASTER)) {
+                final long seq = Math.min(logSeq.getLogCommit(),
+                        logSeq.getBeCommit());
+                Logger.info("slave join rewind cseq: {}, om: {}, or: {}",
+                        new Object[] { seq, getData().getOldMasterSmrVersion(),
+                                getData().getOldRole() });
+                return seq;
+            }
+        }
+
+        final long seq = logSeq.getLogCommit();
+        Logger.info("slave join rewind cseq: {}, om: {}, or: {}", new Object[] {
+                seq, getData().getOldMasterSmrVersion(),
+                getData().getOldRole() });
+        return seq;
+    }
+    
     static public RealState convertToState(String reply) {
         String[] tokens = reply.split(" ");
         String role;
@@ -427,6 +458,28 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         return logSeq;
     }
     
+    public String smrVersion() throws MgmtSmrCommandException {
+        final String cmd = "smrversion";
+        
+        try {
+            // Send 'role master'
+            String reply = executeQuery(cmd);
+            
+            String []toks = reply.split(" ");
+            Logger.info("get smrversion success {}, reply: \"{}\"", this, reply);
+            if (toks[0].equals(ERROR)) {
+                return SMR_VERSION_101;
+            } else if (toks[1].equals(SMR_VERSION_201)) {
+                return SMR_VERSION_201;
+            } else {
+                throw new MgmtSmrCommandException("Get smrversion error.");
+            }
+        } catch (IOException e) {
+            Logger.error("get smrversion fail. {}", this);
+            throw new MgmtSmrCommandException("Get smrversion error. " + e.getMessage());
+        }
+    }
+    
     private void roleMasterCmdResult(String cmd, String reply, long jobID,
             WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         // Make information for logging
@@ -458,8 +511,8 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             LogSequence logSeq,
             int quorum, long jobID, WorkflowLogDao workflowLogDao)
             throws MgmtSmrCommandException {
-        final String cmd = "role master " + getName() + " " + quorum
-                + " " + logSeq.getMax();
+        final String cmd = "role master " + getName() + " " + quorum + " "
+                + getNewMasterRewindCseq(logSeq);
         
         try {
             // Workflow log
@@ -494,7 +547,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     
     public RoleMasterZkResult roleMasterZk(PartitionGroup pg,
             List<PartitionGroupServer> pgsList, LogSequence logSeq, int quorum,
-            long jobID, WorkflowLogDao workflowLogDao)
+            String masterVersion, long jobID, WorkflowLogDao workflowLogDao)
             throws MgmtSmrCommandException {
         try {
             PartitionGroupData pgM = 
@@ -506,6 +559,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     .withMasterGen(pg.getData().currentGen() + 1)
                     .withRole(PGS_ROLE_MASTER)
                     .withOldRole(PGS_ROLE_MASTER)
+                    .withOldMasterSmrVersion(masterVersion)
                     .withColor(GREEN).build();
             
             List<Op> ops = new ArrayList<Op>();
@@ -562,7 +616,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         String cmd = "role slave " + getName() + " "
                 + master.getData().getPmIp() + " "
                 + master.getData().getSmrBasePort() + " "
-                + targetLogSeq.getLogCommit();
+                + getSlaveJoinSeq(targetLogSeq);
         try {
             workflowLogDao.log(jobID,
                     SEVERITY_MODERATE, "RolsSlave",
@@ -592,13 +646,14 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
-    public RoleSlaveZkResult roleSlaveZk(long jobID, int mGen, Color color,
+    public RoleSlaveZkResult roleSlaveZk(long jobID, int mGen, Color color, String masterVersion,
             WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         PartitionGroupServerData pgsM = 
             PartitionGroupServerData.builder().from(getData())
                 .withMasterGen(mGen)
                 .withRole(PGS_ROLE_SLAVE)
                 .withOldRole(PGS_ROLE_SLAVE)
+                .withOldMasterSmrVersion(masterVersion)
                 .withColor(color).build();
         try {
             pgsDao.updatePgs(getPath(), pgsM);

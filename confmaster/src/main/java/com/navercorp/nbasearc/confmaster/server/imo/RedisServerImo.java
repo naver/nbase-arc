@@ -113,7 +113,7 @@ public class RedisServerImo {
         
         pgs.release();
         
-        container.remove(PathUtil.pgsPath(name, clusterName));
+        container.remove(PathUtil.rsPath(name, clusterName));
     }
     
     public String getPath(String rs, String cluster) {

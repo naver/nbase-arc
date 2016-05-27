@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.codehaus.jackson.type.TypeReference;
 import org.springframework.context.ApplicationContext;
 
+import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;

@@ -962,12 +962,12 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Start crc16 client
             for s in cluster['servers']:
-                c = load_generator_crc16.Crc16Client(s['id'], s['ip'], s['gateway_port'], 3000, verbose=False)
+                c = load_generator_crc16.Crc16Client(s['id'], s['ip'], s['redis_port'], 600, verbose=False)
                 c.start()
                 clnts.append(c)
 
             # Network isolation test
-            cmfi = fi_confmaster.ConfmasterWfFi(['ra', 'qa', 'me', 'yj', 'bj', 'mg'], 
+            cmfi = fi_confmaster.ConfmasterWfFi(['ra', 'me', 'yj', 'bj', 'mg'], 
                                                 ['lconn', 'slave', 'master', 'setquorum'], [True, False], 1)
 
             for fi in cmfi:
@@ -1035,53 +1035,11 @@ class TestNetworkIsolation(unittest.TestCase):
                     self.assertEqual("+OK\r\n", ret, '[%s] role lconn fail.' % str(fi))
                     check_cluster = True
                 # 'me', 'lconn'
-                elif fi[0] == 'me' and fi[1] == 'lconn':
+                elif fi[0] == 'me':
                     m, s1, s2 = util.get_mss(cluster)
                     ret = util.role_lconn(m)
                     self.assertEqual("+OK\r\n", ret, '[%s] role lconn fail.' % str(fi))
                     check_cluster = True
-                # 'qa', 'setquorum'
-                elif fi[0] == 'qa' and fi[1] == 'setquorum':
-                    m, s1, s2 = util.get_mss(cluster)
-
-                    # shutdown
-                    ret = testbase.request_to_shutdown_smr(s1)
-                    self.assertEqual(0, ret, '[%s] failed to shutdown smr%d' % (str(fi), s1['id']))
-                    ret = testbase.request_to_shutdown_redis(s1)
-                    self.assertEqual(0, ret, '[%s] failed to shutdown redis%d' % (str(fi), s1['id']))
-
-                    # Check quorum
-                    q = -1
-                    for q_cnt in xrange(20):
-                        q = util.get_quorum(m)
-                        if q == 1:
-                            break
-                        time.sleep(1)
-                    self.assertEquals(1, q, "[%s] check quorum fail." % str(fi))
-
-                    # Modify quorum
-                    ret = util.cmd_to_smr_addr(m['ip'], m['smr_mgmt_port'], 'setquorum 0\r\n')
-                    self.assertEqual("+OK\r\n", ret, '[%s] "setquorum 0" fail.' % str(fi))
-
-                    # Check quorum
-                    q = -1
-                    for q_cnt in xrange(20):
-                        q = util.get_quorum(m)
-                        if q == 1:
-                            break
-                        time.sleep(1)
-                    self.assertEquals(1, q, "[%s] check quorum fail." % str(fi))
-
-                    # recovery
-                    ret = testbase.request_to_start_smr(s1)
-                    self.assertEqual(0, ret, '[%s] failed to start smr' % str(fi))
-                    ret = testbase.request_to_start_redis(s1, max_try=120)
-                    self.assertEqual(0, ret, '[%s] failed to start redis' % str(fi))
-                    ret = testbase.wait_until_finished_to_set_up_role(s1, 11)
-                    self.assertEqual(0, ret, '[%s] failed to role change. smr_id:%d' % (str(fi), s1['id']))
-
-                    check_cluster = True
-
                 # 'setquorum'
                 elif fi[1] == 'setquorum':
                     m, s1, s2 = util.get_mss(cluster)
@@ -1109,6 +1067,9 @@ class TestNetworkIsolation(unittest.TestCase):
                         break
                     time.sleep(0.5)
                 self.assertTrue(ok, "[%s] fail. failt injection had not been triggered." % str(fi))
+
+                for c in clnts:
+                    self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
 
             # Shutdown cluster
             ret = default_cluster.finalize( cluster )

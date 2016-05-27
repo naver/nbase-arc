@@ -53,28 +53,10 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertEquals( ret, 0, 'failed to TestQuorumPolicy.finalize' )
         return 0
 
-    def get_mss( self ):
-        # get master, slave1, and slave2
-        master = util.get_server_by_role( self.cluster['servers'], 'master' )
-        self.assertNotEquals( master, None, 'failed to get master' )
-
-        slave1 = util.get_server_by_role( self.cluster['servers'], 'slave' )
-        self.assertNotEquals( slave1, None, 'failed to get slave1' )
-
-        slave2 = None
-        for server in self.cluster['servers']:
-            id = server['id']
-            if id != master['id'] and id != slave1['id']:
-                slave2 = server
-                break
-        self.assertNotEquals( slave2, None, 'failed to get slave2' )
-
-        return master, slave1, slave2
-
     def test_quorum( self ):
         util.print_frame()
 
-        master, slave1, slave2 = self.get_mss()
+        master, slave1, slave2 = util.get_mss(self.cluster)
 
         expected = 2
         max_try = 20
@@ -93,6 +75,7 @@ class TestQuorumPolicy( unittest.TestCase ):
         expected = 1
         max_try = 20
         for i in range( 0, max_try ):
+            master = util.get_server_by_role( self.cluster['servers'], 'master' )
             quorum = util.get_quorum( master )
             if quorum == expected:
                 break;
@@ -107,6 +90,7 @@ class TestQuorumPolicy( unittest.TestCase ):
         expected = 0
         max_try = 20
         for i in range( 0, max_try ):
+            master = util.get_server_by_role( self.cluster['servers'], 'master' )
             quorum = util.get_quorum( master )
             if quorum == expected:
                 break;

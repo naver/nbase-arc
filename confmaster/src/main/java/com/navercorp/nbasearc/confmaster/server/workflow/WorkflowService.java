@@ -24,7 +24,6 @@ import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor
 import java.io.IOException;
 import java.util.concurrent.Future;
 
-import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.springframework.beans.BeansException;
@@ -32,10 +31,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
-import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
-import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtNoAvaliablePgsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeAlreayExistsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;

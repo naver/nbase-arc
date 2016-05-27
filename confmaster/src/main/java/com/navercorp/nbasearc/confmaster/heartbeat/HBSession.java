@@ -19,7 +19,6 @@ package com.navercorp.nbasearc.confmaster.heartbeat;
 import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 
 import java.io.IOException;
-import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 
 import org.springframework.context.ApplicationContext;

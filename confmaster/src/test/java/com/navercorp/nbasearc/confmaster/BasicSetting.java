@@ -148,7 +148,7 @@ public class BasicSetting {
     ReplyFormatter replyFormatter = new ReplyFormatter();
     ObjectMapper objectMapper = new ObjectMapper();
     
-    final protected long assertionTimeout = 5000L;  
+    final protected long assertionTimeout = 5L;  
     
     final protected String ok = S2C_OK;
     final protected long timeout = 10000000L;
@@ -559,6 +559,8 @@ public class BasicSetting {
                     return "+OK log min:0 commit:0 max:0 be_sent:0";
                 } else if (cmd.equals(PGS_PING)) {
                     return pingResp;
+                } else if (cmd.equals("smrversion")) {
+                    return "+OK 201";
                 }
                 return S2C_OK;
             }

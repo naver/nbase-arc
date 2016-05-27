@@ -20,7 +20,6 @@ import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -50,7 +49,6 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
     final PartitionGroupServerImo pgsImo;
     
     final RARoleLconn roleLconn;
-    final RASetquorum setquorum;
 
     public RoleAdjustmentWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
@@ -64,7 +62,6 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
         this.pgsImo = context.getBean(PartitionGroupServerImo.class);
         
         this.roleLconn = context.getBean(RARoleLconn.class);
-        this.setquorum = context.getBean(RASetquorum.class);
     }
 
     @Override
@@ -95,7 +92,12 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
 
     private void toRed(PartitionGroupServer pgs,
             List<PartitionGroupServer> joinedPgsList)
-            throws MgmtZooKeeperException, MgmtSetquorumException {
+            throws MgmtZooKeeperException, MgmtSetquorumException, MgmtSmrCommandException {
+        PartitionGroupServer master = pg.getMaster(joinedPgsList);
+        if (master != null) {
+            roleLconn.roleLconn(master, BLUE, jobID);
+        }
+
         Logger.info("{} {}->{} {}->{}", new Object[] { pgs,
                 pgs.getData().getRole(), pgs.getData().getRole(),
                 pgs.getData().getColor(), RED });
@@ -103,15 +105,10 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
                 .from(pgs.getData()).withColor(RED).build();
         pgsDao.updatePgs(pgs.getPath(), pgsM);
         pgs.setData(pgsM);
-
-        PartitionGroupServer master = pg.getMaster(joinedPgsList);
-        if (master != null) {
-            setquorum.setquorum(master, pg.getData().getQuorum() - pg.getD(joinedPgsList));
-        }
     }
 
     private void toLconn(PartitionGroupServer pgs) throws MgmtSmrCommandException {
-        roleLconn.roleLconn(pgs, jobID);
+        roleLconn.roleLconn(pgs, YELLOW, jobID);
     }
 
     private void toBlue(PartitionGroupServer pgs) throws MgmtZooKeeperException {

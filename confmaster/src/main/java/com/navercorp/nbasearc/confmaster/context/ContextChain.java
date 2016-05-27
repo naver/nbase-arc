@@ -24,24 +24,24 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReser
 
 public class ContextChain {
 
-    public static <T> void setWorkflow(Callable<T> call)
+    public static void setWorkflow(Callable<Object> call)
             throws MgmtDuplicatedReservedCallException {
-        ReservedCall<T> rcall = new ReservedCall<T>(call, 0,
+        ReservedCall rcall = new ReservedCall(call, 0,
                 TimeUnit.MILLISECONDS);
         ThreadLocalVariableHolder.getReservedCallHolder().setCall(rcall);
     }
 
-    public static <T> void setNextJob(Callable<T> call, long delay,
+    public static void setNextJob(Callable<Object> call, long delay,
             TimeUnit timeUnit) throws MgmtDuplicatedReservedCallException  {
-        ReservedCall<T> rcall = new ReservedCall<T>(call, delay, timeUnit);
+        ReservedCall rcall = new ReservedCall(call, delay, timeUnit);
         ThreadLocalVariableHolder.getReservedCallHolder().setCall(rcall);
     }
     
-    public static <T> boolean hasNextJob() {
+    public static boolean hasNextJob() {
         return ThreadLocalVariableHolder.getReservedCallHolder().hasNextCall();
     }
 
-    public static <T> ReservedCall<T> pollNextJob() {
+    public static ReservedCall pollNextJob() {
         return ThreadLocalVariableHolder.getReservedCallHolder().pollCall();
     }
 

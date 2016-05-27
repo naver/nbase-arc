@@ -155,6 +155,8 @@ public class Workflow201Test extends BasicSetting {
                     return "+OK log min:0 commit:0 max:0 be_sent:0";
                 } else if (cmd.equals(PGS_PING)) {
                     return REDIS_PONG;
+                } else if (cmd.equals("smrversion")) {
+                    return "+OK 201";
                 }
                 return S2C_OK;
             }
@@ -335,6 +337,8 @@ public class Workflow201Test extends BasicSetting {
                     return "+OK log min:0 commit:0 max:0 be_sent:0";
                 } else if (cmd.equals(PGS_PING)) {
                     return REDIS_PONG;
+                } else if (cmd.equals("smrversion")) {
+                    return "+OK 201";
                 }
                 return S2C_OK;
             }

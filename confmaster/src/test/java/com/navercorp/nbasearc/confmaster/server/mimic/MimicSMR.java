@@ -97,6 +97,8 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
             return getQuorum();
         } else if (args[0].equals("setquorum")) {
             return setQuorum(Arrays.copyOfRange(args, 1, args.length));
+        } else if (args[0].equals("smrversion")) {
+            return "+OK 201";
         } else if (args[0].equals("getseq") && args[1].equals("log")) {
             return getSeqlog();
         } else if (args[0].equals(PGS_PING)) {

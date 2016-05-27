@@ -20,14 +20,10 @@ import json
 
 cmds = [['ra', 'lconn', True],
         ['ra', 'lconn', False],
-        ['ra', 'setquorum', True],
-        ['ra', 'setquorum', False],
         ['me', 'master', True],
         ['me', 'master', False],
         ['me', 'lconn', True],
         ['me', 'lconn', False],
-        ['qa', 'setquorum', True],
-        ['qa', 'setquorum', False],
         ['yj', 'slave', True],
         ['yj', 'slave', False],
         ['bj', 'slave', True],
@@ -42,7 +38,7 @@ class ConfmasterWfFi:
 
     """
     wf : array of strings
-         ex) ['ra', 'qa', 'me', 'yj', 'bj', 'mg']
+         ex) ['ra', 'me', 'yj', 'bj', 'mg']
     where : array of strings
             ex) ['lconn', 'slave', 'master', 'setquorum']
     successFail : array of booleans
