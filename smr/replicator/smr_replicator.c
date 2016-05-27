@@ -3826,10 +3826,11 @@ do_role_master (mgmtConn * conn, long long rewind_cseq)
   else if (rewind_cseq != -1)
     {
       /* check against my sequence number */
-      if (rep->commit_seq > rewind_cseq)
+      if (rep->local_client->sent_seq > rewind_cseq)
 	{
-	  LOG (LG_ERROR, "rewind_cseq %lld is less than my commit_seq %lld",
-	       rewind_cseq, rep->commit_seq);
+	  LOG (LG_ERROR,
+	       "rewind_cseq %lld is less than backend commit_seq %lld",
+	       rewind_cseq, rep->local_client->sent_seq);
 	  return -1;
 	}
 
@@ -3998,10 +3999,11 @@ do_role_slave (mgmtConn * conn, const char *host, int slave_port,
   else if (rewind_cseq != -1)
     {
       /* check against my sequence number */
-      if (rep->commit_seq > rewind_cseq)
+      if (rep->local_client->sent_seq > rewind_cseq)
 	{
-	  LOG (LG_ERROR, "rewind_cseq %lld is less than my commit_seq %lld",
-	       rewind_cseq, rep->commit_seq);
+	  LOG (LG_ERROR,
+	       "rewind_cseq %lld is less than backend commit_seq %lld",
+	       rewind_cseq, rep->local_client->sent_seq);
 	  return -1;
 	}
 
