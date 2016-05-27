@@ -54,6 +54,6 @@ struct dump_plugin_callback {
 
     /* finalization of ctx is required. */
     int (*finalize) (void *ctx);
-} callback;
+} ;
 
 #endif
