@@ -864,7 +864,6 @@ log_rewind_to_cseq (smrReplicator * rep, long long seq)
   aseq_set (&rep->sync_seq, seq);
   aseq_set (&rep->log_seq, seq);
   aseq_set (&rep->cron_est_min_seq, seq_round_down (seq));
-  assert (seq >= rep->commit_seq);
   return 0;
 }
 
@@ -4011,6 +4010,11 @@ do_role_slave (mgmtConn * conn, const char *host, int slave_port,
 	{
 	  LOG (LG_ERROR, "rewind log entry failed");
 	  return -1;
+	}
+      if (rep->commit_seq > rewind_cseq)
+	{
+	  // for 1.2 configuration master compatibility
+	  rep->commit_seq = rewind_cseq;
 	}
       assert (aseq_get (&rep->log_seq) == rewind_cseq);
     }
