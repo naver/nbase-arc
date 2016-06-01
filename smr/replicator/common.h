@@ -28,6 +28,8 @@
 #include "stream.h"
 #include "slowlog.h"
 
+/* define smr version */
+#define SMR_VERSION 201
 /* main event loop interval in msec. */
 #define MAIN_CRON_INTERVAL 2
 

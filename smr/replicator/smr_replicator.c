@@ -322,6 +322,7 @@ static int info_slowlog (smrReplicator * rep, gpbuf_t * gp);
 static int info_request (mgmtConn * conn, char **tokens, int num_tok);
 static int slowlog_mapf (slowLogEntry * e, void *arg);
 static int slowlog_request (mgmtConn * conn, char **tokens, int num_tok);
+static int smrversion_request (mgmtConn * conn, char **tokens, int num_tok);
 /* top handler */
 static int mgmt_request (mgmtConn * conn, char *bp, char *ep);
 
@@ -5272,6 +5273,18 @@ error:
 }
 
 static int
+smrversion_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+  if (num_tok != 0)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
+				 num_tok);
+    }
+
+  return mgmt_reply_cstring (conn, "+OK %d", SMR_VERSION);
+}
+
+static int
 mgmt_request (mgmtConn * conn, char *bp, char *ep)
 {
   char **tokens = NULL;
@@ -5383,6 +5396,10 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
   else if (strcasecmp (tokens[0], "slowlog") == 0)
     {
       ret = slowlog_request (conn, tokens + 1, arity - 1);
+    }
+  else if (strcasecmp (tokens[0], "smrversion") == 0)
+    {
+      ret = smrversion_request (conn, tokens + 1, arity - 1);
     }
   else if (strcasecmp (tokens[0], "fi") == 0)
     {
