@@ -24,8 +24,9 @@ def createlog(path):
     os.system('%s createlog %s' % (Conf.LOG_UTIL_BIN_PATH, path))
     Logs.add(path)
 
-def deletelog(path):
+def syncdeletelog(path):
   if path in Logs:
+    os.system('%s synclog %s' % (Conf.LOG_UTIL_BIN_PATH, path))
     os.system('%s deletelog %s' % (Conf.LOG_UTIL_BIN_PATH, path))
     Logs.discard(path)
 
