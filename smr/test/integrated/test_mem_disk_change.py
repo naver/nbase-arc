@@ -65,7 +65,7 @@ class TestMemDiskChange (unittest.TestCase):
 	if i % 2 == 0:
 	  Log.createlog(pgs.dir)
 	else:
-	  Log.deletelog(pgs.dir)
+	  Log.syncdeletelog(pgs.dir)
 
 	# start replicator 
 	pgs.start_smr()
