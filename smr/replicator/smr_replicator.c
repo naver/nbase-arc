@@ -318,6 +318,7 @@ static int migrate_request (mgmtConn * conn, char **tokens, int num_tok);
 static int getseq_request (mgmtConn * conn, char **tokens, int num_tok);
 static int setquorum_request (mgmtConn * conn, char **tokens, int num_tok);
 static int getquorum_request (mgmtConn * conn, char **tokens, int num_tok);
+static int getquorumv_request (mgmtConn * conn, char **tokens, int num_tok);
 static int confget_request (mgmtConn * conn, char **tokens, int num_tok);
 static int confset_request (mgmtConn * conn, char **tokens, int num_tok);
 static char *get_role_string (repRole role);
@@ -4987,6 +4988,49 @@ getquorum_request (mgmtConn * conn, char **tokens, int num_tok)
   return mgmt_reply_cstring (conn, "%d", rep->commit_quorum);
 }
 
+static int
+getquorumv_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+  smrReplicator *rep = conn->rep;
+  gpbuf_t gp;
+  int ret;
+  char tmpbuf[1024];
+
+  if (num_tok != 0)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
+				 num_tok);
+    }
+
+  gpbuf_init (&gp, tmpbuf, sizeof (tmpbuf));
+
+  ret = gpbuf_printf (&gp, "%d", rep->commit_quorum);
+  CHECK (ret);
+
+  if (rep->has_quorum_members)
+    {
+      int i;
+      for (i = 0; i < SMR_MAX_SLAVES; i++)
+	{
+	  if (rep->quorum_members[i] < 0)
+	    {
+	      break;
+	    }
+	  ret = gpbuf_printf (&gp, " %d ", rep->quorum_members[i]);
+	  CHECK (ret);
+	}
+    }
+  gp.cp = '\0';
+  ret = mgmt_reply_cstring (conn, "+OK %s", gp.bp);
+  gpbuf_cleanup (&gp);
+  return ret;
+
+error:
+  ret = mgmt_reply_cstring (conn, "-ERR internal %d", ret);
+  gpbuf_cleanup (&gp);
+  return ret;
+}
+
 #define CONF_SLAVE_IDLE_TIMEOUT_MSEC "slave_idle_timeout_msec"
 static int
 confget_request (mgmtConn * conn, char **tokens, int num_tok)
@@ -5413,7 +5457,8 @@ slowlog_request (mgmtConn * conn, char **tokens, int num_tok)
   /* check argument */
   if (num_tok != 3)
     {
-      return mgmt_reply_cstring (conn, "-ERR invalid number of arguments:%d",
+      return mgmt_reply_cstring (conn,
+				 "-ERR invalid number of arguments:%d",
 				 num_tok);
     }
 
@@ -5603,6 +5648,17 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
       if (rep->role == MASTER)
 	{
 	  ret = getquorum_request (conn, tokens + 1, arity - 1);
+	}
+      else
+	{
+	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
+	}
+    }
+  else if (strcasecmp (tokens[0], "getquorumv") == 0)
+    {
+      if (rep->role == MASTER)
+	{
+	  ret = getquorumv_request (conn, tokens + 1, arity - 1);
 	}
       else
 	{
@@ -5972,8 +6028,8 @@ mig_prepare_write (migStruct * mig)
 }
 
 static int
-mig_log_get_buf (migStruct * mig, long long seq, long long limit, char **buf,
-		 int *buf_sz)
+mig_log_get_buf (migStruct * mig, long long seq, long long limit,
+		 char **buf, int *buf_sz)
 {
   long long seq_;
   int off;
@@ -6404,8 +6460,8 @@ mig_thread (void *arg)
       goto finalization;
     }
 
-  if (aeCreateFileEvent (mig->el, mig->fd, AE_READABLE, mig_read_handler, rep)
-      == AE_ERR)
+  if (aeCreateFileEvent
+      (mig->el, mig->fd, AE_READABLE, mig_read_handler, rep) == AE_ERR)
     {
       MIG_ERR (rep, "failed to setup mig_read handler");
       goto finalization;
@@ -6653,7 +6709,8 @@ server_cron (struct aeEventLoop *eventLoop, long long id, void *clientData)
 	    slaveConn *sc = (slaveConn *) h;
 	    h = h->next;
 
-	    if ((rep->cron_count - sc->read_cron_count) * MAIN_CRON_INTERVAL >
+	    if ((rep->cron_count -
+		 sc->read_cron_count) * MAIN_CRON_INTERVAL >
 		rep->slave_idle_to)
 	      {
 		LOG (LG_ERROR,
