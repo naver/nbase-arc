@@ -5016,7 +5016,7 @@ getquorumv_request (mgmtConn * conn, char **tokens, int num_tok)
 	    {
 	      break;
 	    }
-	  ret = gpbuf_printf (&gp, " %d ", rep->quorum_members[i]);
+	  ret = gpbuf_printf (&gp, " %d", rep->quorum_members[i]);
 	  CHECK (ret);
 	}
     }
