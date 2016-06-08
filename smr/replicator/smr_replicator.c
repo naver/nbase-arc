@@ -266,6 +266,9 @@ static int parse_seq (char *tok, long long *seq);
 static int parse_int (char *tok, int *rval);
 static int parse_nid (char *tok, short *nid);
 static int parse_quorum_policy (char *pol, int *dest);
+static int parse_quorum_members (short master_nid, char *members[],
+				 short dest[SMR_MAX_SLAVES],
+				 int *num_members);
 static int notify_be_new_master (smrReplicator * rep, char *master_host,
 				 int client_port, long long last_cseq,
 				 short nid);
@@ -275,6 +278,7 @@ static int notify_be_init (smrReplicator * rep, char *log_dir,
 			   long long commit_seq, short nid);
 static int notify_be_lconn (smrReplicator * rep);
 static int do_virtual_progress (smrReplicator * rep);
+static int nid_is_quorum_member (smrReplicator * rep, short nid);
 /* role master */
 static int do_role_master (mgmtConn * conn, long long rewind_cseq);
 static int role_master_request (mgmtConn * conn, char **tokens, int num_tok);
@@ -314,9 +318,11 @@ static int migrate_request (mgmtConn * conn, char **tokens, int num_tok);
 static int getseq_request (mgmtConn * conn, char **tokens, int num_tok);
 static int setquorum_request (mgmtConn * conn, char **tokens, int num_tok);
 static int getquorum_request (mgmtConn * conn, char **tokens, int num_tok);
+static int getquorumv_request (mgmtConn * conn, char **tokens, int num_tok);
 static int confget_request (mgmtConn * conn, char **tokens, int num_tok);
 static int confset_request (mgmtConn * conn, char **tokens, int num_tok);
-static int info_slave (smrReplicator * rep, gpbuf_t * gp);
+static char *get_role_string (repRole role);
+static int info_replicator (smrReplicator * rep, gpbuf_t * gp);
 static int info_slowlog_brief (slowLogEntry * e, void *arg);
 static int info_slowlog (smrReplicator * rep, gpbuf_t * gp);
 static int info_request (mgmtConn * conn, char **tokens, int num_tok);
@@ -408,6 +414,11 @@ init_replicator (smrReplicator * rep, repRole role, smrLog * smrlog,
   rep->mgmt_lfd = -1;
   rep->log_dir = NULL;
   rep->commit_quorum = 0;
+  rep->has_quorum_members = 0;
+  for (i = 0; i < SMR_MAX_SLAVES; i++)
+    {
+      rep->quorum_members[i] = -1;
+    }
   rep->master_host = NULL;
   rep->master_base_port = -1;
   /* smr log related */
@@ -695,7 +706,10 @@ check_publish_seq (smrReplicator * rep, long long rcvd_seq,
   for (h = rep->slaves.next; h != &rep->slaves; h = h->next)
     {
       slaveConn *sc = (slaveConn *) h;
-      seq_ary[member++] = sc->slave_log_seq;
+      if (sc->is_quorum_member)
+	{
+	  seq_ary[member++] = sc->slave_log_seq;
+	}
     }
 
   /* member - 1 means current quorum */
@@ -1907,6 +1921,7 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 	}
     }
   sc->nid = nid;
+  sc->is_quorum_member = nid_is_quorum_member (rep, nid);
 
   if (tcp_read_fully (cfd, &net_seq, sizeof (net_seq)) < 0)
     {
@@ -3656,6 +3671,31 @@ parse_quorum_policy (char *pol, int *dest)
 }
 
 static int
+parse_quorum_members (short master_nid, char *members[],
+		      short dest[SMR_MAX_SLAVES], int *num_members)
+{
+  int i;
+  short nid;
+
+  for (i = 0; i < SMR_MAX_SLAVES && members[i] != NULL; i++)
+    {
+      if (parse_nid (members[i], &nid) < 0 || nid == master_nid)
+	{
+	  return -1;
+	}
+      if (dest != NULL)
+	{
+	  dest[i] = nid;
+	}
+    }
+  if (num_members != NULL)
+    {
+      *num_members = i;
+    }
+  return 0;
+}
+
+static int
 notify_be_new_master (smrReplicator * rep, char *master_host,
 		      int client_port, long long last_cseq, short nid)
 {
@@ -3798,6 +3838,27 @@ do_virtual_progress (smrReplicator * rep)
 }
 
 static int
+nid_is_quorum_member (smrReplicator * rep, short nid)
+{
+  int i;
+
+  if (rep->has_quorum_members == 0)
+    {
+      // no special membership
+      return 1;
+    }
+
+  for (i = 0; i < SMR_MAX_SLAVES; i++)
+    {
+      if (rep->quorum_members[i] == nid)
+	{
+	  return 1;
+	}
+    }
+  return 0;
+}
+
+static int
 do_role_master (mgmtConn * conn, long long rewind_cseq)
 {
   smrReplicator *rep;
@@ -3929,13 +3990,17 @@ role_master_request (mgmtConn * conn, char **tokens, int num_tok)
   int ret;
   short nid = 0;
   long long rewind_cseq = -1LL;
+  int i;
+  int commit_quorum = 0;
+  short quorum_members[SMR_MAX_SLAVES];
+  int num_members = 0;
 
   rep = conn->rep;
 
-  if (num_tok != 3)
+  if (num_tok < 3)
     {
       return mgmt_reply_cstring (conn,
-				 "-ERR need <nid> <quorum policy> <rewind cseq>");
+				 "-ERR need <nid> <quorum policy> <rewind cseq> [<quorum members>]");
     }
 
   /* parse nid */
@@ -3946,7 +4011,7 @@ role_master_request (mgmtConn * conn, char **tokens, int num_tok)
   rep->nid = nid;
 
   /* parse quorum policy */
-  if (parse_quorum_policy (tokens[1], NULL) != 0)
+  if (parse_quorum_policy (tokens[1], &commit_quorum) != 0)
     {
       return mgmt_reply_cstring (conn, "-ERR bad quorum policy:%s",
 				 tokens[1]);
@@ -3958,10 +4023,29 @@ role_master_request (mgmtConn * conn, char **tokens, int num_tok)
       return mgmt_reply_cstring (conn, "-ERR bad rewind_cseq:%s", tokens[2]);
     }
 
-  (void) parse_quorum_policy (tokens[1], &rep->commit_quorum);
+  /* parse quorum members */
+  for (i = 0; i < SMR_MAX_SLAVES; i++)
+    {
+      quorum_members[i] = -1;
+    }
+  if (num_tok > 3)
+    {
+      if (parse_quorum_members
+	  (rep->nid, &tokens[3], quorum_members, &num_members) < 0)
+	{
+	  return mgmt_reply_cstring (conn, "-ERR bad quorum members");
+	}
+    }
+
   ret = do_role_master (conn, rewind_cseq);
   if (ret == 0)
     {
+      rep->commit_quorum = commit_quorum;
+      rep->has_quorum_members = (num_members > 0);
+      for (i = 0; i < SMR_MAX_SLAVES; i++)
+	{
+	  rep->quorum_members[i] = quorum_members[i];
+	}
       return mgmt_reply_cstring (conn, "+OK");
     }
   else
@@ -4843,20 +4927,49 @@ static int
 setquorum_request (mgmtConn * conn, char **tokens, int num_tok)
 {
   smrReplicator *rep = conn->rep;
+  int i;
+  int commit_quorum = 0;
+  short quorum_members[SMR_MAX_SLAVES];
+  int num_members = 0;
+  dlisth *h;
 
-  if (num_tok != 1)
+  if (num_tok < 1)
     {
       return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
 				 num_tok);
     }
 
-  if (parse_quorum_policy (tokens[0], NULL) != 0)
+  if (parse_quorum_policy (tokens[0], &commit_quorum) != 0)
     {
       return mgmt_reply_cstring (conn, "-ERR bad quorum policy:%s",
 				 tokens[0]);
     }
 
-  (void) parse_quorum_policy (tokens[0], &rep->commit_quorum);
+  for (i = 0; i < SMR_MAX_SLAVES; i++)
+    {
+      quorum_members[i] = -1;
+    }
+  if (num_tok > 1)
+    {
+      if (parse_quorum_members
+	  (rep->nid, &tokens[1], quorum_members, &num_members) < 0)
+	{
+	  return mgmt_reply_cstring (conn, "-ERR bad quorum members");
+	}
+    }
+
+  rep->commit_quorum = commit_quorum;
+  rep->has_quorum_members = (num_members > 0);
+  for (i = 0; i < SMR_MAX_SLAVES; i++)
+    {
+      rep->quorum_members[i] = quorum_members[i];
+    }
+  // reset quorum membership
+  for (h = rep->slaves.next; h != &rep->slaves; h = h->next)
+    {
+      slaveConn *sc = (slaveConn *) h;
+      sc->is_quorum_member = nid_is_quorum_member (rep, sc->nid);
+    }
   rep->cron_need_publish = 1;
   return mgmt_reply_cstring (conn, "+OK");
 }
@@ -4873,6 +4986,49 @@ getquorum_request (mgmtConn * conn, char **tokens, int num_tok)
     }
 
   return mgmt_reply_cstring (conn, "%d", rep->commit_quorum);
+}
+
+static int
+getquorumv_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+  smrReplicator *rep = conn->rep;
+  gpbuf_t gp;
+  int ret;
+  char tmpbuf[1024];
+
+  if (num_tok != 0)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
+				 num_tok);
+    }
+
+  gpbuf_init (&gp, tmpbuf, sizeof (tmpbuf));
+
+  ret = gpbuf_printf (&gp, "%d", rep->commit_quorum);
+  CHECK (ret);
+
+  if (rep->has_quorum_members)
+    {
+      int i;
+      for (i = 0; i < SMR_MAX_SLAVES; i++)
+	{
+	  if (rep->quorum_members[i] < 0)
+	    {
+	      break;
+	    }
+	  ret = gpbuf_printf (&gp, " %d", rep->quorum_members[i]);
+	  CHECK (ret);
+	}
+    }
+  gp.cp = '\0';
+  ret = mgmt_reply_cstring (conn, "+OK %s", gp.bp);
+  gpbuf_cleanup (&gp);
+  return ret;
+
+error:
+  ret = mgmt_reply_cstring (conn, "-ERR internal %d", ret);
+  gpbuf_cleanup (&gp);
+  return ret;
 }
 
 #define CONF_SLAVE_IDLE_TIMEOUT_MSEC "slave_idle_timeout_msec"
@@ -4948,27 +5104,143 @@ invalid_value:
 }
 
 
+static char *
+get_role_string (repRole role)
+{
+  switch (role)
+    {
+    case NONE:
+      return "NONE";
+    case LCONN:
+      return "LCONN";
+    case MASTER:
+      return "MASTER";
+    case SLAVE:
+      return "SLAVE";
+    default:
+      return "BADSTATE";
+    }
+}
+
 static int
-info_slave (smrReplicator * rep, gpbuf_t * gp)
+info_replicator (smrReplicator * rep, gpbuf_t * gp)
 {
   int ret;
   dlisth *h;
 
-  ret = gpbuf_printf (gp, "#Slave\r\n");
+  ret = gpbuf_printf (gp, "#Replicator\r\n");
   CHECK (ret);
-  for (h = rep->slaves.next; h != &rep->slaves; h = h->next)
+  ret = gpbuf_printf (gp, "role:%s\r\n", get_role_string (rep->role));
+  CHECK (ret);
+  ret = gpbuf_printf (gp, "nid:%d\r\n", rep->nid);
+  CHECK (ret);
+  ret =
+    gpbuf_printf (gp,
+		  "port:base=%d local(+0 %d) client(+1 %d) slave(+2 %d) mgmt(+3 %d)\r\n",
+		  rep->base_port, rep->local_lfd, rep->client_lfd,
+		  rep->slave_lfd, rep->mgmt_lfd);
+  CHECK (ret);
+  ret =
+    gpbuf_printf (gp,
+		  "log:min=%lld be_ckpt=%lld commit=%lld sync=%lld log=%lld\r\n",
+		  aseq_get (&rep->min_seq), rep->be_ckpt_seq, rep->commit_seq,
+		  aseq_get (&rep->sync_seq), aseq_get (&rep->log_seq));
+  CHECK (ret);
+
+  // quorum related
+  if (rep->role == MASTER)
     {
-      slaveConn *sc = (slaveConn *) h;
-      ret = gpbuf_printf (gp,
-			  "slave_%d:nid=%d fd=%d slave_log_seq=%lld sent_log_seq=%lld idle_msec=%lld\r\n",
-			  sc->nid, sc->nid, sc->fd, sc->slave_log_seq,
-			  sc->sent_log_seq,
-			  cron_count_diff_msec (sc->read_cron_count,
-						rep->cron_count));
+      ret =
+	gpbuf_printf (gp, "quorum_policy:quorum=%d has_members=%d",
+		      rep->commit_quorum, rep->has_quorum_members);
+      CHECK (ret);
+      if (rep->has_quorum_members)
+	{
+	  int i;
+	  for (i = 0; i < SMR_MAX_SLAVES; i++)
+	    {
+	      if (rep->quorum_members[i] < 0)
+		{
+		  break;
+		}
+	      ret = gpbuf_printf (gp, "%d ", rep->quorum_members[i]);
+	      CHECK (ret);
+	    }
+	}
+      ret = gpbuf_printf (gp, "\r\n");
       CHECK (ret);
     }
 
+  // local backend
+  if (rep->local_client != NULL)
+    {
+      localConn *lc = rep->local_client;
+      ret =
+	gpbuf_printf (gp,
+		      "local_backend:init_sent=%d fd=%d consumed_seq=%lld sent_seq=%lld\r\n",
+		      lc->init_sent, lc->fd, lc->consumed_seq, lc->sent_seq);
+      CHECK (ret);
+    }
+
+  // master
+  if (rep->master != NULL)
+    {
+      masterConn *mc = rep->master;
+      ret =
+	gpbuf_printf (gp,
+		      "master:host=%s base_port=%d fd=%d rseq=%lld\r\n",
+		      rep->master_host ? rep->master_host : "",
+		      rep->master_base_port, mc->fd, mc->rseq);
+      CHECK (ret);
+    }
+
+  // clients 
+  if (!dlisth_is_empty (&rep->clients))
+    {
+      ret = gpbuf_printf (gp, "#client\r\n");
+      CHECK (ret);
+      for (h = rep->clients.next; h != &rep->clients; h = h->next)
+	{
+	  clientConn *cc = (clientConn *) h;
+	  ret = gpbuf_printf (gp,
+			      "client_%d:nid=%d fd=%d num_logged=%lld\r\n",
+			      cc->nid, cc->nid, cc->fd, cc->num_logged);
+	  CHECK (ret);
+	}
+    }
+
+  // slaves
+  if (!dlisth_is_empty (&rep->slaves))
+    {
+      ret = gpbuf_printf (gp, "#slave\r\n");
+      CHECK (ret);
+      for (h = rep->slaves.next; h != &rep->slaves; h = h->next)
+	{
+	  slaveConn *sc = (slaveConn *) h;
+	  ret = gpbuf_printf (gp,
+			      "slave_%d:nid=%d fd=%d slave_log_seq=%lld sent_log_seq=%lld idle_msec=%lld\r\n",
+			      sc->nid, sc->nid, sc->fd, sc->slave_log_seq,
+			      sc->sent_log_seq,
+			      cron_count_diff_msec (sc->read_cron_count,
+						    rep->cron_count));
+	  CHECK (ret);
+	}
+    }
+
+  // management clients
+  if (!dlisth_is_empty (&rep->managers))
+    {
+      ret = gpbuf_printf (gp, "#management\r\n");
+      CHECK (ret);
+      for (h = rep->managers.next; h != &rep->managers; h = h->next)
+	{
+	  mgmtConn *mc = (mgmtConn *) h;
+	  ret = gpbuf_printf (gp, "mgmt_%d:fd=%d\r\n", mc->fd, mc->fd);
+	  CHECK (ret);
+	}
+    }
   return 0;
+
 error:
   return -1;
 }
@@ -5091,9 +5363,9 @@ info_request (mgmtConn * conn, char **tokens, int num_tok)
   ret = gpbuf_printf (&gp, "");
   CHECK (ret);
 
-  if (is_all || is_default || !strcasecmp (section, "slave"))
+  if (is_all || is_default || !strcasecmp (section, "replicator"))
     {
-      ret = info_slave (rep, &gp);
+      ret = info_replicator (rep, &gp);
       CHECK (ret);
     }
   if (is_all || !strcasecmp (section, "slowlog"))
@@ -5185,7 +5457,8 @@ slowlog_request (mgmtConn * conn, char **tokens, int num_tok)
   /* check argument */
   if (num_tok != 3)
     {
-      return mgmt_reply_cstring (conn, "-ERR invalid number of arguments:%d",
+      return mgmt_reply_cstring (conn,
+				 "-ERR invalid number of arguments:%d",
 				 num_tok);
     }
 
@@ -5375,6 +5648,17 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
       if (rep->role == MASTER)
 	{
 	  ret = getquorum_request (conn, tokens + 1, arity - 1);
+	}
+      else
+	{
+	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
+	}
+    }
+  else if (strcasecmp (tokens[0], "getquorumv") == 0)
+    {
+      if (rep->role == MASTER)
+	{
+	  ret = getquorumv_request (conn, tokens + 1, arity - 1);
 	}
       else
 	{
@@ -5744,8 +6028,8 @@ mig_prepare_write (migStruct * mig)
 }
 
 static int
-mig_log_get_buf (migStruct * mig, long long seq, long long limit, char **buf,
-		 int *buf_sz)
+mig_log_get_buf (migStruct * mig, long long seq, long long limit,
+		 char **buf, int *buf_sz)
 {
   long long seq_;
   int off;
@@ -6176,8 +6460,8 @@ mig_thread (void *arg)
       goto finalization;
     }
 
-  if (aeCreateFileEvent (mig->el, mig->fd, AE_READABLE, mig_read_handler, rep)
-      == AE_ERR)
+  if (aeCreateFileEvent
+      (mig->el, mig->fd, AE_READABLE, mig_read_handler, rep) == AE_ERR)
     {
       MIG_ERR (rep, "failed to setup mig_read handler");
       goto finalization;
@@ -6425,7 +6709,8 @@ server_cron (struct aeEventLoop *eventLoop, long long id, void *clientData)
 	    slaveConn *sc = (slaveConn *) h;
 	    h = h->next;
 
-	    if ((rep->cron_count - sc->read_cron_count) * MAIN_CRON_INTERVAL >
+	    if ((rep->cron_count -
+		 sc->read_cron_count) * MAIN_CRON_INTERVAL >
 		rep->slave_idle_to)
 	      {
 		LOG (LG_ERROR,

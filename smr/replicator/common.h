@@ -24,12 +24,14 @@
 #include "ae.h"
 #include "dlist.h"
 #include "part_filter.h"
+#include "smr.h"
 #include "smr_log.h"
 #include "stream.h"
 #include "slowlog.h"
 
 /* define smr version */
 #define SMR_VERSION 201
+
 /* main event loop interval in msec. */
 #define MAIN_CRON_INTERVAL 2
 
@@ -216,6 +218,7 @@ typedef struct slaveConn
 {
   dlisth head;			// linked to smrServer.slaves
   short nid;			// nid allocated
+  int is_quorum_member;		// is this quourm member?
   smrReplicator *rep;		// back pointer to the replicator instance
   int fd;			// connection fd
   int w_prepared;		// write handler event preparation flag
@@ -228,6 +231,7 @@ typedef struct slaveConn
 #define init_slave_conn(s) do {  \
   dlisth_init(&(s)->head);       \
   (s)->nid = -1;                 \
+  (s)->is_quorum_member = 0;     \
   (s)->rep = NULL;               \
   (s)->fd = -1;                  \
   (s)->w_prepared = 0;           \
@@ -397,6 +401,8 @@ struct smrReplicator_
   char *log_dir;		// log directory
   // minimum number of slave nodes for master to publish commit_seq w.r.t number of slaves
   int commit_quorum;
+  int has_quorum_members;	// has quorum members
+  short quorum_members[SMR_MAX_SLAVES];	// quourm members. valid when has_quorum_mebers is 1
   char *master_host;		// master host (or NULL if it is a master)
   int master_base_port;		// master base port (or -1 if it is a master)
   /* smr log related */

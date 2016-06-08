@@ -44,8 +44,12 @@ class SMR (Proc.Proc):
     if seg[0] != '+OK':
       raise Exception (resp[0])
 
-  def role_master(self, nid, quorum, cseq):
-    resp = self._conn.do_request('role master %d %d %d' % (nid, quorum, cseq))
+  def role_master(self, nid, quorum, cseq, nids = None):
+    cmd = 'role master %d %d %d' % (nid, quorum, cseq)
+    if nids is not None:
+      for nid in nids:
+	cmd = cmd + ' %d' % nid
+    resp = self._conn.do_request(cmd)
     seg = resp[0].split()
     if seg[0] != '+OK':
       raise Exception (resp[0])
@@ -56,17 +60,28 @@ class SMR (Proc.Proc):
     if seg[0] != '+OK':
       raise Exception (resp[0])
 
-  def setquorum(self, q):
-    resp = self._conn.do_request('setquorum %d' % q)
+  def setquorum(self, q, nids = None):
+    cmd = 'setquorum %d' % q
+    if nids is not None:
+      for nid in nids:
+	cmd = cmd + ' %d' % nid
+    resp = self._conn.do_request(cmd)
     seg = resp[0].split()
     if seg[0] != '+OK':
       raise Exception (resp[0])
-
+  
   def getquorum(self):
     # getquorum request DOES NOT starts with +OK nor -ERR
     resp = self._conn.do_request('getquorum')
     seg = resp[0].split()
     return int(seg[0])
+
+  def getquorumv(self):
+    resp = self._conn.do_request('getquorumv')
+    seg = resp[0].split()
+    if seg[0] != '+OK':
+      raise Exception (resp[0])
+    return seg[1:]
 
   def wait_role(self, role, timeout = 2000):
     wait_time_sec = 0.0

@@ -46,7 +46,7 @@ class TestKeepAlive (unittest.TestCase):
 
       # check master idle time grows close upto 1 second.
       for i in range(0, 9):
-	res = pgs1.smr.info('slave')
+	res = pgs1.smr.info('all')
         line = res['slave']['slave_' + str(pgs2.id)]
 	assert line != None
 	idle_msec = int(line[(line.find('idle_msec=') + len('idle_msec=')):])
