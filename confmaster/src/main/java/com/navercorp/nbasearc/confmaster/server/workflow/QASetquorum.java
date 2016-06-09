@@ -19,6 +19,7 @@ package com.navercorp.nbasearc.confmaster.server.workflow;
 import org.springframework.stereotype.Component;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 
 @Component("QASetquorum")
@@ -27,9 +28,9 @@ public class QASetquorum {
     // It is not allowed to decalre any member variable in this class.
     // Since it is a singleton instance and represents a part of workflow logic running in multiple threads.
 
-    public void setquorum(PartitionGroupServer master, int q)
-            throws MgmtSetquorumException {
-        master.setquorum(q);
+    public void setquorum(PartitionGroupServer master, int q, String quorumMembers)
+            throws MgmtSetquorumException, MgmtSmrCommandException {
+        master.setquorum(q, quorumMembers);
     }
 
 }

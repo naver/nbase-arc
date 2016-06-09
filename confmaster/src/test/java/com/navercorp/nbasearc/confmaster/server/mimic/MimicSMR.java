@@ -19,7 +19,9 @@ package com.navercorp.nbasearc.confmaster.server.mimic;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 
 import org.mockito.invocation.InvocationOnMock;
@@ -37,6 +39,7 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
     boolean unstable;
     Random rand = new Random(System.currentTimeMillis());
     volatile IInjector<String, String> injector = null;
+    List<String> quorumMembers = new ArrayList<String>();
     
     public long getTimestamp() {
         return timestamp;
@@ -95,6 +98,8 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
         
         if (args[0].equals("getquorum")) {
             return getQuorum();
+        } else if(args[0].equals("getquorumv")) {
+            return getQuorumV();
         } else if (args[0].equals("setquorum")) {
             return setQuorum(Arrays.copyOfRange(args, 1, args.length));
         } else if (args[0].equals("smrversion")) {
@@ -107,7 +112,7 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
             return bping();
         } else if (args[0].equals("role")) {
             if (args[1].equals("master")) {
-                if (args.length != 3+2) {
+                if (args.length < 3+2) {
                     return "-ERR need <nid> <quorum policy> <rewind cseq>";
                 }
                 return roleMaster(Arrays.copyOfRange(args, 2, args.length));
@@ -134,11 +139,32 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
         return String.valueOf(quorum);
     }
     
+    private String getQuorumV() {
+        if (!role.equals(PGS_ROLE_MASTER)) {
+            return "-ERR bad state:" + PartitionGroupServer.roleToNumber(role);
+        }
+        
+        StringBuilder sb = new StringBuilder("+OK ").append(quorum).append(" ");
+        for (String qm : quorumMembers) {
+            sb.append(qm).append(" ");
+        }
+        if (sb.length() > 0) {
+            return sb.substring(0, sb.length() - 1);
+        }
+        return "";
+    }
+    
     private String setQuorum(String[] args) {
         if (!role.equals(PGS_ROLE_MASTER)) {
             return "-ERR bad state:" + PartitionGroupServer.roleToNumber(role);
         }
         quorum = Integer.parseInt(args[0]);
+        
+        quorumMembers.clear();
+        for (int i = 0; i < quorum; i++) {
+            quorumMembers.add(args[1+i]);
+        }
+        
         return S2C_OK;
     }
     
@@ -165,6 +191,12 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
             role = PGS_ROLE_MASTER;
             quorum = Integer.valueOf(args[1]);
             timestamp++;
+            
+            quorumMembers.clear();
+            for (int i = 0; i < quorum; i ++) {
+                quorumMembers.add(args[2+i]);
+            }
+            
             return S2C_OK;
         }
         return "-ERR do_role_master failed";

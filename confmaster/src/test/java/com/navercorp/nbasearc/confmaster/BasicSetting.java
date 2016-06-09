@@ -16,10 +16,8 @@
 
 package com.navercorp.nbasearc.confmaster;
 
-import static com.jayway.awaitility.Awaitility.await;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -44,8 +42,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.codehaus.jackson.JsonProcessingException;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 
@@ -492,85 +488,6 @@ public class BasicSetting {
 
     public void joinPgs(int id) throws Exception {
         joinLeave.pgsJoin(getPgs(id), getRs(id), pgsMockups[id]);
-    }
-    
-    public void testRoleNone(PartitionGroupServer pgs) throws Exception {
-        // Mock up PGS '0' to be in LCONN state
-        final String pingResp = "";
-        mockSocket(pgs, pingResp);
-        mockHeartbeatResult(pgs, PGS_ROLE_NONE, pingResp);
-        
-        // It expects that PGS '0' becomes a master.
-        await("failure detected - check role").atMost(assertionTimeout, SECONDS).until(new RoleValidator(pgs, PGS_ROLE_NONE));
-        await("failure detected - check color.").atMost(assertionTimeout, SECONDS).until(new ColorValidator(pgs, RED));
-
-        // Mock up PGS '0' to be a MASTER
-        mockSocket(pgs, "");
-    }
-
-    public void mockPgsNone(PartitionGroupServer pgs) throws Exception {
-        // Mock up PGS '0' to be in LCONN state
-        final String pingResp = "";
-        mockSocket(pgs, pingResp);
-        mockHeartbeatResult(pgs, PGS_ROLE_NONE, pingResp);    
-    }
-    
-    public void mockPgsLconn(PartitionGroupServer pgs) throws Exception {
-        // Mock up PGS '0' to be in LCONN state
-        final String pingResp = "+OK 1 1400000000";
-        mockSocket(pgs, pingResp);
-        mockHeartbeatResult(pgs, PGS_ROLE_LCONN, pingResp);    
-    }
-    
-    public PartitionGroupServer waitRoleMaster(List<PartitionGroupServer> pgsList) throws Exception {
-        MasterFinder condition = new MasterFinder(pgsList);
-        
-        // It expects that PGS '0' becomes a master.
-        await("test for role master.").atMost(assertionTimeout, SECONDS).until(condition);
-
-        // Mock up PGS '0' to be a MASTER
-        mockSocket(condition.getMaster(), "+OK 2 1400000000");
-        return condition.getMaster();
-    }
-    
-    public void waitRoleSlave(PartitionGroupServer pgs) throws Exception {
-        // It expects that PGS becomes a slave.
-        await("test for role slave.").atMost(assertionTimeout, SECONDS).until(
-                new RoleValidator(pgs, PGS_ROLE_SLAVE));
-
-        // Mock up PGS to be a SLAVE
-        mockSocket(pgs, "+OK 3 1400000000");
-    }
-    
-    public void mockSocket(PartitionGroupServer pgs, final String pingResp) throws IOException {
-        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
-        pgs.setServerConnection(msock);
-        when(msock.execute(anyString())).thenAnswer(new Answer<String>() {
-            Integer quorum = new Integer(0);
-
-            public String answer(InvocationOnMock invocation) throws Throwable {
-                String cmd = (String) invocation.getArguments()[0];
-                if (cmd.equals("getquorum")) {
-                    return String.valueOf(quorum);
-                } else if (cmd.split(" ")[0].equals("setquorum")) {
-                    quorum = Integer.parseInt(cmd.split(" ")[1]);
-                    return S2C_OK;
-                } else if (cmd.equals("getseq log")) {
-                    return "+OK log min:0 commit:0 max:0 be_sent:0";
-                } else if (cmd.equals(PGS_PING)) {
-                    return pingResp;
-                } else if (cmd.equals("smrversion")) {
-                    return "+OK 201";
-                }
-                return S2C_OK;
-            }
-        });
-        
-        BlockingSocketImpl msockRs = mock(BlockingSocketImpl.class);
-        RedisServer rs = getRs(Integer.valueOf(pgs.getName()));
-        rs.setServerConnection(msockRs);
-        when(msockRs.execute(REDIS_PING)).thenReturn(REDIS_PONG);
-        when(msockRs.execute(REDIS_REP_PING)).thenReturn(REDIS_PONG);
     }
     
     protected MimicSMR mimic(PartitionGroupServer pgs) {

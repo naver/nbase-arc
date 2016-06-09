@@ -17,6 +17,7 @@
 package com.navercorp.nbasearc.confmaster.faultinjection;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.workflow.QASetquorum;
 
@@ -26,11 +27,12 @@ public class QASetquorumFI extends QASetquorum {
     private boolean successFail = false;
 
     @Override
-    public synchronized void setquorum(PartitionGroupServer master, int q)
-            throws MgmtSetquorumException {
+    public synchronized void setquorum(PartitionGroupServer master, int q,
+            String quorumMembers) throws MgmtSetquorumException,
+            MgmtSmrCommandException {
         if (count > 0) {
             if (successFail) {
-                master.setquorum(q);
+                master.setquorum(q, quorumMembers);
                 count--;
                 throw new MgmtSetquorumException(
                         "[FI] QA setquorum success fail. " + master);
@@ -40,7 +42,7 @@ public class QASetquorumFI extends QASetquorum {
                         "[FI] QA setquorum lconn fail fail. " + master);
             }
         } else {
-            super.setquorum(master, q);
+            super.setquorum(master, q, quorumMembers);
         }
     }
 

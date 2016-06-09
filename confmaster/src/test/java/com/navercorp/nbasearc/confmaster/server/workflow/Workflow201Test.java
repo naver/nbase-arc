@@ -16,9 +16,11 @@
 
 package com.navercorp.nbasearc.confmaster.server.workflow;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.*;
+import static com.jayway.awaitility.Awaitility.await;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 
@@ -31,8 +33,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
@@ -43,6 +43,7 @@ import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
@@ -118,6 +119,8 @@ public class Workflow201Test extends BasicSetting {
 
     @Test
     public void initialReconfiguration() throws Exception {
+        MimicSMR[] mimics = new MimicSMR[MAX_PGS];
+        
         createPm();
         createCluster();
 
@@ -139,30 +142,8 @@ public class Workflow201Test extends BasicSetting {
 
         // ME
         PartitionGroupServer master = getPgs(0);
-
-        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
-        when(msock.execute(anyString())).thenAnswer(new Answer<String>() {
-            Integer quorum = new Integer(0);
-
-            public String answer(InvocationOnMock invocation) throws Throwable {
-                String cmd = (String) invocation.getArguments()[0];
-                if (cmd.equals("getquorum")) {
-                    return String.valueOf(quorum);
-                } else if (cmd.split(" ")[0].equals("setquorum")) {
-                    quorum = Integer.parseInt(cmd.split(" ")[1]);
-                    return S2C_OK;
-                } else if (cmd.equals("getseq log")) {
-                    return "+OK log min:0 commit:0 max:0 be_sent:0";
-                } else if (cmd.equals(PGS_PING)) {
-                    return REDIS_PONG;
-                } else if (cmd.equals("smrversion")) {
-                    return "+OK 201";
-                }
-                return S2C_OK;
-            }
-        });
-        master.setServerConnection(msock);
-        getRs(0).setServerConnection(msock);
+        mimics[0] = mimic(master);
+        mimics[0].init();
         
         MasterElectionWorkflow me = new MasterElectionWorkflow(getPg(), null,
                 false, context);
@@ -177,8 +158,8 @@ public class Workflow201Test extends BasicSetting {
         // Add Slave
         for (int slaveIdx = 1; slaveIdx < 3; slaveIdx++) {
             createPgs(slaveIdx);
-            getPgs(slaveIdx).setServerConnection(msock);
-            getRs(slaveIdx).setServerConnection(msock);
+            mimics[slaveIdx] = mimic(getPgs(slaveIdx));
+            mimics[slaveIdx].init();
 
             // IC
             IncreaseCopyWorkflow ic = new IncreaseCopyWorkflow(getPgs(slaveIdx), getPg(), context);
@@ -224,8 +205,9 @@ public class Workflow201Test extends BasicSetting {
         System.out.println("MG\n" + getConfiguration());
 
         // Check quorum of master
-        verify(msock).execute("setquorum 1");
-        verify(msock).execute("setquorum 2");
+        QuorumValidator quorumValidator = new QuorumValidator(mimics[0], 2);
+        await("test for quorum.").atMost(assertionTimeout, SECONDS).until(
+                quorumValidator);
 
         // Kill master
         BlockingSocketImpl msockDead = mock(BlockingSocketImpl.class);
@@ -300,6 +282,8 @@ public class Workflow201Test extends BasicSetting {
 
     @Test
     public void opWorkflowCommands() throws Exception {
+        MimicSMR[] mimics = new MimicSMR[MAX_PGS];
+        
         createPm();
         createCluster();
 
@@ -321,31 +305,9 @@ public class Workflow201Test extends BasicSetting {
 
         // ME
         PartitionGroupServer master = getPgs(0);
-
-        BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
-        when(msock.execute(anyString())).thenAnswer(new Answer<String>() {
-            Integer quorum = new Integer(0);
-
-            public String answer(InvocationOnMock invocation) throws Throwable {
-                String cmd = (String) invocation.getArguments()[0];
-                if (cmd.equals("getquorum")) {
-                    return String.valueOf(quorum);
-                } else if (cmd.split(" ")[0].equals("setquorum")) {
-                    quorum = Integer.parseInt(cmd.split(" ")[1]);
-                    return S2C_OK;
-                } else if (cmd.equals("getseq log")) {
-                    return "+OK log min:0 commit:0 max:0 be_sent:0";
-                } else if (cmd.equals(PGS_PING)) {
-                    return REDIS_PONG;
-                } else if (cmd.equals("smrversion")) {
-                    return "+OK 201";
-                }
-                return S2C_OK;
-            }
-        });
-        master.setServerConnection(msock);
-        getRs(0).setServerConnection(msock);
-
+        mimics[0] = mimic(master);
+        mimics[0].init();
+        
         doCommand("op_wf " + clusterName + " " + getPg().getName() + " QA false forced");
         doCommand("op_wf " + clusterName + " " + getPg().getName() + " ME false forced");
 
@@ -357,8 +319,8 @@ public class Workflow201Test extends BasicSetting {
         // Add Slave
         for (int slaveIdx = 1; slaveIdx < 3; slaveIdx++) {
             createPgs(slaveIdx);
-            getPgs(slaveIdx).setServerConnection(msock);
-            getRs(slaveIdx).setServerConnection(msock);
+            mimics[slaveIdx] = mimic(getPgs(slaveIdx));
+            mimics[slaveIdx].init();
 
             // IC
             IncreaseCopyWorkflow ic = new IncreaseCopyWorkflow(getPgs(slaveIdx), getPg(), context);
@@ -397,9 +359,10 @@ public class Workflow201Test extends BasicSetting {
         System.out.println("MG\n" + getConfiguration());
 
         // Check quorum of master
-        verify(msock).execute("setquorum 1");
-        verify(msock).execute("setquorum 2");
-
+        QuorumValidator quorumValidator = new QuorumValidator(mimics[0], 2);
+        await("test for quorum.").atMost(assertionTimeout, SECONDS).until(
+                quorumValidator);
+        
         // Kill master
         BlockingSocketImpl msockDead = mock(BlockingSocketImpl.class);
         master.setServerConnection(msockDead);

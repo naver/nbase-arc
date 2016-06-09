@@ -167,6 +167,45 @@ public class PartitionGroup extends ZNode<PartitionGroupData> {
         
         return d;
     }
+
+    public List<String> getQuorumMembers(PartitionGroupServer master,
+            List<PartitionGroupServer> joinedPgsList) {
+        List<String> quorumMembers = new ArrayList<String>();
+
+        for (PartitionGroupServer pgs : joinedPgsList) {
+            if (pgs == master) {
+                continue;
+            }
+            
+            if (pgs.getData().getColor() == GREEN
+                    || pgs.getData().getColor() == BLUE) {
+                quorumMembers.add(pgs.getName());
+            }
+        }
+        
+        return quorumMembers;
+    }
+    
+    public String getQuorumMembersString(PartitionGroupServer master,
+            List<PartitionGroupServer> joinedPgsList) {
+        StringBuilder sb = new StringBuilder();
+        for (PartitionGroupServer pgs : joinedPgsList) {
+            if (pgs == master) {
+                continue;
+            }
+            
+            if (pgs.getData().getColor() == GREEN
+                    || pgs.getData().getColor() == BLUE) {
+                sb.append(pgs.getName()).append(" ");
+            }
+        }
+        
+        if (sb.length() > 0) {
+            return sb.subSequence(0, sb.length() - 1).toString();
+        } else {
+            return sb.toString();
+        }
+    }
     
     public SortedLogSeqSet getLogSeq(List<PartitionGroupServer> pgsList)
             throws IOException {

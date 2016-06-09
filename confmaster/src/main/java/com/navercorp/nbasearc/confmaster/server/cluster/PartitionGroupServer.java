@@ -507,12 +507,17 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
-    public void roleMaster(PartitionGroup pg,
-            LogSequence logSeq,
-            int quorum, long jobID, WorkflowLogDao workflowLogDao)
-            throws MgmtSmrCommandException {
-        final String cmd = "role master " + getName() + " " + quorum + " "
-                + getNewMasterRewindCseq(logSeq);
+    public void roleMaster(String smrVersion, PartitionGroup pg,
+            LogSequence logSeq, int quorum, String quorumMembers, long jobID,
+            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
+        String cmd;
+        if (smrVersion.equals(SMR_VERSION_201)) {
+            cmd = "role master " + getName() + " " + quorum + " "
+                    + getNewMasterRewindCseq(logSeq) + " " + quorumMembers;
+        } else {
+            cmd = "role master " + getName() + " " + quorum + " "
+                    + getNewMasterRewindCseq(logSeq);
+        }
         
         try {
             // Workflow log
@@ -708,8 +713,71 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
 
-    public void setquorum(int q) throws MgmtSetquorumException {
-        final String cmd = "setquorum " + q;
+    /*
+     * return List<String> containing [quorum, nid1, nid2, ...]
+     */
+    public List<String> getQuorumV() throws MgmtSmrCommandException {
+        final String cmd = "getquorumv";
+
+        try {
+            String reply = executeQuery(cmd);
+            String []toks = reply.split(" ");
+            if (!toks[0].equals(S2C_OK)) {
+                final String msg = "getquorumv fail. " + this + ", cmd: " + cmd
+                        + ", reply: " + reply;
+                Logger.error(msg);
+                throw new MgmtSmrCommandException(msg);
+            }
+            
+            List<String> ret = new ArrayList<String>();
+            for (int i = 1; i < toks.length; i++) {
+                ret.add(toks[i]);
+            }
+            
+            Logger.info("getquorumv success. {}, reply: {}", this, reply);
+            return ret;
+        } catch (IOException e) {
+            final String msg = "getquorumv fail. " + this + ", cmd: " + cmd
+                    + ", exception: " + e.getMessage();
+            Logger.warn(msg);
+            throw new MgmtSmrCommandException(msg);
+        }
+    }
+    
+    public int getQuorum() throws MgmtSmrCommandException {
+        final String cmd = "getquorum";
+
+        try {
+            String reply = executeQuery(cmd);
+            
+            try {
+                final int q = Integer.valueOf(reply);
+                Logger.info("getquorum success. {}, reply: {}", this, reply);
+                return q;
+            } catch (NumberFormatException e) {            
+                final String msg = "getquorum fail. " + this + ", cmd: " + cmd
+                        + ", reply: " + reply;
+                Logger.error(msg);                
+                throw new MgmtSmrCommandException(msg);
+            }
+        } catch (IOException e) {
+            final String msg = "getquorum fail. " + this + ", cmd: " + cmd
+                    + ", exception: " + e.getMessage();
+            Logger.warn(msg);
+            throw new MgmtSmrCommandException(msg);
+        }
+    }
+    
+    public void setquorum(int q, String quorumMembers)
+            throws MgmtSetquorumException, MgmtSmrCommandException {
+        final String v = smrVersion();
+        String cmd; 
+        if (v.equals(SMR_VERSION_201)) {
+            cmd = "setquorum " + q + " " + quorumMembers;
+        } else {
+            cmd = "setquorum " + q;
+        }
+        
         try {
             String reply = executeQuery(cmd);
             if (!reply.equals(S2C_OK)) {

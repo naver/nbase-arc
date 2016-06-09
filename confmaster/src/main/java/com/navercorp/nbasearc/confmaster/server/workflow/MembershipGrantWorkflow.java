@@ -59,7 +59,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     public MembershipGrantWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg);
+        super(cascading, pg, context.getBean(PartitionGroupImo.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);
@@ -109,7 +109,9 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
             final int curQ = q - d;
             final int newQ = curQ + 1;
-            setquorum.setquorum(master, newQ);
+            final String quorumMembers = pg.getQuorumMembersString(master,
+                    joinedPgsList) + " " + pgs.getName();
+            setquorum.setquorum(master, newQ, quorumMembers);
 
             try {
                 String response = rs.executeQuery("ping");
@@ -117,7 +119,8 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
                     continue;
                 }
             } catch (IOException e) {
-                setquorum.setquorum(master, curQ);
+                setquorum.setquorum(master, curQ,
+                        pg.getQuorumMembersString(master, joinedPgsList));
                 continue;
             }
 
@@ -133,11 +136,6 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     @Override
     protected void onSuccess() throws Exception {
-        if (pgImo.get(pg.getName(), pg.getClusterName()) == null) {
-            Logger.info("pg does not exist. exit workflow. {}", pg);
-            return;
-        }
-
         int numGreen = 0;
         for (PartitionGroupServer pgs : joinedPgsList) {
             if (pgs.getData().getColor() == GREEN) {
@@ -167,11 +165,6 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     @Override
     protected void onException(long nextEpoch, Exception e) {
-        if (pgImo.get(pg.getName(), pg.getClusterName()) == null) {
-            Logger.info("pg does not exist. exit workflow. {}", pg);
-            return;
-        }
-
         wfExecutor.performDelayed(ROLE_ADJUSTMENT,
                 config.getServerJobWorkflowPgReconfigDelay(),
                 TimeUnit.MILLISECONDS, pg, nextEpoch, context);

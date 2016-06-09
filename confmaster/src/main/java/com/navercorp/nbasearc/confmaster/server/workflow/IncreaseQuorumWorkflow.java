@@ -25,6 +25,7 @@ import java.util.List;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
@@ -48,7 +49,7 @@ public class IncreaseQuorumWorkflow {
     }
 
     public String execute() throws MgmtZooKeeperException, IOException,
-            MgmtSetquorumException {
+            MgmtSetquorumException, MgmtSmrCommandException {
         final List<PartitionGroupServer> joinedPgsList = pg
                 .getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
                         Integer.valueOf(pg.getName())));
@@ -68,7 +69,8 @@ public class IncreaseQuorumWorkflow {
             return "-ERR not enough available pgs.";
         }
 
-        master.setquorum((pg.getData().getQuorum() + 1));
+        master.setquorum(pg.getData().getQuorum() + 1,
+                pg.getQuorumMembersString(master, joinedPgsList));
 
         PartitionGroupData pgM = PartitionGroupData.builder()
                 .from(pg.getData()).withQuorum(pg.getData().getQuorum() + 1)

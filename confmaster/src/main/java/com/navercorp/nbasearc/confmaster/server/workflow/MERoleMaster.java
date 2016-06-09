@@ -42,12 +42,14 @@ public class MERoleMaster {
             int newQ, long jobID) throws MgmtSmrCommandException {
         final String smrVersion = newMaster.smrVersion();
         
-        newMaster.roleMaster(pg, newMasterLog, newQ, jobID, workflowLogDao);
+        newMaster.roleMaster(smrVersion, pg, newMasterLog, newQ,
+                pg.getQuorumMembersString(newMaster, joinedPgsList), jobID,
+                workflowLogDao);
 
         RoleMasterZkResult result = newMaster.roleMasterZk(pg, joinedPgsList,
                 newMasterLog, newQ, smrVersion, jobID, workflowLogDao);
         newMaster.setData(result.pgsM);
         pg.setData(result.pgM);
     }
-
+    
 }
