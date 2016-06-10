@@ -321,37 +321,46 @@ public class PGSStateDecisionWorkflow {
      */
     private boolean timestampValidation(long maximumStateTimestamp,
             String oldView, String newView) throws IOException {
-
         boolean validStateTimestamp;
 
         if (!newView.equals(PGS_ROLE_NONE)) {
             long ats = pgs.getActiveStateTimestamp();
             if (maximumStateTimestamp >= ats) {
                 validStateTimestamp = true;
+                Logger.info(
+                        "timestamp validation success. role: {}->{}, timestamp: zk{} active{}->hb{}",
+                        new Object[] { oldView, newView,
+                                pgs.getData().getStateTimestamp(),
+                                ats, maximumStateTimestamp });
             } else {
                 validStateTimestamp = false;
+                Logger.info(
+                        "timestamp validation fail. role: {}->{}, timestamp: zk{} active{}->hb{}",
+                        new Object[] { oldView, newView,
+                                pgs.getData().getStateTimestamp(),
+                                ats, maximumStateTimestamp });
             }
         } else {
             if (maximumStateTimestamp < pgs.getData().getStateTimestamp()) {
                 validStateTimestamp = false;
+                Logger.info(
+                        "timestamp validation fail. role: {}->{}, timestamp: zk{}->hb{}",
+                        new Object[] { oldView, newView,
+                                pgs.getData().getStateTimestamp(),
+                                maximumStateTimestamp });
             } else {
                 validStateTimestamp = true;
+                Logger.info(
+                        "timestamp validation success. role: {}->{}, timestamp: zk{}->hb{}",
+                        new Object[] { oldView, newView,
+                                pgs.getData().getStateTimestamp(),
+                                maximumStateTimestamp });
             }
         }
 
         if (validStateTimestamp) {
-            Logger.info(
-                    "timestamp validation success. role: {}->{}, timestamp: {}->{}",
-                    new Object[] { oldView, newView,
-                            pgs.getData().getStateTimestamp(),
-                            maximumStateTimestamp });
             return true;
         } else {
-            Logger.info(
-                    "timestamp validation fail. role: {}->{}, timestamp: {}->{}",
-                    new Object[] { oldView, newView,
-                            pgs.getData().getStateTimestamp(),
-                            maximumStateTimestamp });
             return false;
         }
     }
