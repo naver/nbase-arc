@@ -194,7 +194,7 @@ public class Workflow201Test extends BasicSetting {
             // Check whether pgs became a slave
             assertEquals(PGS_ROLE_SLAVE, slave.getData().getRole());
             assertEquals(YELLOW, slave.getData().getColor());
-            assertEquals(getPg().getData().currentGen(), slave.getData()
+            assertEquals(getPg().getData().currentGen() + 1, slave.getData()
                     .getMasterGen());
         }
 
@@ -350,7 +350,7 @@ public class Workflow201Test extends BasicSetting {
             // Check whether pgs became a slave
             assertEquals(PGS_ROLE_SLAVE, slave.getData().getRole());
             assertEquals(YELLOW, slave.getData().getColor());
-            assertEquals(getPg().getData().currentGen(), slave.getData()
+            assertEquals(getPg().getData().currentGen() + 1, slave.getData()
                     .getMasterGen());
         }
 

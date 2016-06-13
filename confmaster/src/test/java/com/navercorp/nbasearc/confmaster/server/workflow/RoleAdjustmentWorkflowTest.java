@@ -211,7 +211,7 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
         assertEquals(PGS_ROLE_LCONN, p1.getData().getRole());
         assertEquals(SERVER_STATE_LCONN, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(1, p1.getData().getMasterGen());
         assertEquals(0, pg.getData().currentGen());
     }
     

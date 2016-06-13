@@ -559,9 +559,21 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                 PartitionGroupData.builder().from(pg.getData())
                     .addMasterGen(logSeq.getMax()).build();
             
+            // For backward compatibility, confmaster adds 1 to currentGen
+            // since 1.2 and smaller version of confmaster follow a rule, PG.mGen + 1 = PGS.mGen.
+            // Notice that it add 2 to currentGen because pg.getData().currentGen has not updated yet.
+            // Please see below for more details.
+            // +--------------------+---------+----------+
+            // |                    | PG.mGen | PGS.mGen |
+            // +--------------------+---------+----------+
+            // | As-is              | 3       | 4        |
+            // | Update Master.mGen | 3       | 5(3+2)   |
+            // | Update PG.mGen     | 4(3+1)  | 5        |
+            // | To-be              | 4       | 5        |
+            // +--------------------+---------+----------+
             PartitionGroupServerData pgsM = 
                 PartitionGroupServerData.builder().from(getData())
-                    .withMasterGen(pg.getData().currentGen() + 1)
+                    .withMasterGen(pg.getData().currentGen() + 2)
                     .withRole(PGS_ROLE_MASTER)
                     .withOldRole(PGS_ROLE_MASTER)
                     .withOldMasterSmrVersion(masterVersion)

@@ -536,7 +536,7 @@ public class BasicSetting {
         assertEquals(role, pgs.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, pgs.getData().getState());
         assertEquals(HB_MONITOR_YES, pgs.getData().getHb());
-        assertEquals(mgen, pgs.getData().getMasterGen());
+        assertEquals(mgen + 1, pgs.getData().getMasterGen());
         assertEquals(mgen, pg.getData().currentGen());
     }
     

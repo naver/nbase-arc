@@ -48,7 +48,9 @@ public class YJRoleSlave {
                 pgs.getData().getRole(), PGS_ROLE_SLAVE,
                 pgs.getData().getColor(), YELLOW });
 
-        pgs.setData(pgs.roleSlaveZk(jobID, pg.getData().currentGen(), YELLOW,
+        // For backward compatibility, confmaster adds 1 to currentGen
+        // since 1.2 and smaller version of confmaster follow a rule, PG.mGen + 1 = PGS.mGen.
+        pgs.setData(pgs.roleSlaveZk(jobID, pg.getData().currentGen() + 1, YELLOW,
                 masterVersion, workflowLogDao).pgsM);
     }
 

@@ -290,7 +290,7 @@ public class PgReconfigurationTest extends BasicSetting {
         assertEquals(PGS_ROLE_NONE, p1.getData().getRole());
         assertEquals(SERVER_STATE_FAILURE, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(1, p1.getData().getMasterGen());
         
         // Recover p1
         // N M -> S M
@@ -336,7 +336,7 @@ public class PgReconfigurationTest extends BasicSetting {
         assertEquals(PGS_ROLE_NONE, p2.getData().getRole());
         assertEquals(SERVER_STATE_FAILURE, p2.getData().getState());
         assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-        assertEquals(1, p2.getData().getMasterGen());
+        assertEquals(2, p2.getData().getMasterGen());
         
         MasterFinder masterFinder = new MasterFinder(getPgsList());
         await("reconfiguration for master.").atMost(assertionTimeout, SECONDS).until(masterFinder);

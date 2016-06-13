@@ -17,12 +17,13 @@
 package com.navercorp.nbasearc.confmaster.repository.znode;
 
 import java.util.List;
-import java.util.SortedMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class PgDataBuilder {
     
     private List<Integer> pgsIdList;
-    private SortedMap<Integer, Long> masterGenMap;
+    private ConcurrentSkipListMap<Integer, Long> masterGenMap;
     private Integer copy;
     private Integer quorum;
 
@@ -39,7 +40,7 @@ public class PgDataBuilder {
         return this;
     }
 
-    public PgDataBuilder withMasterGenMap(SortedMap<Integer, Long> masterGenMap) {
+    public PgDataBuilder withMasterGenMap(ConcurrentSkipListMap<Integer, Long> masterGenMap) {
         this.masterGenMap = masterGenMap;
         return this;
     }
@@ -77,6 +78,16 @@ public class PgDataBuilder {
             gen = masterGenMap.lastKey() + 1;
         }
         masterGenMap.put(gen, last_commit_seq);
+        return this;
+    }
+
+    public PgDataBuilder cleanMGen(int mgenHistorySize) {
+        final int lastKey = masterGenMap.lastKey();
+        for (Map.Entry<Integer, Long> e : masterGenMap.entrySet()) {
+            if (e.getKey() <= lastKey - mgenHistorySize) {
+                masterGenMap.remove(e.getKey());
+            }
+        }
         return this;
     }
     
