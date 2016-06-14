@@ -1359,22 +1359,6 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
             recover_list.append(pgs)
             continue
 
-    # Leave PGS from replication
-    for pgs in recover_list:
-        pgs_id = pgs['pgs_id']
-        ip = pgs['ip']
-        redis_port = pgs['redis_port']
-        hb = pgs['hb']
-
-        host = config.USERNAME + '@' + pgs['ip'].encode('ascii')
-        env.hosts = [host]
-
-        # PGS Leave
-        if hb == 'Y':
-            if cm.pgs_leave(cluster_name, pgs_id, ip, redis_port, host, False) == False:
-                warn(red("[%s:%d] PGS Leave fail, PGS_ID:%d" % (ip, smr_base_port, pgs_id)))
-                return False
-
     # Execute SMR and Redis
     for pgs in recover_list:
         pgs_id = pgs['pgs_id']
@@ -1403,57 +1387,6 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
                 warn(red("[%s] Start Redis fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, redis_port)))
                 return False
 
-    master = cm.get_master_pgs(cluster_name, pg_id)
-    if master == None:
-        logseq_list = []
-        master_candidate = None
-        max_commit = -1
-        min_logseq = -1
-
-        print magenta("\nGet Log Sequence")
-        for pgs in recover_list:
-            pgs_id = pgs['pgs_id']
-            ip = pgs['ip']
-            smr_base_port = pgs['smr_base_port']
-
-            logseq = util.get_logseq(ip, smr_base_port + 3)
-            if logseq == None:
-                warn("[%s:%d] Get log sequence fail, PGS_ID:%d" % (ip, smr_base_port, pgs_id))
-                return False
-
-            print yellow("[%s:%s] PGS '%d' >>> min:%d, commit:%d, max:%d, be_sent:%d" % (ip, smr_base_port, pgs_id, logseq['min'], logseq['commit'], logseq['max'], logseq['be_sent']))
-
-            if max_commit < logseq['commit']:
-                max_commit = logseq['commit']
-                min_logseq = logseq['min']
-                master_candidate = pgs
-            elif max_commit == logseq['commit']:
-                if min_logseq > logseq['min']: 
-                    master_candidate = pgs
-                    min_logseq = logseq['min']
-                elif min_logseq == logseq['min']:
-                    master_candidate = random.choice([master_candidate, pgs])
-
-        # PGS Join - master candidate
-        master_pgs_id = master_candidate['pgs_id']
-        master_ip = master_candidate['ip']
-        master_smr_base_port = master_candidate['smr_base_port']
-        master_redis_port = master_candidate['redis_port']
-
-        host = config.USERNAME + '@' + master_ip.encode('ascii')
-        env.hosts = [host]
-
-        if cm.pgs_join(cluster_name, master_pgs_id, master_ip, master_smr_base_port, host) == False:
-            warn(red("[%s] Join PGS fail, PGS_ID:%d, PORT:%d" % (host, master_pgs_id, master_smr_base_port)))
-            return False
-
-        # Check redis state
-        if util.check_redis_state(master_ip, master_redis_port) != True:
-            warn(red("[%s] Check Redis state fail. PGS_ID:%d, PORT:%d" % (host, master_pgs_id, master_redis_port))) 
-            return False
-
-        recover_list.remove(master_candidate)
-
     # PGS Join - others
     for pgs in recover_list:
         pgs_id = pgs['pgs_id']
@@ -1463,10 +1396,6 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
 
         host = config.USERNAME + '@' + pgs['ip'].encode('ascii')
         env.hosts = [host]
-
-        if cm.pgs_join(cluster_name, pgs_id, ip, smr_base_port, host) == False:
-            warn(red("[%s] Join PGS fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, smr_base_port)))
-            return False
 
         # Check redis state
         if util.check_redis_state(ip, redis_port) != True:
