@@ -128,6 +128,8 @@ public class MimicSMR implements Answer<String>, IMimic<String, String>,
             } else if (args[1].equals("null")) {
                 return roleNull();
             }
+        } else if (args[0].equals("singleton")) {
+            return S2C_OK;
         }
         return "-ERR bad request: unsupported cmd " + cmd;
     }

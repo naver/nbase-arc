@@ -19,7 +19,9 @@ package com.navercorp.nbasearc.confmaster.server.cluster;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -79,11 +81,47 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         setNodeType(NodeType.PGS);
         setData(data);
         
-        setServerConnection(
-            new BlockingSocketImpl(
-                getData().getPmIp(), getData().getSmrMgmtPort(), 
-                config.getClusterPgsTimeout(), PGS_PING, 
-                config.getDelim(), config.getCharset()));
+        BlockingSocketImpl con = new BlockingSocketImpl(getData().getPmIp(),
+                getData().getSmrMgmtPort(), config.getClusterPgsTimeout(),
+                PGS_PING, config.getDelim(), config.getCharset());
+        con.setFirstHandshaker(new BlockingSocketImpl.FirstHandshaker() {
+            @Override
+            public void handshake(BufferedReader in, PrintWriter out, String delim)
+                    throws IOException {
+                String cmd = null;
+                
+                try {
+                    cmd = "smrversion";
+                    out.print(cmd + delim);
+                    out.flush();
+                    
+                    final String reply = in.readLine();
+                    if (reply.equals("+OK 201") == false) {
+                        return;
+                    }
+                } catch (IOException e) {
+                    Logger.info("Singleton request to SMR fail. cmd: " + cmd);
+                    throw e;
+                }
+                
+                try {
+                    cmd = "singleton confmaster";
+                    out.print(cmd + delim);
+                    out.flush();
+                    
+                    final String reply = in.readLine();
+                    if (reply.equals("+OK") == false) {
+                        Logger.info("Singleton request to SMR fail. cmd: " + cmd
+                                + ", reply: \"" + reply + "\"");
+                        throw new IOException("Singleton request to SMR fail. " + this);
+                    }
+                } catch (IOException e) {
+                    Logger.info("Singleton request to SMR fail. cmd: " + cmd);
+                    throw e;
+                }
+            }
+        });
+        setServerConnection(con);
         
         hbcRefData = new HBRefData();
         hbcRefData.setZkData(getData().getRole(), getData().getStateTimestamp(), stat.getVersion())
