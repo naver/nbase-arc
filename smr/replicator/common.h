@@ -247,6 +247,7 @@ typedef struct mgmtConn
 {
   dlisth head;
   smrReplicator *rep;		// back pointer to the replicator instance
+  char *singleton;		// if not null, at most one conn with same singleton value
   int fd;			// connection fd
   int w_prepared;		// write handler event preparation flag
   char *ibuf;			// input buffer
@@ -257,6 +258,7 @@ typedef struct mgmtConn
 #define init_mgmt_conn(s) do { \
   dlisth_init(&(s)->head);     \
   (s)->rep = NULL;             \
+  (s)->singleton = NULL;       \
   (s)->fd = -1;                \
   (s)->w_prepared = 0;         \
   (s)->ibuf = NULL;            \

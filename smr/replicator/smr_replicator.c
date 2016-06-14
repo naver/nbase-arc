@@ -319,6 +319,7 @@ static int getseq_request (mgmtConn * conn, char **tokens, int num_tok);
 static int setquorum_request (mgmtConn * conn, char **tokens, int num_tok);
 static int getquorum_request (mgmtConn * conn, char **tokens, int num_tok);
 static int getquorumv_request (mgmtConn * conn, char **tokens, int num_tok);
+static int singleton_request (mgmtConn * conn, char **tokens, int num_tok);
 static int confget_request (mgmtConn * conn, char **tokens, int num_tok);
 static int confset_request (mgmtConn * conn, char **tokens, int num_tok);
 static char *get_role_string (repRole role);
@@ -3306,6 +3307,11 @@ free_mgmt_conn (mgmtConn * conn)
     {
       dlisth_delete (&conn->head);
     }
+  if (conn->singleton != NULL)
+    {
+      free (conn->singleton);
+      conn->singleton = NULL;
+    }
   if (conn->fd > 0)
     {
       aeDeleteFileEvent (conn->rep->el, conn->fd, AE_READABLE);
@@ -5031,6 +5037,45 @@ error:
   return ret;
 }
 
+static int
+singleton_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+  smrReplicator *rep = conn->rep;
+  dlisth *h;
+  char *singleton = NULL;
+
+  if (num_tok != 1)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
+				 num_tok);
+    }
+
+  singleton = strdup (tokens[0]);
+  if (singleton == NULL)
+    {
+      return -1;
+    }
+
+  // close other mgmt connections with same singleton value. except me
+  for (h = rep->managers.next; h != &rep->managers;)
+    {
+      mgmtConn *mc = (mgmtConn *) h;
+      h = h->next;
+      if (mc != conn && mc->singleton != NULL
+	  && strcmp (singleton, mc->singleton) == 0)
+	{
+	  free_mgmt_conn (mc);
+	}
+    }
+  if (conn->singleton)
+    {
+      free (conn->singleton);
+    }
+  conn->singleton = singleton;
+
+  return mgmt_reply_cstring (conn, "+OK", rep->commit_quorum);
+}
+
 #define CONF_SLAVE_IDLE_TIMEOUT_MSEC "slave_idle_timeout_msec"
 static int
 confget_request (mgmtConn * conn, char **tokens, int num_tok)
@@ -5235,7 +5280,9 @@ info_replicator (smrReplicator * rep, gpbuf_t * gp)
       for (h = rep->managers.next; h != &rep->managers; h = h->next)
 	{
 	  mgmtConn *mc = (mgmtConn *) h;
-	  ret = gpbuf_printf (gp, "mgmt_%d:fd=%d\r\n", mc->fd, mc->fd);
+	  ret =
+	    gpbuf_printf (gp, "mgmt_%d:fd=%d singleton=[%s]\r\n", mc->fd,
+			  mc->fd, mc->singleton ? mc->singleton : "");
 	  CHECK (ret);
 	}
     }
@@ -5664,6 +5711,10 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
+    }
+  else if (strcasecmp (tokens[0], "singleton") == 0)
+    {
+      ret = singleton_request (conn, tokens + 1, arity - 1);
     }
   else if (strcasecmp (tokens[0], "confget") == 0)
     {

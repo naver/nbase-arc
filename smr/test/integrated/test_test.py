@@ -20,7 +20,7 @@ import socket
 import os
 import time
 import traceback, sys
-import Conf, Cm, Pg, Pgs, Smr, Be, Util
+import Conf, Cm, Pg, Pgs, Smr, Be, Util, Conn
 
 class TestTest (unittest.TestCase):
   def test_all(self):
@@ -82,6 +82,40 @@ class TestTest (unittest.TestCase):
       if cm is not None:
 	cm.remove_workspace()
 
+  def _test_smr_singleton(self):
+    c1 = None
+    c2 = None
+    try:
+      c1 = Conn.Conn('localhost', 1903)
+      c2 = Conn.Conn('localhost', 1903)
+      # set
+      r1 = c1.do_request('singleton a')
+      assert r1[0] == '+OK'
+      # override with same value
+      r1 = c1.do_request('singleton a')  
+      assert r1[0] == '+OK'
+      # override with other value
+      r1 = c1.do_request('singleton b')  
+      assert r1[0] == '+OK'
+      # bad command
+      r2 = c2.do_request('singleton a b c')
+      assert r2[0].startswith('-ERR')
+      # set with already set singleton value
+      r2 = c2.do_request('singleton b')
+      assert r2[0] == '+OK'
+      try:
+        c1.do_request('ping')
+        # -- must not be reached
+        assert False
+      except:
+        c1.disconnect() # clear
+        c1 = Conn.Conn('localhost', 1903)
+    finally:
+      if c1 != None:
+	c1.disconnect()
+      if c2 != None:
+	c2.disconnect()
+
   def _test_smr(self):
     cm = None
     pgs = None
@@ -102,6 +136,8 @@ class TestTest (unittest.TestCase):
       self.assertRaisesRegexp(Exception, '-ERR bad number of token:0',
               pgs.smr.confset, '', '')
 
+      # other command specific tests
+      self._test_smr_singleton()
     finally:
       if pgs is not None:
 	pgs.kill_smr()
