@@ -364,21 +364,41 @@ public class PgReconfigurationTest extends BasicSetting {
         masterFinder = new MasterFinder(getPgsList());
         await("reconfiguration for master.").atMost(assertionTimeout, SECONDS).until(masterFinder);
         validateNormal(masterFinder.getMaster(), pg, PGS_ROLE_MASTER, 2);
-        
-        masterFinder.getMaster().getName();
-        doCommand("pgs_leave " + masterFinder.getMaster().getClusterName()
-                + " " + masterFinder.getMaster().getName());
-        doCommand("pgs_lconn " + masterFinder.getMaster().getClusterName()
-                + " " + masterFinder.getMaster().getName());
+
+        PartitionGroupServer leftPgs = masterFinder.getMaster();
+        doCommand("pgs_leave " + leftPgs.getClusterName() + " "
+                + leftPgs.getName());
+        doCommand("pgs_lconn " + leftPgs.getClusterName() + " "
+                + leftPgs.getName());
+
+        // Check mGen
+        for (PartitionGroupServer pgs : getPgsList()) {
+            // Skip left PGS
+            if (pgs == leftPgs) {
+                continue;
+            }
+            await("validate mGen.").atMost(assertionTimeout, SECONDS).until(
+                    new MasterGenValidator(pgs, 4));
+        }
 
         mimics[0].mSmr.execute("role lconn");
         mimics[1].mSmr.execute("role lconn");
         mimics[2].mSmr.execute("role lconn");
+
+        // Check mGen
+        for (PartitionGroupServer pgs : getPgsList()) {
+            // Skip left PGS
+            if (pgs == leftPgs) {
+                continue;
+            }
+            await("validate mGen.").atMost(assertionTimeout, SECONDS).until(
+                    new MasterGenValidator(pgs, 5));
+        }
         
         // Check new master
         masterFinder = new MasterFinder(getPgsList());
         await("reconfiguration for master.").atMost(assertionTimeout, SECONDS).until(masterFinder);
-        validateNormal(masterFinder.getMaster(), pg, PGS_ROLE_MASTER, 3);
+        validateNormal(masterFinder.getMaster(), pg, PGS_ROLE_MASTER, 4);
 
         slaveFinder = new SlaveFinder(getPgsList());
         await("reconfiguration for slave.").atMost(assertionTimeout, SECONDS).until(slaveFinder);
