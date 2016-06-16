@@ -16,6 +16,8 @@
 
 package com.navercorp.nbasearc.confmaster.faultinjection;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.workflow.RARoleLconn;
@@ -26,7 +28,7 @@ public class RARoleLconnFI extends RARoleLconn {
     private boolean successFail = false;
 
     @Override
-    public synchronized void roleLconn(PartitionGroupServer pgs, long jobID)
+    public synchronized void roleLconn(PartitionGroupServer pgs, Color color, long jobID)
             throws MgmtSmrCommandException {
         if (count > 0) {
             if (successFail) {
@@ -40,7 +42,7 @@ public class RARoleLconnFI extends RARoleLconn {
                         "[FI] RA role lconn fail fail. " + pgs);
             }
         } else {
-            super.roleLconn(pgs, jobID);
+            super.roleLconn(pgs, color, jobID);
         }
     }
 

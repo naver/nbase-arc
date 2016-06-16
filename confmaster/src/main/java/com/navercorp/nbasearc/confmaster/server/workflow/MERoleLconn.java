@@ -19,8 +19,6 @@ package com.navercorp.nbasearc.confmaster.server.workflow;
 import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_LCONN;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.BLUE;
 
-import java.io.IOException;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

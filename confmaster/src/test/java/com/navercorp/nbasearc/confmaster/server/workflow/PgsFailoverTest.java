@@ -67,82 +67,6 @@ public class PgsFailoverTest extends BasicSetting {
     }
     
     @Test
-    public void initialConfig() throws Exception {
-        // Initialize
-        createCluster();
-        createPm();
-        createPg();
-        
-        // Create master
-        createPgs(0);
-        mockPgs(0);
-        joinPgs(0);
-        mockPgsLconn(getPgs(0));
-        PartitionGroupServer master = waitRoleMaster(getPgsList());
-        
-        // Create slave
-        for (int id = 1; id < MAX_PGS; id++) {
-            createPgs(id);
-            mockPgs(id);
-            joinPgs(id);
-            mockPgsLconn(getPgs(id));
-            waitRoleSlave(getPgs(id));
-        }
-        
-        // Check master
-        assertEquals("Check the role of the master.", 
-                PGS_ROLE_MASTER, master.getView());
-        assertEquals("Check the state of master PGS",
-                SERVER_STATE_NORMAL, master.getData().getState());
-
-        // Check slave
-        for (int id = 0; id < MAX_PGS; id++) {
-            if (getPgs(id).equals(master)) {
-                continue;
-            }
-            assertEquals("Check role of the slave.",
-                    PGS_ROLE_SLAVE, getPgs(id).getView());
-            assertEquals("Check the state of a slave.", 
-                    SERVER_STATE_NORMAL, getPgs(id).getData().getState());
-        }
-    }
-    
-    @Test
-    public void failover() throws Exception {
-        initialConfig();
-        
-        PartitionGroupServer master = getPgs(0);
-        
-        // Kill
-        testRoleNone(master);
-        
-        // Check states and roles
-        for (int id = 0; id < MAX_PGS; id++) {
-            if (getPgs(id).equals(master)) {
-                continue;
-            }
-            await("After master crashes, failover with a slave.").atMost(
-                    5, SECONDS).until(new StateValidator(getPgs(id), SERVER_STATE_NORMAL));
-        }
-        assertEquals("Check the color of the crashed PGS.", 
-                RED, master.getData().getColor());
-        assertEquals("CHeck ther state of the crashed PGS."
-                , SERVER_STATE_FAILURE, master.getData().getState());
-        assertEquals("Check that there must be a master."
-                , 1, count(PGS_ROLE_MASTER));
-        assertEquals("Check that another PGS must be a slave."
-                , 1, count(PGS_ROLE_SLAVE));
-        
-        // Check master
-        await("test for role master.").atMost(assertionTimeout, SECONDS).until(
-                new MasterFinder(getPgsList()));
-
-        // Check slave
-        await("test for role slave.").atMost(assertionTimeout, SECONDS).until(
-                new SlaveFinder(getPgsList()));
-    }
-    
-    @Test
     public void restartRecovery() throws Exception {
         MimicSMR[] mimics = new MimicSMR[MAX_PGS];
         
@@ -168,7 +92,7 @@ public class PgsFailoverTest extends BasicSetting {
         assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(1, p1.getData().getMasterGen());
         assertEquals(0, pg.getData().currentGen());
         QuorumValidator quorumValidator = new QuorumValidator(mimics[0], 0); 
         await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
@@ -189,7 +113,7 @@ public class PgsFailoverTest extends BasicSetting {
         assertEquals(PGS_ROLE_SLAVE, p2.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, p2.getData().getState());
         assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-        assertEquals(0, p2.getData().getMasterGen());
+        assertEquals(1, p2.getData().getMasterGen());
         assertEquals(0, pg.getData().currentGen());
         quorumValidator = new QuorumValidator(mimics[0], 1); 
         await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
@@ -200,7 +124,7 @@ public class PgsFailoverTest extends BasicSetting {
         assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(1, p1.getData().getMasterGen());
         assertEquals(0, pg.getData().currentGen());
         
         // Mimic p1 failure
@@ -214,7 +138,7 @@ public class PgsFailoverTest extends BasicSetting {
         assertEquals(PGS_ROLE_MASTER, p2.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, p2.getData().getState());
         assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-        assertEquals(1, p2.getData().getMasterGen());
+        assertEquals(2, p2.getData().getMasterGen());
         assertEquals(1, pg.getData().currentGen());
         quorumValidator = new QuorumValidator(mimics[1], 0); 
         await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
@@ -224,7 +148,7 @@ public class PgsFailoverTest extends BasicSetting {
         assertEquals(PGS_ROLE_NONE, p1.getData().getRole());
         assertEquals(SERVER_STATE_FAILURE, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(1, p1.getData().getMasterGen());
         
         // Recover p1 
         mimics[0].init();
@@ -236,14 +160,14 @@ public class PgsFailoverTest extends BasicSetting {
         assertEquals(PGS_ROLE_SLAVE, p1.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(1, p1.getData().getMasterGen());
+        assertEquals(2, p1.getData().getMasterGen());
         assertEquals(1, pg.getData().currentGen());
         
         assertEquals(GREEN, p2.getData().getColor());
         assertEquals(PGS_ROLE_MASTER, p2.getData().getRole());
         assertEquals(SERVER_STATE_NORMAL, p2.getData().getState());
         assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-        assertEquals(1, p2.getData().getMasterGen());
+        assertEquals(2, p2.getData().getMasterGen());
         assertEquals(1, pg.getData().currentGen());
         quorumValidator = new QuorumValidator(mimics[1], 1); 
         await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
@@ -429,13 +353,4 @@ public class PgsFailoverTest extends BasicSetting {
         }
     }
     
-    private int count(String role) {
-        int count = 0;
-        for (int id = 0; id < MAX_PGS; id++) {
-            if (getPgs(id).getData().getRole().equals(role)) {
-                count++;
-            }
-        }
-        return count;
-    }
 }

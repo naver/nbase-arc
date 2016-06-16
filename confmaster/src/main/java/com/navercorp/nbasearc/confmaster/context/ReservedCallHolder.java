@@ -18,15 +18,15 @@ package com.navercorp.nbasearc.confmaster.context;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
 
-public class ReservedCallHolder<T> {
+public class ReservedCallHolder {
     
-    private ReservedCall<T> call = null;
+    private ReservedCall call = null;
 
     public boolean hasNextCall() {
         return call != null;
     }
 
-    public ReservedCall<T> pollCall() {
+    public ReservedCall pollCall() {
         try {
             return call;
         } finally {
@@ -34,7 +34,7 @@ public class ReservedCallHolder<T> {
         }
     }
     
-    public void setCall(ReservedCall<T> call) throws MgmtDuplicatedReservedCallException {
+    public void setCall(ReservedCall call) throws MgmtDuplicatedReservedCallException {
         if (this.call != null) {
             throw new MgmtDuplicatedReservedCallException(
                     "Workflow to run on next time is already set. Workfolw="

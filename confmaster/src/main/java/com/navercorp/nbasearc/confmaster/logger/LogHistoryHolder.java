@@ -20,8 +20,6 @@ import static org.apache.log4j.Level.*;
 
 import org.apache.log4j.Level;
 
-import com.navercorp.nbasearc.confmaster.context.ContextType;
-
 public class LogHistoryHolder {
 
     private LogHistory logHistory = new LogHistory();

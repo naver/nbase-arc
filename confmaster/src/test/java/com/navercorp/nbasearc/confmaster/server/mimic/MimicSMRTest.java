@@ -46,9 +46,9 @@ public class MimicSMRTest {
         assertEquals("+OK 2 " + mimic.getTimestamp(), mimic.execute(PGS_PING));
 
         assertEquals("0", mimic.execute("getquorum"));
-        assertEquals(S2C_OK, mimic.execute("setquorum 1"));
+        assertEquals(S2C_OK, mimic.execute("setquorum 1 0"));
         assertEquals("1", mimic.execute("getquorum"));
-        assertEquals(S2C_OK, mimic.execute("setquorum 2"));
+        assertEquals(S2C_OK, mimic.execute("setquorum 2 0 50"));
         assertEquals("2", mimic.execute("getquorum"));
         assertEquals(S2C_OK, mimic.execute("setquorum 0"));
         assertEquals("0", mimic.execute("getquorum"));

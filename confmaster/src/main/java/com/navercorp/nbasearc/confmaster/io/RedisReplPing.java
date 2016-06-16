@@ -22,7 +22,6 @@ import static com.navercorp.nbasearc.confmaster.Constant.REDIS_PONG;
 import java.io.IOException;
 import java.util.concurrent.Callable;
 
-import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
@@ -32,14 +31,12 @@ public class RedisReplPing implements Callable<RedisReplPing.Result> {
     private String clusterName;
     private PartitionGroupServer pgs;
     private RedisServer rs;
-    private Config config;
 
     public RedisReplPing(String clusterName, PartitionGroupServer pgs,
-            RedisServer rs, Config config) {
+            RedisServer rs) {
         this.clusterName = clusterName;
         this.pgs = pgs;
         this.rs = rs;
-        this.config = config;
     }
     
     @Override

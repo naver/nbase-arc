@@ -112,7 +112,7 @@ public class CommandExecutor {
     public Future<JobResult> perform(final String request, final CommandCallback callback) {
         CommandTemplate ct = new CommandTemplate(
                 request, callback, context, commandMethods, lockMethods);
-        ExecutionContext ec = new ExecutionContext(ct, ContextType.CM, executor);
+        ExecutionContext<JobResult> ec = new ExecutionContext<JobResult>(ct, ContextType.CM, executor);
         return executor.perform(ec);
     }
     

@@ -19,9 +19,6 @@ package com.navercorp.nbasearc.confmaster.server.workflow;
 import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_SLAVE;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.BLUE;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.GREEN;
-import static com.navercorp.nbasearc.confmaster.Constant.Color.YELLOW;
-
-import java.io.IOException;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -45,14 +42,17 @@ public class BJRoleSlave {
     public void roleSlave(PartitionGroupServer pgs, PartitionGroup pg,
             LogSequence logSeq, PartitionGroupServer master, long jobID)
             throws MgmtSmrCommandException {
+        final String masterVersion = master.smrVersion();
         pgs.roleSlave(pg, logSeq, master, BLUE, jobID, workflowLogDao);
 
         Logger.info("{} {}->{} {}->{}", new Object[] { pgs,
                 pgs.getData().getRole(), PGS_ROLE_SLAVE,
                 pgs.getData().getColor(), GREEN });
 
-        pgs.setData(pgs.roleSlaveZk(jobID, pg.getData().currentGen(), GREEN,
-                workflowLogDao).pgsM);
+        // For backward compatibility, confmaster adds 1 to currentGen
+        // since 1.2 and smaller version of confmaster follow a rule, PG.mGen + 1 = PGS.mGen.
+        pgs.setData(pgs.roleSlaveZk(jobID, pg.getData().currentGen() + 1, GREEN,
+                masterVersion, workflowLogDao).pgsM);
     }
 
 }

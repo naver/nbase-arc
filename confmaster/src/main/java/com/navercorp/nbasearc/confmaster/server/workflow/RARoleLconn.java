@@ -16,8 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.workflow;
 
-import static com.navercorp.nbasearc.confmaster.Constant.PGS_ROLE_LCONN;
-import static com.navercorp.nbasearc.confmaster.Constant.Color.YELLOW;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -36,13 +35,13 @@ public class RARoleLconn {
     @Autowired
     WorkflowLogDao workflowLogDao;
 
-    public void roleLconn(PartitionGroupServer pgs, long jobID)
+    public void roleLconn(PartitionGroupServer pgs, Color color, long jobID)
             throws MgmtSmrCommandException {
         pgs.roleLconn();
         Logger.info("{} {}->{} {}->{}", new Object[] { pgs,
                 pgs.getData().getRole(), PGS_ROLE_LCONN,
-                pgs.getData().getColor(), YELLOW });
-        pgs.setData(pgs.roleLconnZk(jobID, YELLOW, workflowLogDao).pgsM);
+                pgs.getData().getColor(), color });
+        pgs.setData(pgs.roleLconnZk(jobID, color, workflowLogDao).pgsM);
     }
 
 }

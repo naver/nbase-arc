@@ -139,7 +139,10 @@ public class ClientSessionHandler implements SessionHandler {
         
         SocketChannel clntChan = (SocketChannel) key.channel();
         try {
-            clntChan.write(encoder.encode(sendBuffer));
+            ByteBuffer buff = encoder.encode(sendBuffer);
+            while (buff.hasRemaining()) {
+                clntChan.write(buff);
+            }
         } catch (CharacterCodingException e) {
             session.close();
         } catch (IOException e) {

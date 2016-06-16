@@ -396,13 +396,13 @@ def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=Fal
             if False == (master_count == 1 and slave_count == expected_slave_count and quorum == expected_quorum):
                 ok = False
 
-            log('+master_count=%d, slave_count=%d, quorum=%d, expected_quorum=%d' %
+            log('+master_count=%d, slave_count=%d, quorum=%s, expected_quorum=%d' %
                     (master_count, slave_count, quorum, expected_quorum))
         else:
             if False == (master_count == 1 and slave_count == expected_slave_count):
                 ok = False
 
-            log('+master_count=%d, slave_count=%d, quorum=%d' %
+            log('+master_count=%d, slave_count=%d, quorum=%s' %
                     (master_count, slave_count, quorum))
 
     return ok
@@ -1135,8 +1135,10 @@ def get_quorum( master ):
         log( 'error, response from pgs:%d is None.' % master['id'] )
         return None
 
-    return int( response )
-
+    try:
+        return int( response )
+    except:
+        return None
 
 def cmd_to_smr( server, cmd ):
     return cmd_to_smr_addr( server['ip'], server['smr_mgmt_port'], cmd )

@@ -19,8 +19,7 @@ package com.navercorp.nbasearc.confmaster.repository.znode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 import org.codehaus.jackson.annotate.JsonAutoDetect;
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
@@ -41,7 +40,7 @@ public class PartitionGroupData implements Cloneable {
     @JsonProperty("pgs_ID_List")
     private List<Integer> pgsIdList = new ArrayList<Integer>();
     @JsonProperty("master_Gen_Map")
-    private SortedMap<Integer, Long> masterGenMap = new TreeMap<Integer, Long>();
+    private ConcurrentSkipListMap<Integer, Long> masterGenMap = new ConcurrentSkipListMap<Integer, Long>();
     @JsonProperty("copy")
     private Integer copy = 0;
     @JsonProperty("quorum")
@@ -129,11 +128,11 @@ public class PartitionGroupData implements Cloneable {
     }
 
     @SuppressWarnings("unchecked")
-    public SortedMap<Integer, Long> getMasterGenMap() {
-        return (SortedMap<Integer, Long>)((TreeMap<Integer, Long>)masterGenMap).clone();
+    public ConcurrentSkipListMap<Integer, Long> getMasterGenMap() {
+        return (ConcurrentSkipListMap<Integer, Long>)((ConcurrentSkipListMap<Integer, Long>)masterGenMap).clone();
     }
 
-    protected void setMaster_Gen_Map(SortedMap<Integer, Long> map) {
+    protected void setMaster_Gen_Map(ConcurrentSkipListMap<Integer, Long> map) {
         this.masterGenMap = map;
     }
 
@@ -190,7 +189,7 @@ public class PartitionGroupData implements Cloneable {
         }
         PartitionGroupData obj = new PartitionGroupData();
         obj.pgsIdList = new ArrayList<Integer>(this.pgsIdList);
-        obj.masterGenMap = new TreeMap<Integer, Long>(this.masterGenMap);
+        obj.masterGenMap = new ConcurrentSkipListMap<Integer, Long>(this.masterGenMap);
         return obj;
     }
 

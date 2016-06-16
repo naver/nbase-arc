@@ -34,11 +34,14 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperExcept
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
 import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
+import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
+import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
@@ -49,6 +52,8 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
     final ZooKeeperHolder zookeeper;
     final PartitionGroupServerDao pgsDao;
     final PartitionGroupServerImo pgsImo;
+    final PartitionGroupDao pgDao;
+    final PartitionGroupImo pgImo;
     final RedisServerImo rsImo;
     
     final MGSetquorum setquorum;
@@ -57,7 +62,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     public MembershipGrantWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg);
+        super(cascading, pg, context.getBean(PartitionGroupImo.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);
@@ -65,6 +70,8 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
         this.zookeeper = context.getBean(ZooKeeperHolder.class);
         this.pgsDao = context.getBean(PartitionGroupServerDao.class);
         this.pgsImo = context.getBean(PartitionGroupServerImo.class);
+        this.pgDao = context.getBean(PartitionGroupDao.class);
+        this.pgImo = context.getBean(PartitionGroupImo.class);
         this.rsImo = context.getBean(RedisServerImo.class);
         
         this.setquorum = context.getBean(MGSetquorum.class);
@@ -106,7 +113,9 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
             final int curQ = q - d;
             final int newQ = curQ + 1;
-            setquorum.setquorum(master, newQ);
+            final String quorumMembers = pg.getQuorumMembersString(master,
+                    joinedPgsList) + " " + pgs.getName();
+            setquorum.setquorum(master, newQ, quorumMembers);
 
             try {
                 String response = rs.executeQuery("ping");
@@ -114,7 +123,8 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
                     continue;
                 }
             } catch (IOException e) {
-                setquorum.setquorum(master, curQ);
+                setquorum.setquorum(master, curQ,
+                        pg.getQuorumMembersString(master, joinedPgsList));
                 continue;
             }
 
@@ -149,11 +159,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
                     config.getServerJobWorkflowPgReconfigDelay(),
                     TimeUnit.MILLISECONDS, pg, nextEpoch, context);
         } else {
-            /*
-             * TODO : When all PGSes in a PG are green, it is able to
-             * clean mgen-history of PG to prevent history from growing
-             * too long to cause slow operations.
-             */ 
+            cleanMGen();
         }
     }
 
@@ -162,5 +168,23 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
         wfExecutor.performDelayed(ROLE_ADJUSTMENT,
                 config.getServerJobWorkflowPgReconfigDelay(),
                 TimeUnit.MILLISECONDS, pg, nextEpoch, context);
+    }
+
+    /*
+     * When all PGSes in a PG are green, it is able to
+     * clean mgen-history of PG to prevent history from growing
+     * too long to cause slow operations.
+     */ 
+    private void cleanMGen() throws MgmtZooKeeperException {
+        try {
+            PartitionGroupData pgM = PartitionGroupData.builder().from(pg.getData())
+                    .cleanMGen(config.getClusterPgMgenHistorySize()).build();
+            pgDao.updatePg(pg.getPath(), pgM);
+            pg.setData(pgM);
+        } catch (Exception e) {
+            throw new MgmtZooKeeperException(
+                    "Clean mgen history of " + pg + " fail, "
+                            + e.getMessage());
+        }
     }
 }

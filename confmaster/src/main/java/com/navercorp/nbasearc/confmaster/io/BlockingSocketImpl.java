@@ -29,6 +29,7 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 
 public class BlockingSocketImpl implements BlockingSocket {
@@ -36,6 +37,7 @@ public class BlockingSocketImpl implements BlockingSocket {
     private Socket socket;
     private BufferedReader in;
     private PrintWriter out;
+    private FirstHandshaker fh = null;
 
     private final String ip;
     private final int port;
@@ -179,6 +181,10 @@ public class BlockingSocketImpl implements BlockingSocket {
                 new BufferedWriter(
                     new OutputStreamWriter(socket.getOutputStream(), charset)));
         Logger.debug("Connection to {}:{} was established.", ip, port);
+        
+        if (fh != null) {
+            fh.handshake(in, out, delim);
+        }
     }
 
     public void close() throws IOException {
@@ -186,6 +192,15 @@ public class BlockingSocketImpl implements BlockingSocket {
         if (out != null) out.close();
         if (socket != null) socket.close();
         Logger.debug("Connection to {}:{} was closed.", ip, port);
+    }
+    
+    public void setFirstHandshaker(FirstHandshaker fh) {
+        this.fh = fh;
+    }
+    
+    public interface FirstHandshaker {
+        public void handshake(BufferedReader in, PrintWriter out, String delim)
+                throws IOException;
     }
 
 }

@@ -19,7 +19,9 @@ package com.navercorp.nbasearc.confmaster.server.cluster;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -79,11 +81,47 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         setNodeType(NodeType.PGS);
         setData(data);
         
-        setServerConnection(
-            new BlockingSocketImpl(
-                getData().getPmIp(), getData().getSmrMgmtPort(), 
-                config.getClusterPgsTimeout(), PGS_PING, 
-                config.getDelim(), config.getCharset()));
+        BlockingSocketImpl con = new BlockingSocketImpl(getData().getPmIp(),
+                getData().getSmrMgmtPort(), config.getClusterPgsTimeout(),
+                PGS_PING, config.getDelim(), config.getCharset());
+        con.setFirstHandshaker(new BlockingSocketImpl.FirstHandshaker() {
+            @Override
+            public void handshake(BufferedReader in, PrintWriter out, String delim)
+                    throws IOException {
+                String cmd = null;
+                
+                try {
+                    cmd = "smrversion";
+                    out.print(cmd + delim);
+                    out.flush();
+                    
+                    final String reply = in.readLine();
+                    if (reply.equals("+OK 201") == false) {
+                        return;
+                    }
+                } catch (IOException e) {
+                    Logger.info("Singleton request to SMR fail. cmd: " + cmd);
+                    throw e;
+                }
+                
+                try {
+                    cmd = "singleton confmaster";
+                    out.print(cmd + delim);
+                    out.flush();
+                    
+                    final String reply = in.readLine();
+                    if (reply.equals("+OK") == false) {
+                        Logger.info("Singleton request to SMR fail. cmd: " + cmd
+                                + ", reply: \"" + reply + "\"");
+                        throw new IOException("Singleton request to SMR fail. " + this);
+                    }
+                } catch (IOException e) {
+                    Logger.info("Singleton request to SMR fail. cmd: " + cmd);
+                    throw e;
+                }
+            }
+        });
+        setServerConnection(con);
         
         hbcRefData = new HBRefData();
         hbcRefData.setZkData(getData().getRole(), getData().getStateTimestamp(), stat.getVersion())
@@ -352,6 +390,37 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
+    public long getNewMasterRewindCseq(LogSequence logSeq) {
+        if (getData().getOldMasterSmrVersion().equals(SMR_VERSION_101)) {
+            Logger.info("new master rewind cseq: {}, om: {}",
+                    logSeq.getLogCommit(), getData().getOldMasterSmrVersion());
+            return logSeq.getLogCommit();
+        } else {
+            Logger.info("new master rewind cseq: {}, om: {}",
+                    logSeq.getLogCommit(), getData().getOldMasterSmrVersion());
+            return logSeq.getMax();
+        }
+    }
+    
+    public long getSlaveJoinSeq(LogSequence logSeq) {
+        if (getData().getOldMasterSmrVersion().equals(SMR_VERSION_101)) {
+            if (getData().getOldRole().equals(PGS_ROLE_MASTER)) {
+                final long seq = Math.min(logSeq.getLogCommit(),
+                        logSeq.getBeCommit());
+                Logger.info("slave join rewind cseq: {}, om: {}, or: {}",
+                        new Object[] { seq, getData().getOldMasterSmrVersion(),
+                                getData().getOldRole() });
+                return seq;
+            }
+        }
+
+        final long seq = logSeq.getLogCommit();
+        Logger.info("slave join rewind cseq: {}, om: {}, or: {}", new Object[] {
+                seq, getData().getOldMasterSmrVersion(),
+                getData().getOldRole() });
+        return seq;
+    }
+    
     static public RealState convertToState(String reply) {
         String[] tokens = reply.split(" ");
         String role;
@@ -427,6 +496,28 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         return logSeq;
     }
     
+    public String smrVersion() throws MgmtSmrCommandException {
+        final String cmd = "smrversion";
+        
+        try {
+            // Send 'role master'
+            String reply = executeQuery(cmd);
+            
+            String []toks = reply.split(" ");
+            Logger.info("get smrversion success {}, reply: \"{}\"", this, reply);
+            if (toks[0].equals(ERROR)) {
+                return SMR_VERSION_101;
+            } else if (toks[1].equals(SMR_VERSION_201)) {
+                return SMR_VERSION_201;
+            } else {
+                throw new MgmtSmrCommandException("Get smrversion error.");
+            }
+        } catch (IOException e) {
+            Logger.error("get smrversion fail. {}", this);
+            throw new MgmtSmrCommandException("Get smrversion error. " + e.getMessage());
+        }
+    }
+    
     private void roleMasterCmdResult(String cmd, String reply, long jobID,
             WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         // Make information for logging
@@ -454,12 +545,17 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
-    public void roleMaster(PartitionGroup pg,
-            LogSequence logSeq,
-            int quorum, long jobID, WorkflowLogDao workflowLogDao)
-            throws MgmtSmrCommandException {
-        final String cmd = "role master " + getName() + " " + quorum
-                + " " + logSeq.getMax();
+    public void roleMaster(String smrVersion, PartitionGroup pg,
+            LogSequence logSeq, int quorum, String quorumMembers, long jobID,
+            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
+        String cmd;
+        if (smrVersion.equals(SMR_VERSION_201)) {
+            cmd = "role master " + getName() + " " + quorum + " "
+                    + getNewMasterRewindCseq(logSeq) + " " + quorumMembers;
+        } else {
+            cmd = "role master " + getName() + " " + quorum + " "
+                    + getNewMasterRewindCseq(logSeq);
+        }
         
         try {
             // Workflow log
@@ -494,18 +590,31 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     
     public RoleMasterZkResult roleMasterZk(PartitionGroup pg,
             List<PartitionGroupServer> pgsList, LogSequence logSeq, int quorum,
-            long jobID, WorkflowLogDao workflowLogDao)
+            String masterVersion, long jobID, WorkflowLogDao workflowLogDao)
             throws MgmtSmrCommandException {
         try {
             PartitionGroupData pgM = 
                 PartitionGroupData.builder().from(pg.getData())
                     .addMasterGen(logSeq.getMax()).build();
             
+            // For backward compatibility, confmaster adds 1 to currentGen
+            // since 1.2 and smaller version of confmaster follow a rule, PG.mGen + 1 = PGS.mGen.
+            // Notice that it add 2 to currentGen because pg.getData().currentGen has not updated yet.
+            // Please see below for more details.
+            // +--------------------+---------+----------+
+            // |                    | PG.mGen | PGS.mGen |
+            // +--------------------+---------+----------+
+            // | As-is              | 3       | 4        |
+            // | Update Master.mGen | 3       | 5(3+2)   |
+            // | Update PG.mGen     | 4(3+1)  | 5        |
+            // | To-be              | 4       | 5        |
+            // +--------------------+---------+----------+
             PartitionGroupServerData pgsM = 
                 PartitionGroupServerData.builder().from(getData())
-                    .withMasterGen(pg.getData().currentGen() + 1)
+                    .withMasterGen(pg.getData().currentGen() + 2)
                     .withRole(PGS_ROLE_MASTER)
                     .withOldRole(PGS_ROLE_MASTER)
+                    .withOldMasterSmrVersion(masterVersion)
                     .withColor(GREEN).build();
             
             List<Op> ops = new ArrayList<Op>();
@@ -562,7 +671,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         String cmd = "role slave " + getName() + " "
                 + master.getData().getPmIp() + " "
                 + master.getData().getSmrBasePort() + " "
-                + targetLogSeq.getLogCommit();
+                + getSlaveJoinSeq(targetLogSeq);
         try {
             workflowLogDao.log(jobID,
                     SEVERITY_MODERATE, "RolsSlave",
@@ -592,13 +701,14 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
-    public RoleSlaveZkResult roleSlaveZk(long jobID, int mGen, Color color,
+    public RoleSlaveZkResult roleSlaveZk(long jobID, int mGen, Color color, String masterVersion,
             WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
         PartitionGroupServerData pgsM = 
             PartitionGroupServerData.builder().from(getData())
                 .withMasterGen(mGen)
                 .withRole(PGS_ROLE_SLAVE)
                 .withOldRole(PGS_ROLE_SLAVE)
+                .withOldMasterSmrVersion(masterVersion)
                 .withColor(color).build();
         try {
             pgsDao.updatePgs(getPath(), pgsM);
@@ -653,8 +763,71 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
 
-    public void setquorum(int q) throws MgmtSetquorumException {
-        final String cmd = "setquorum " + q;
+    /*
+     * return List<String> containing [quorum, nid1, nid2, ...]
+     */
+    public List<String> getQuorumV() throws MgmtSmrCommandException {
+        final String cmd = "getquorumv";
+
+        try {
+            String reply = executeQuery(cmd);
+            String []toks = reply.split(" ");
+            if (!toks[0].equals(S2C_OK)) {
+                final String msg = "getquorumv fail. " + this + ", cmd: " + cmd
+                        + ", reply: " + reply;
+                Logger.error(msg);
+                throw new MgmtSmrCommandException(msg);
+            }
+            
+            List<String> ret = new ArrayList<String>();
+            for (int i = 1; i < toks.length; i++) {
+                ret.add(toks[i]);
+            }
+            
+            Logger.info("getquorumv success. {}, reply: {}", this, reply);
+            return ret;
+        } catch (IOException e) {
+            final String msg = "getquorumv fail. " + this + ", cmd: " + cmd
+                    + ", exception: " + e.getMessage();
+            Logger.warn(msg);
+            throw new MgmtSmrCommandException(msg);
+        }
+    }
+    
+    public int getQuorum() throws MgmtSmrCommandException {
+        final String cmd = "getquorum";
+
+        try {
+            String reply = executeQuery(cmd);
+            
+            try {
+                final int q = Integer.valueOf(reply);
+                Logger.info("getquorum success. {}, reply: {}", this, reply);
+                return q;
+            } catch (NumberFormatException e) {            
+                final String msg = "getquorum fail. " + this + ", cmd: " + cmd
+                        + ", reply: " + reply;
+                Logger.error(msg);                
+                throw new MgmtSmrCommandException(msg);
+            }
+        } catch (IOException e) {
+            final String msg = "getquorum fail. " + this + ", cmd: " + cmd
+                    + ", exception: " + e.getMessage();
+            Logger.warn(msg);
+            throw new MgmtSmrCommandException(msg);
+        }
+    }
+    
+    public void setquorum(int q, String quorumMembers)
+            throws MgmtSetquorumException, MgmtSmrCommandException {
+        final String v = smrVersion();
+        String cmd; 
+        if (v.equals(SMR_VERSION_201)) {
+            cmd = "setquorum " + q + " " + quorumMembers;
+        } else {
+            cmd = "setquorum " + q;
+        }
+        
         try {
             String reply = executeQuery(cmd);
             if (!reply.equals(S2C_OK)) {

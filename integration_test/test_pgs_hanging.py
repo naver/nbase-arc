@@ -486,31 +486,17 @@ class TestPGSHanging( unittest.TestCase ):
         smr2.write( 'fi delay sleep 1 8000\r\n' )
         time.sleep( 7 )
 
-        # wait for rejoin as a slave
         success = False
-        for i in range( 20 ):
-            role = util.get_role_of_server( s1 )
-            if role == c.ROLE_SLAVE:
-                ts_after = util.get_timestamp_of_pgs( s1 )
-                if ts_after != -1 and ts_before1 == ts_after:
-                    success = True
-                    break
-            time.sleep( 1 )
-        self.assertEqual( success, True, 'failed to rejoin as a slave. %s:%d' % (s2['ip'], s2['smr_mgmt_port']) )
+        for i in xrange(20):
+            ret = util.check_cluster(self.cluster['cluster_name'], self.mgmt_ip, self.mgmt_port, check_quorum=True)
+            if ret:
+                success = True
+                break
+            time.sleep(1)
+        self.assertEqual(success, True, 'unstable cluster')
 
-        success = False
-        for i in range( 20 ):
-            role = util.get_role_of_server( s2 )
-            if role == c.ROLE_SLAVE:
-                ts_after = util.get_timestamp_of_pgs( s2 )
-                if ts_after != -1 and ts_before2 == ts_after:
-                    success = True
-                    break
-            time.sleep( 1 )
-        self.assertEqual( success, True, 'failed to rejoin as a slave. %s:%d' % (s2['ip'], s2['smr_mgmt_port']) )
-
-        util.log( 'server state transition after hang' )
-        util.log_server_state( self.cluster )
+        # get master, slave1, slave2
+        m, s1, s2 = util.get_mss( self.cluster )
 
         redis1 = redis_mgmt.Redis( s1['id'] )
         ret = redis1.connect( s1['ip'], s1['redis_port'] )

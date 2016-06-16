@@ -16,6 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.workflow;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 
 import java.io.IOException;
@@ -30,8 +31,12 @@ import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
+/*
+ * Dead workflow. This workflow does nothing since RA/toRed makes master lconn.
+ */
 public class QuorumAdjustmentWorkflow extends CascadingWorkflow {
     final ApplicationContext context;
     final Config config;
@@ -42,7 +47,7 @@ public class QuorumAdjustmentWorkflow extends CascadingWorkflow {
 
     public QuorumAdjustmentWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg);
+        super(cascading, pg, context.getBean(PartitionGroupImo.class));
 
         this.context = context;
         this.config = context.getBean(Config.class);
@@ -63,21 +68,55 @@ public class QuorumAdjustmentWorkflow extends CascadingWorkflow {
             return;
         }
         
-        String q; 
-        try {
-            q = master.executeQuery("getquorum");
-        } catch (IOException e) {
-            throw new MgmtSmrCommandException(e.getMessage());
+        if (master.smrVersion().equals(SMR_VERSION_201)) {
+            _201(pg, joinedPgsList, master, d);
+        } else {
+            _101(joinedPgsList, master, d);
         }
-        
-        final int activeQ = Integer.valueOf(q);
+    }
+    
+    private void _201(PartitionGroup pg,
+            List<PartitionGroupServer> joinedPgsList,
+            PartitionGroupServer master, int d) throws MgmtSmrCommandException,
+            MgmtSetquorumException {
+        final List<String> activeQuorumMembers = master.getQuorumV();
+        final int activeQ = Integer.valueOf(activeQuorumMembers.get(0));
+        activeQuorumMembers.remove(0);
+
+        final List<String> tobeQuorumMembers = pg.getQuorumMembers(master,
+                joinedPgsList);
+        final int tobeQ = pg.getData().getQuorum() - d;
+
+        boolean e = true;
+        if (activeQ != tobeQ) {
+            e = false;
+        } else {
+            for (String m : tobeQuorumMembers) {
+                if (!activeQuorumMembers.contains(m)) {
+                    e = false;
+                    break;
+                }
+            }
+        }
+
+        if (!e) {
+            setquorum.setquorum(master, tobeQ,
+                    pg.getQuorumMembersString(master, joinedPgsList));
+        }
+    }
+
+    private void _101(List<PartitionGroupServer> joinedPgsList,
+            PartitionGroupServer master, int d) throws MgmtSmrCommandException,
+            MgmtSetquorumException {
+        final int activeQ = master.getQuorum();
 
         final int tobeQ = pg.getData().getQuorum() - d;
         if (tobeQ == activeQ) {
             return;
         }
 
-        setquorum.setquorum(master, tobeQ);
+        setquorum.setquorum(master, tobeQ,
+                pg.getQuorumMembersString(master, joinedPgsList));
     }
 
     @Override

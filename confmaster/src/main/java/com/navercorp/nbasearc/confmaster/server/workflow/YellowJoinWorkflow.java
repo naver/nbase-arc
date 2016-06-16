@@ -33,6 +33,7 @@ import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class YellowJoinWorkflow extends CascadingWorkflow {
@@ -48,7 +49,7 @@ public class YellowJoinWorkflow extends CascadingWorkflow {
 
     public YellowJoinWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg);
+        super(cascading, pg, context.getBean(PartitionGroupImo.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);

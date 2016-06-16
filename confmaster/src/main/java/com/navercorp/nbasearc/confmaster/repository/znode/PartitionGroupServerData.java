@@ -35,7 +35,7 @@ import static com.navercorp.nbasearc.confmaster.Constant.*;
 @JsonPropertyOrder(
         { "pg_ID", "pm_Name", "pm_IP", "backend_Port_Of_Redis",
         "replicator_Port_Of_SMR", "management_Port_Of_SMR", "state",
-        "stateTimestamp", "hb", "smr_Role", "old_SMR_Role", "color", "master_Gen" })
+        "stateTimestamp", "hb", "smr_Role", "old_SMR_Role", "color", "master_Gen", "old_master_version" })
 public class PartitionGroupServerData implements Cloneable {
     
     @JsonProperty("pg_ID")
@@ -58,10 +58,14 @@ public class PartitionGroupServerData implements Cloneable {
     private String hb;
     @JsonProperty("smr_Role")
     private String role;
+    @JsonProperty("old_SMR_Role")
+    private String oldRole = PGS_ROLE_NONE;
     @JsonProperty("color")
     private Color color;
     @JsonProperty("master_Gen")
     private int masterGen;
+    @JsonProperty("old_master_version")
+    private String oldMasterSmrVersion = SMR_VERSION_101;
 
     @JsonIgnore
     private final ObjectMapper mapper = new ObjectMapper();
@@ -159,6 +163,14 @@ public class PartitionGroupServerData implements Cloneable {
         this.role = role;
     }
 
+    public String getOldRole() {
+        return oldRole;
+    }
+
+    public void setOldRole(String oldRole) {
+        this.oldRole = oldRole;
+    }
+
     public Color getColor() {
         return color;
     }
@@ -189,6 +201,14 @@ public class PartitionGroupServerData implements Cloneable {
 
     protected void setStateTimestamp(long stateTimestamp) {
         this.stateTimestamp = stateTimestamp;
+    }
+
+    public String getOldMasterSmrVersion() {
+        return oldMasterSmrVersion;
+    }
+
+    public void setOldMasterVersion(String oldMasterSmrVersion) {
+        this.oldMasterSmrVersion = oldMasterSmrVersion;
     }
     
     @Override

@@ -18,10 +18,6 @@ package com.navercorp.nbasearc.confmaster.repository.znode;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 
-import java.util.Arrays;
-
-import com.navercorp.nbasearc.confmaster.logger.Logger;
-
 public class PgsDataBuilder {
 
     private int pgId;
@@ -34,8 +30,10 @@ public class PgsDataBuilder {
     private long stateTimestamp;
     private String hb;
     private String role;
+    private String oldRole;
     private Color color;
     private int masterGen;
+    private String oldMasterSmrVersion;
 
     public PgsDataBuilder from(PartitionGroupServerData data) {
         withPgId(data.getPgId());
@@ -48,8 +46,10 @@ public class PgsDataBuilder {
         withStateTimestamp(data.getStateTimestamp());
         withHb(data.getHb());
         withRole(data.getRole());
+        withOldRole(data.getOldRole());
         withColor(data.getColor());
         withMasterGen(data.getMasterGen());
+        withOldMasterSmrVersion(data.getOldMasterSmrVersion());
         return this;
     }
 
@@ -114,8 +114,9 @@ public class PgsDataBuilder {
         
         return this;
     }
-
+    
     public PgsDataBuilder withOldRole(String oldRole) {
+        this.oldRole = oldRole;
         return this;
     }
     
@@ -128,13 +129,20 @@ public class PgsDataBuilder {
         this.masterGen = masterGen;
         return this;
     }
+        
+    public PgsDataBuilder withOldMasterSmrVersion(String smrVersion) {
+        this.oldMasterSmrVersion = smrVersion;
+        return this;
+    }
 
     public PartitionGroupServerData build() {
         PartitionGroupServerData data = new PartitionGroupServerData();
         data.initialize(pgId, pmName, pmIp, redisPort, smrBasePort,
                 smrMgmtPort, state, role, color, masterGen, hb);
         ;
+        data.setOldRole(oldRole);
         data.setStateTimestamp(stateTimestamp);
+        data.setOldMasterVersion(oldMasterSmrVersion);
         return data;
     }
 

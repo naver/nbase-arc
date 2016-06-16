@@ -37,6 +37,7 @@ import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.SortedLogSeqSet;
+import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class MasterElectionWorkflow extends CascadingWorkflow {
@@ -58,7 +59,7 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
     public MasterElectionWorkflow(PartitionGroup pg,
             PartitionGroupServer masterHint, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg);
+        super(cascading, pg, context.getBean(PartitionGroupImo.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);

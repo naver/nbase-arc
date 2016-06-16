@@ -123,6 +123,9 @@ public class Constant {
         GREEN, BLUE, YELLOW, RED;
     }
     
-    public static String FORCED = "forced"; 
+    public static String FORCED = "forced";
+    
+    public static String SMR_VERSION_101 = "101";
+    public static String SMR_VERSION_201 = "201";
 
 }

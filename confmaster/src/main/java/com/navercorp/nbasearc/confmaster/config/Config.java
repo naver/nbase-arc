@@ -33,6 +33,8 @@ public class Config {
     @Value("${confmaster.zookeeper.address}")
     private String zooKeeperAddress;
     
+    @Value("${confmaster.cluster.pg.mgen.history.size}")
+    private Integer clusterPgMgenHistorySize;
     @Value("${confmaster.cluster.pgs.timeout}")
     private Integer clusterPgsTimeout;
     @Value("${confmaster.cluster.gw.timeout}")
@@ -96,6 +98,10 @@ public class Config {
 
     public String getZooKeeperAddress() {
         return zooKeeperAddress;
+    }
+
+    public Integer getClusterPgMgenHistorySize() {
+        return clusterPgMgenHistorySize;
     }
 
     public Integer getClusterPgsTimeout() {

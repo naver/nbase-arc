@@ -42,8 +42,9 @@ public class MERoleMasterFI extends MERoleMaster {
             throws MgmtSmrCommandException {
         if (count > 0) {
             if (successFail) {
-                newMaster.roleMaster(pg, newMasterLog, newQ, jobID,
-                        workflowLogDao);
+                newMaster.roleMaster(newMaster.smrVersion(), pg, newMasterLog,
+                        newQ, pg.getQuorumMembersString(newMaster, joinedPgsList), 
+                        jobID, workflowLogDao);
                 count--;
                 throw new MgmtSmrCommandException(
                         "[FI] ME role master success fail. " + newMaster);

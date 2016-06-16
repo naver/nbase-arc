@@ -40,12 +40,16 @@ public class MERoleMaster {
     public void roleMaster(PartitionGroupServer newMaster, PartitionGroup pg,
             LogSequence newMasterLog, List<PartitionGroupServer> joinedPgsList,
             int newQ, long jobID) throws MgmtSmrCommandException {
-        newMaster.roleMaster(pg, newMasterLog, newQ, jobID, workflowLogDao);
+        final String smrVersion = newMaster.smrVersion();
+        
+        newMaster.roleMaster(smrVersion, pg, newMasterLog, newQ,
+                pg.getQuorumMembersString(newMaster, joinedPgsList), jobID,
+                workflowLogDao);
 
         RoleMasterZkResult result = newMaster.roleMasterZk(pg, joinedPgsList,
-                newMasterLog, newQ, jobID, workflowLogDao);
+                newMasterLog, newQ, smrVersion, jobID, workflowLogDao);
         newMaster.setData(result.pgsM);
         pg.setData(result.pgM);
     }
-
+    
 }

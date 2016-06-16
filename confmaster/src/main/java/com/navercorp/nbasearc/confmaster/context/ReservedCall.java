@@ -19,19 +19,19 @@ package com.navercorp.nbasearc.confmaster.context;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
-public class ReservedCall<T> {
+public class ReservedCall {
     
-    private final Callable<T> call;
+    private final Callable<Object> call;
     private final long delay;
     private final TimeUnit timeUnit;
 
-    public ReservedCall(Callable<T> call, long delay, TimeUnit timeUnit) {
+    public ReservedCall(Callable<Object> call, long delay, TimeUnit timeUnit) {
         this.call = call;
         this.delay = delay;
         this.timeUnit = timeUnit;
     }
 
-    public Callable<T> getCall() {
+    public Callable<Object> getCall() {
         return call;
     }
 

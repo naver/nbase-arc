@@ -238,6 +238,7 @@ public class PgReconfigurationTest extends BasicSetting {
         }
     }
     
+    @Test
     public void masterElection() throws Exception {
         // Initialize
         createCluster();
@@ -289,7 +290,7 @@ public class PgReconfigurationTest extends BasicSetting {
         assertEquals(PGS_ROLE_NONE, p1.getData().getRole());
         assertEquals(SERVER_STATE_FAILURE, p1.getData().getState());
         assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(0, p1.getData().getMasterGen());
+        assertEquals(1, p1.getData().getMasterGen());
         
         // Recover p1
         // N M -> S M
@@ -335,7 +336,7 @@ public class PgReconfigurationTest extends BasicSetting {
         assertEquals(PGS_ROLE_NONE, p2.getData().getRole());
         assertEquals(SERVER_STATE_FAILURE, p2.getData().getState());
         assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-        assertEquals(1, p2.getData().getMasterGen());
+        assertEquals(2, p2.getData().getMasterGen());
         
         MasterFinder masterFinder = new MasterFinder(getPgsList());
         await("reconfiguration for master.").atMost(assertionTimeout, SECONDS).until(masterFinder);
@@ -383,7 +384,7 @@ public class PgReconfigurationTest extends BasicSetting {
         await("reconfiguration for slave.").atMost(assertionTimeout, SECONDS).until(slaveFinder);
         assertEquals(1, slaveFinder.getSlaves().size());
         for (PartitionGroupServer slv : slaveFinder.getSlaves()) {
-            validateNormal(slv, pg, PGS_ROLE_SLAVE, 3);
+            validateNormal(slv, pg, PGS_ROLE_SLAVE, 4);
         }
     }
 

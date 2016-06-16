@@ -21,17 +21,26 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumExcept
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
+import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 
 public abstract class CascadingWorkflow {
     final boolean cascading;
     final PartitionGroup pg;
+    final PartitionGroupImo pgImo;
     
-    CascadingWorkflow(boolean cascading, PartitionGroup pg) {
+    CascadingWorkflow(boolean cascading, PartitionGroup pg,
+            PartitionGroupImo pgImo) {
         this.cascading = cascading;
         this.pg = pg;
+        this.pgImo = pgImo;
     }
     
     public void execute() throws Exception {
+        if (pgImo.get(pg.getName(), pg.getClusterName()) == null) {
+            Logger.info("pg does not exist. exit workflow. {}", pg);
+            return;
+        }
+
         Logger.info("begin {}", pg);
         try {
             _execute();
