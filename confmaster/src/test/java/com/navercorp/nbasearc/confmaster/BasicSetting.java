@@ -679,5 +679,22 @@ public class BasicSetting {
             return quorum == Integer.valueOf(master.execute("getquorum"));
         }
     }
+
+    public static class MasterGenValidator implements Callable<Boolean> {
+        final PartitionGroupServer pgs;
+        final int mGen; 
+
+        public MasterGenValidator(PartitionGroupServer pgs, int mGen) {
+            this.pgs = pgs;
+            this.mGen = mGen;
+        }
+
+        public Boolean call() throws Exception {
+            if (pgs.getData().getMasterGen() == mGen) {
+                return true;
+            }
+            return false;
+        }
+    }
     
 }
