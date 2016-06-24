@@ -40,7 +40,7 @@ import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
-public class UpdateHeartbeatCheckerWorkflow {
+public class TotalInspectionWorkflow {
     
     private final WorkflowExecutor workflowExecutor;
     
@@ -53,7 +53,7 @@ public class UpdateHeartbeatCheckerWorkflow {
     
     private final WorkflowLogDao workflowLogDao; 
 
-    protected UpdateHeartbeatCheckerWorkflow(ApplicationContext context) {
+    protected TotalInspectionWorkflow(ApplicationContext context) {
         this.zookeeper = context.getBean(ZooKeeperHolder.class);
         
         this.workflowExecutor = context.getBean(WorkflowExecutor.class);

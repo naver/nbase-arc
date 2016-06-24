@@ -66,6 +66,9 @@ public class PgReconfigurationTest extends BasicSetting {
     @Autowired
     Config config;
     
+    @Autowired
+    ConfMaster confMaster;
+    
     @BeforeClass
     public static void beforeClass() throws Exception {
         BasicSetting.beforeClass();
@@ -93,6 +96,8 @@ public class PgReconfigurationTest extends BasicSetting {
         });
         cmThread.start();
         latch.await();
+
+        confMaster.setState(ConfMaster.RUNNING);
         
         joinLeave.initialize(context);
         

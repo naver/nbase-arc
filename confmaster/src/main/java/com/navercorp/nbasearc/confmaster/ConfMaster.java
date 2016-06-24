@@ -45,6 +45,11 @@ import com.navercorp.nbasearc.confmaster.statistics.Statistics;
 @Component
 public class ConfMaster {
     
+    public final static int LOADING = 0;
+    public final static int READY = 1;
+    public final static int RUNNING = 2;
+    private Integer state = LOADING;
+
     @Autowired
     private ApplicationContext context;
     
@@ -73,7 +78,7 @@ public class ConfMaster {
     private GracefulTerminator terminator;
     
     private ClusterContollerServer server;
-    
+
     public void initialize() throws InterruptedException,
             MgmtZooKeeperException, KeeperException, Exception {
         terminator = new GracefulTerminator(
@@ -154,6 +159,20 @@ public class ConfMaster {
     public void terminate() {
         terminator.terminate();;
         terminator.await();
+    }
+
+    public Integer getState() {
+        synchronized (this.state) {
+            return state;
+        }
+    }
+
+    public void setState(int state) {
+        synchronized (this.state) {
+            if (this.state < state) {
+                this.state = state;
+            }
+        }
     }
     
 }

@@ -30,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
@@ -99,7 +100,8 @@ public class PartitionGroupService {
     
     @CommandMapping(name="pg_add",
             usage="pg_add <cluster_name> <pgid>\r\n" +
-                    "add a single partition group")
+                    "add a single partition group",
+            requiredState=ConfMaster.RUNNING)
     public String pgAdd(String clusterName, String pgId)
             throws MgmtCommandWrongArgumentException, NodeExistsException,
             MgmtZooKeeperException, NoNodeException {
@@ -160,7 +162,8 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_del",
             usage="pg_del <cluster_name> <pgid>\r\n" +
-                    "delete a single partition group")
+                    "delete a single partition group",
+            requiredState=ConfMaster.RUNNING)
     public String pgDel(String clusterName, String pgId)
             throws MgmtZooKeeperException {
         // Check
@@ -225,7 +228,8 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_info",
             usage="pg_info <cluster_name> <pg_id>\r\n" +
-                    "get information of a Partition Group")
+                    "get information of a Partition Group",
+            requiredState=ConfMaster.READY)
     public String pgInfo(String clusterName, String pgid) {
         // Check
         if (null == clusterImo.get(clusterName)) {
@@ -252,7 +256,8 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="pg_ls",
-            usage="pg_ls <cluster_name>")
+            usage="pg_ls <cluster_name>",
+            requiredState=ConfMaster.READY)
     public String pgLs(String clusterName) throws KeeperException,
             InterruptedException {
         // In Memory
@@ -283,7 +288,8 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="role_change",
-            usage="role_change <cluster_name> <pgs_id>")
+            usage="role_change <cluster_name> <pgs_id>",
+            requiredState=ConfMaster.RUNNING)
     public String roleChange(String clusterName, String pgsid)
             throws KeeperException, InterruptedException {
         Cluster cluster = clusterImo.get(clusterName);
@@ -381,7 +387,8 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="pg_iq",
-            usage="pg_iq <cluster_name> <pg_id>")
+            usage="pg_iq <cluster_name> <pg_id>",
+            requiredState=ConfMaster.RUNNING)
     public String pgIq(String clusterName, String pgId) throws Exception {
         // In Memory
         PartitionGroup pg = pgImo.get(pgId, clusterName);
@@ -406,7 +413,8 @@ public class PartitionGroupService {
     }
 
     @CommandMapping(name="pg_dq",
-            usage="pg_dq <cluster_name> <pg_id>")
+            usage="pg_dq <cluster_name> <pg_id>",
+            requiredState=ConfMaster.RUNNING)
     public String pgDq(String clusterName, String pgId) throws Exception {
         // In Memory
         PartitionGroup pg = pgImo.get(pgId, clusterName);
@@ -433,8 +441,10 @@ public class PartitionGroupService {
                 .pgsList(READ).pg(WRITE, pgId);
     }
 
-    @CommandMapping(name = "op_wf", usage = "op_wf <cluster_name> <pg_id> <wf> <cascading> forced\r\n"
-            + "wf: RA, QA, ME, YJ, BJ, MG")
+    @CommandMapping(name = "op_wf", 
+            usage = "op_wf <cluster_name> <pg_id> <wf> <cascading> forced\r\n" 
+                    + "wf: RA, QA, ME, YJ, BJ, MG",
+            requiredState=ConfMaster.RUNNING)
     public String opWf(String clusterName, String pgId, String wf, boolean cascading, String mode) throws Exception {
         if (!mode.equals(FORCED)) {
             return EXCEPTIONMSG_NOT_FORCED_MODE;

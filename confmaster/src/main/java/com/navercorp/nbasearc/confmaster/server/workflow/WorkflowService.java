@@ -345,18 +345,18 @@ public class WorkflowService {
         }
     }
     
-    @WorkflowMapping(name=UPDATE_HEARTBEAT_CHECKER, privilege=LEADER)
+    @WorkflowMapping(name=TOTAL_INSPECTION, privilege=LEADER)
     public Future<JobResult> updateHeartbeatChecker()
             throws MgmtZooKeeperException {
-        UpdateHeartbeatCheckerWorkflow updateHeartbeatCheckerWorkflow = 
-                new UpdateHeartbeatCheckerWorkflow(context);
+        TotalInspectionWorkflow updateHeartbeatCheckerWorkflow = 
+                new TotalInspectionWorkflow(context);
         
         updateHeartbeatCheckerWorkflow.execute(executor);
         
         return null;
     }
 
-    @LockMapping(name=UPDATE_HEARTBEAT_CHECKER)
+    @LockMapping(name=TOTAL_INSPECTION)
     public void updateHeartbeatCheckerLock(HierarchicalLockHelper lockHelper) {
         lockHelper.root(WRITE);
     }

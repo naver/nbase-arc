@@ -37,10 +37,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
@@ -59,6 +61,9 @@ import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
 @ContextConfiguration("classpath:applicationContext-test.xml")
 public class CommandTest extends BasicSetting {
     
+    @Autowired
+    ConfMaster confMaster;
+    
     @BeforeClass
     public static void beforeClass() throws Exception {
         BasicSetting.beforeClass();
@@ -68,6 +73,7 @@ public class CommandTest extends BasicSetting {
     @Before
     public void before() throws Exception {
         super.before();
+        confMaster.setState(ConfMaster.RUNNING);
         createPm();
         createCluster();
         createPg();
@@ -616,10 +622,10 @@ public class CommandTest extends BasicSetting {
         pgsData.initialize(0, pmName, pmData.getIp(), 8109, 8100, 8103,
                 SERVER_STATE_FAILURE, PGS_ROLE_NONE, Color.RED, -1, HB_MONITOR_NO);
         HBRefData hbcRefData = new HBRefData();
-        hbcRefData.setLastState(SERVER_STATE_UNKNOWN);
-        hbcRefData.setLastStateTimestamp(0);
+        hbcRefData.setLastState(pgsData.getRole());
+        hbcRefData.setLastStateTimestamp(pgsData.getStateTimestamp());
         hbcRefData.setSubmitMyOpinion(false);
-        hbcRefData.setZkData(PGS_ROLE_NONE, 0, 0);
+        hbcRefData.setZkData(pgsData.getRole(), pgsData.getStateTimestamp(), 0);
         String pgsInfoAll = "{\"MGMT\":" + pgsData + ",\"HBC\":" + hbcRefData + "}";
         assertEquals("check result of pgs_info_all", pgsInfoAll, result.getMessages().get(0));
 

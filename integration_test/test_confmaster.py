@@ -31,6 +31,7 @@ import load_generator
 import functools
 from arcci.arcci import *
 from ctypes import *
+import pdb
 
 cluster_2_name = 'test_lock'
 cluster_2_pg_count = 4
@@ -1715,3 +1716,71 @@ class TestConfMaster(unittest.TestCase):
             # shutdown cluster
             ret = default_cluster.finalize(cluster)
             self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
+
+    def test_no_stale_info_in_new_leader(self):
+        util.print_frame()
+        
+        try:
+            ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+            if ret is not 0:
+                default_cluster.finalize( self.cluster )
+            self.assertEquals( ret, 0, 'failed to TestClusteredConfigurator.initialize' )
+
+            # Run new ConfMaster
+            s = self.cluster['servers'][0]
+            new_cm = {}
+            new_cm['id'] = 5000
+            new_cm['ip'] = s['ip']
+            new_cm['zk_port'] = s['zk_port']
+
+            ret = testbase.setup_cm(5000)
+            self.assertEquals(0, ret, 'failed to copy heartbeat checker, server:%d' % new_cm['id'])
+
+            ret = testbase.request_to_start_cm(5000, 5000)
+            self.assertEquals(0, ret,
+                               'failed to request_to_start_cm, server:%d' % new_cm['id'])
+        
+            # Remove all PGS and GW in a PM
+            for s in self.cluster['servers']:
+                reply = ''
+                try:
+                    cmd = 'pgs_leave %s %d forced' % (s['cluster_name'], s['id'])
+                    reply = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
+                    self.assertEquals(json.loads(reply)['state'], 'success', 'Execution fail, cmd: "%s"' % cmd)
+
+                    cmd = 'pgs_del %s %d' % (s['cluster_name'], s['id'])
+                    reply = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
+                    self.assertEquals(json.loads(reply)['state'], 'success', 'Execution fail, cmd: "%s"' % cmd)
+
+                    cmd = 'gw_del %s %d' % (s['cluster_name'], s['id'])
+                    reply = util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], cmd)
+                    self.assertEquals(json.loads(reply)['state'], 'success', 'Execution fail, cmd: "%s"' % cmd)
+                except ValueError as e:
+                    util.log('cmd: "%s", reply: "%s", exception: %s' % (cmd, reply, str(e)))
+                    raise e
+
+            # Shuwdown Leader-Confmaster
+            for s in self.cluster['servers']:
+                self.assertEquals( 0, testbase.request_to_shutdown_cm(s),
+                                   'failed to request_to_shutdown_cm, server:%d' % s['id'] )
+
+            for i in xrange(30):
+                time.sleep(1)
+                reply = util.cm_command(new_cm['ip'], 5000, 'cluster_ls')
+                if json.loads(reply)['state'] == 'success':
+                    break
+
+            # Add PGS
+            cmd = 'pgs_add %s 100 %d %s %s %d %d' % (s['cluster_name'], s['pg_id'], s['pm_name'], s['ip'], s['smr_base_port'], s['redis_port']) 
+            reply = util.cm_command(new_cm['ip'], 5000, cmd)
+            self.assertEquals(json.loads(reply)['state'], 'success', 'Execution fail, cmd: "%s", reply: "%s"' % (cmd, reply))
+
+            # Add GW
+            cmd = 'gw_add %s 100 %s %s %d' % (s['cluster_name'], s['pm_name'], s['ip'], s['gateway_port']) 
+            reply = util.cm_command(new_cm['ip'], 5000, cmd)
+            self.assertEquals(json.loads(reply)['state'], 'success', 'Execution fail, cmd: "%s", reply: "%s"' % (cmd, reply))
+          
+        finally:
+            ret = default_cluster.finalize( self.cluster ) 
+            self.assertEquals( ret, 0, 'failed to TestClusteredConfigurator.finalize' )
+

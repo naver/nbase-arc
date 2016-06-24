@@ -38,6 +38,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
@@ -49,6 +50,9 @@ import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 @ContextConfiguration("classpath:applicationContext-test.xml")
 public class Workflow201Test extends BasicSetting {
 
+    @Autowired
+    ConfMaster confMaster;
+    
     @BeforeClass
     public static void beforeClass() throws Exception {
         LeaderState.setLeader();
@@ -58,6 +62,7 @@ public class Workflow201Test extends BasicSetting {
     @Before
     public void before() throws Exception {
         super.before();
+        confMaster.setState(ConfMaster.RUNNING);
         MockitoAnnotations.initMocks(this);
     }
 

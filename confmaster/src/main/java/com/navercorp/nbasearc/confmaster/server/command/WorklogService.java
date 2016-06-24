@@ -25,6 +25,7 @@ import org.codehaus.jackson.map.JsonMappingException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
@@ -39,7 +40,9 @@ public class WorklogService {
     @Autowired
     private ZkWorkflowLogDao workflowLogDao;
 
-    @CommandMapping(name="worklog_info", usage="worklog_info")
+    @CommandMapping(name="worklog_info", 
+            usage="worklog_info",
+            requiredState=ConfMaster.READY)
     public String worklogInfo() throws JsonParseException, JsonMappingException,
             KeeperException, InterruptedException, IOException {
         if (workflowLogDao.getNumLogs() == 0) {
@@ -66,7 +69,8 @@ public class WorklogService {
     
     @CommandMapping(name="worklog_get", 
             usage="worklog_get <start log number> <end log number>\r\n" +
-                    "get workflow logs")
+                    "get workflow logs",
+            requiredState=ConfMaster.READY)
     public String worklogGet(Long requestedLogStartNo, Long requestedLogEndNo)
             throws MgmtZooKeeperException {
         String err = workflowLogDao.isValidLogNo(requestedLogStartNo, requestedLogEndNo);
@@ -111,7 +115,8 @@ public class WorklogService {
     
     @CommandMapping(name="worklog_head",
             usage="worklog_head <the number of logs>\r\n" +
-                    "get and delete workflow logs from beginning")
+                    "get and delete workflow logs from beginning",
+            requiredState=ConfMaster.READY)
     public String worklogHead(Long logCount) throws NoNodeException,
             MgmtZooKeeperException {
         if (workflowLogDao.getNumLogs() == 0) {
@@ -146,7 +151,8 @@ public class WorklogService {
     
     @CommandMapping(name="worklog_del",
             usage="worklog_del <max log nubmer>\r\n" +
-                    "delete workflow logs")
+                    "delete workflow logs",
+            requiredState=ConfMaster.RUNNING)
     public String worklogDel(Long maxLogNo) {
         if (workflowLogDao.getNumLogs() == 0) {
             return "-ERR confmaster does not have any log.";

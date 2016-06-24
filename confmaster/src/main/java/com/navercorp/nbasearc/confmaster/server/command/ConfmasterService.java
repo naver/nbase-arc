@@ -18,7 +18,9 @@ package com.navercorp.nbasearc.confmaster.server.command;
 
 import static com.navercorp.nbasearc.confmaster.server.mapping.ArityType.LESS;
 import static com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType.NULLABLE;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.TOTAL_INSPECTION;
 import static org.apache.log4j.Level.INFO;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 import java.util.List;
 
@@ -28,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
@@ -51,6 +54,7 @@ import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerClusterRoot;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerPmRoot;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
 
 @Service
 public class ConfmasterService {
@@ -63,6 +67,8 @@ public class ConfmasterService {
     
     @Autowired
     private CommandExecutor commandTemplate;
+    @Autowired
+    private WorkflowExecutor wfExecutor;
 
     @Autowired
     private ClusterImo clusterImo;
@@ -90,14 +96,18 @@ public class ConfmasterService {
     
     @Autowired
     private Config config;
+    
+    @Autowired
+    private ConfMaster confMaster;
 
     private WatchEventHandlerClusterRoot watchClusterRoot = null;
     private WatchEventHandlerPmRoot watchPmRoot = null;
 
     @CommandMapping(
-            name="help",
-            arityType=LESS,
-            usage="help <command>")
+            name="help", 
+            arityType=LESS, 
+            usage="help <command>", 
+            requiredState=ConfMaster.LOADING)
     public String help(@Param(type=NULLABLE) String commandName) {
         if (commandName == null) {
             return commandTemplate.getHelp();
@@ -112,14 +122,47 @@ public class ConfmasterService {
     }
     
     @CommandMapping(
-            name="ping",
-            usage="ping")
+            name="ping", 
+            usage="ping", 
+            requiredState=ConfMaster.LOADING)
     public String ping() {
         return "+PONG";
     }
 
     @LockMapping(name="ping")
     public void pingLock(HierarchicalLockHelper lockHelper) {
+        // Do nothing...
+    }
+    
+    @CommandMapping(
+            name="cm_start", 
+            requiredState=ConfMaster.READY)
+    public String start() {
+        if (confMaster.getState() == ConfMaster.RUNNING) {
+            return EXCEPTIONMSG_CM_ALREADY_RUNNING;
+        }
+        
+        confMaster.setState(ConfMaster.RUNNING);
+
+        wfExecutor.perform(TOTAL_INSPECTION);
+        
+        return S2C_OK;
+    }
+    
+    @LockMapping(name="cm_start")
+    public void startLock(HierarchicalLockHelper lockHelper) {
+        // Do nothing...
+    }
+    
+    @CommandMapping(
+            name="cm_info", 
+            requiredState=ConfMaster.LOADING)
+    public String info() {
+        return "{\"state\":\"" + confMaster.getState() + "\"}";
+    }
+    
+    @LockMapping(name="cm_info")
+    public void infoLock(HierarchicalLockHelper lockHelper) {
         // Do nothing...
     }
     

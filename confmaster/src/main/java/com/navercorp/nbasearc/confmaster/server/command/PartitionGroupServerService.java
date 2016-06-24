@@ -33,6 +33,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtNoAvaliablePgsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
@@ -116,7 +117,8 @@ public class PartitionGroupServerService {
  
     @CommandMapping(
             name="pgs_add",
-            usage="pgs_add <cluster_name> <pgsid> <pgid> <pm_name> <pm_ip> <base_port> <backend_port>")
+            usage="pgs_add <cluster_name> <pgsid> <pgid> <pm_name> <pm_ip> <base_port> <backend_port>",
+            requiredState=ConfMaster.RUNNING)
     public String pgsAdd(String clusterName, String pgsId, String pgId,
             String pmName, String pmIp, int basePort, int backendPort)
             throws MgmtZooKeeperException, NoNodeException {
@@ -206,7 +208,8 @@ public class PartitionGroupServerService {
     
     @CommandMapping(
             name="pgs_del",
-            usage="pgs_del <cluster_name> <pgsid>")
+            usage="pgs_del <cluster_name> <pgsid>",
+            requiredState=ConfMaster.RUNNING)
     public String pgsDel(String clusterName, String pgsId) throws MgmtZooKeeperException {
         // Check & Cache
         PartitionGroupServer pgs = pgsImo.get(pgsId, clusterName);
@@ -282,7 +285,8 @@ public class PartitionGroupServerService {
     @CommandMapping(
             name="pgs_info_all",
             usage="pgs_info_all <cluster_name> <pgs_id>\r\n" +
-                    "get all information of a Partition Group Server")
+                    "get all information of a Partition Group Server",
+            requiredState=ConfMaster.READY)
     public String pgsInfoAll(String clusterName, String pgsid) throws InterruptedException {
         // In Memory
         PartitionGroupServer pgs = pgsImo.get(pgsid, clusterName);
@@ -317,7 +321,8 @@ public class PartitionGroupServerService {
     @CommandMapping(
             name="pgs_info",
             usage="pgs_info <cluster_name> <pgs_id>\r\n" +
-                    "get information of a Partition Group Server")
+                    "get information of a Partition Group Server",
+            requiredState=ConfMaster.READY)
     public String pggInfo(String clusterName, String pgsid) throws InterruptedException {
         // In Memory
         Cluster cluster = clusterImo.get(clusterName);
@@ -349,7 +354,8 @@ public class PartitionGroupServerService {
     
     @CommandMapping(
             name="pgs_join",
-            usage="pgs_join <cluster_name> <pgsid>")
+            usage="pgs_join <cluster_name> <pgsid>",
+            requiredState=ConfMaster.RUNNING)
     public String pgsJoin(String clusterName, String pgsid) {
         // In Memory
         PartitionGroupServer pgs = pgsImo.get(pgsid, clusterName);
@@ -443,7 +449,8 @@ public class PartitionGroupServerService {
     
     @CommandMapping(
             name="pgs_lconn",
-            usage="pgs_lconn <cluster_name> <pgsid>")
+            usage="pgs_lconn <cluster_name> <pgsid>",
+            requiredState=ConfMaster.RUNNING)
     public String pgsLconn(String clusterName, String pgsid)
             throws NodeExistsException, MgmtZooKeeperException,
             MgmtDuplicatedReservedCallException, IOException {
@@ -519,7 +526,8 @@ public class PartitionGroupServerService {
     @CommandMapping(
             name="pgs_leave",
             arityType=GREATER,
-            usage="pgs_leave <cluster_name> <pgsid>")
+            usage="pgs_leave <cluster_name> <pgsid>",
+            requiredState=ConfMaster.RUNNING)
     public String pgsLeave(String clusterName, String pgsid,
             @Param(type = NULLABLE) String mode) throws Exception {
         // In Memory
@@ -647,7 +655,8 @@ public class PartitionGroupServerService {
     @CommandMapping(
             name="pgs_ls",
             usage="pgs_ls <cluster_name>\r\n" +
-                    "show a list of Partition Group Servers")
+                    "show a list of Partition Group Servers",
+            requiredState=ConfMaster.READY)
     public String execute(String clusterName) {
         // In Memory
         Cluster cluster = clusterImo.get(clusterName);
@@ -680,7 +689,8 @@ public class PartitionGroupServerService {
     
     @CommandMapping(
             name="pgs_sync",
-            usage="pgs_sync <cluster_name> <pgsid> <mode>")
+            usage="pgs_sync <cluster_name> <pgsid> <mode>",
+            requiredState=ConfMaster.RUNNING)
     public String pgsSync(String clusterName, String pgsid, String mode) {
         if (LeaderState.isLeader()) {
             return workLeader(clusterName, pgsid, mode);

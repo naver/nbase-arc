@@ -29,4 +29,6 @@ public @interface CommandMapping {
     public String usage() default "";
 
     public ArityType arityType() default ArityType.EQUAL;
+    
+    public int requiredState();
 }

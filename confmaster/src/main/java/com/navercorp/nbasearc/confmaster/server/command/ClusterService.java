@@ -36,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtInvalidQuorumPolicyException;
@@ -112,10 +113,12 @@ public class ClusterService {
     private ZkWorkflowLogDao workflowLogDao;
     
     @CommandMapping(
+            
             name="cluster_add",
             usage="cluster_add <cluster_name> <quorum policy>\r\n" +
                     "Ex) cluster_add cluster1 0:1\r\n" +
-                   "add a new cluster")
+                   "add a new cluster",
+            requiredState=ConfMaster.RUNNING)
     public String clusterAdd(String clusterName, String quorumPolicy)
             throws MgmtCommandWrongArgumentException,
             MgmtZNodeAlreayExistsException, MgmtZooKeeperException,
@@ -181,7 +184,8 @@ public class ClusterService {
             name="cluster_del",
             usage="cluster_del <cluster_name>\r\n" +
                     "Ex) cluster_del cluster1\r\n" +
-                    "delete a new cluster")
+                    "delete a new cluster",
+            requiredState=ConfMaster.RUNNING)
     public String clusterDel(String clusterName)
             throws MgmtZNodeDoesNotExistException, MgmtZooKeeperException {
         // Check
@@ -246,7 +250,8 @@ public class ClusterService {
     
     @CommandMapping(
             name="cluster_info",
-            usage="cluster_info <cluster_name>")
+            usage="cluster_info <cluster_name>",
+            requiredState=ConfMaster.READY)
     public String clusterInfo(String clusterName) throws InterruptedException,
             KeeperException, IOException {
         // Check
@@ -308,7 +313,8 @@ public class ClusterService {
     
     @CommandMapping(
             name="cluster_ls",
-            usage="cluster_ls")
+            usage="cluster_ls",
+            requiredState=ConfMaster.READY)
     public String execute() {
         // In Memory
         List<Cluster> clusters = clusterImo.getAll();
@@ -339,7 +345,8 @@ public class ClusterService {
      */
     @CommandMapping(
             name="get_cluster_info",
-            usage="get_cluster_info <cluster_name>")
+            usage="get_cluster_info <cluster_name>",
+            requiredState=ConfMaster.READY)
     public String getClusterInfo(String clusterName)
             throws InterruptedException, KeeperException {
         // In Memory
@@ -410,7 +417,8 @@ public class ClusterService {
             name="appdata_set",
             arityType=GREATER,
             usage="appdata_set <cluster_name> backup <backup_id> <daemon_id> <period> <base_time> <holding period(day)> <net_limit(MB/s)> <output_format> [<service url>]\r\n" +
-                    "Ex) appdata_set c1 backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json")
+                    "Ex) appdata_set c1 backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json",
+            requiredState=ConfMaster.RUNNING)
     public String clusterBackupScheduleSet(String clusterName, String type,
             Integer backupID, Integer daemonID, String minute, String hour,
             String day, String month, String dayOfWeek, String year,
@@ -513,7 +521,8 @@ public class ClusterService {
     
     @CommandMapping(
             name="appdata_get",
-            usage="appdata_get <cluster_name> backup <backup_id>")
+            usage="appdata_get <cluster_name> backup <backup_id>",
+            requiredState=ConfMaster.READY)
     public String clusterBackupScheduleGet(String clusterName, String type,
             String backupID) throws MgmtZooKeeperException,
             ConfMasterException, NodeExistsException {
@@ -563,7 +572,8 @@ public class ClusterService {
     @CommandMapping(
             name="appdata_del",
             usage="appdata_del <cluster_name> backup <backup_id>\r\n" +
-                    "Ex) appdata_del c1 backup 1")
+                    "Ex) appdata_del c1 backup 1",
+            requiredState=ConfMaster.RUNNING)
     public String clusterBackupScheduleDel(String clusterName, String type,
             int backupID) throws NoNodeException, MgmtZooKeeperException,
             ConfMasterException {
@@ -594,7 +604,8 @@ public class ClusterService {
 
     @CommandMapping(
             name="mig2pc",
-            usage="mig2pc <cluster_name> <src_pgid> <dest_pgid> <range_from> <range_to>")
+            usage="mig2pc <cluster_name> <src_pgid> <dest_pgid> <range_from> <range_to>",
+            requiredState=ConfMaster.RUNNING)
     public String mig2pc(String clusterName, String srcPgId, String destPgId,
             Integer rangeFrom, Integer rangeTo) {
         // In Memory
@@ -802,7 +813,8 @@ public class ClusterService {
     @CommandMapping(
             name="slot_set_pg",
             usage="slot_set_pg <cluster_name> <pg_range_inclusive> <pgid>\r\n" +
-                    "Ex) slot_set_pg cluster1 0:8191 1")
+                    "Ex) slot_set_pg cluster1 0:8191 1",
+            requiredState=ConfMaster.RUNNING)
     public String slotSetPg(String clusterName, String range, Integer pgid) {
         Integer rangeStart = Integer.parseInt(range.split(":")[0]);
         Integer rangeEnd = Integer.parseInt(range.split(":")[1]);

@@ -125,8 +125,8 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         
         hbcRefData = new HBRefData();
         hbcRefData.setZkData(getData().getRole(), getData().getStateTimestamp(), stat.getVersion())
-                  .setLastState(SERVER_STATE_UNKNOWN)
-                  .setLastStateTimestamp(0L)
+                  .setLastState(getData().getRole())
+                  .setLastStateTimestamp(getData().getStateTimestamp())
                   .setSubmitMyOpinion(false);
         
         usedOpinions = new UsedOpinionSet();

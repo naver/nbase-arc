@@ -22,14 +22,19 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
 public class RepositoryTest extends BasicSetting {
+    
+    @Autowired
+    ConfMaster confMaster;
     
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -40,6 +45,7 @@ public class RepositoryTest extends BasicSetting {
     @Before
     public void before() throws Exception {
         super.before();
+        confMaster.setState(ConfMaster.RUNNING);
     }
     
     @Override

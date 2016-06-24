@@ -140,6 +140,19 @@ public class ConfMasterException extends Exception {
         }
     }
     
+    public static class MgmtStateNotSatisfiedException extends Exception {
+        private final String msg;
+        
+        public MgmtStateNotSatisfiedException(String msg) {
+            this.msg = msg;
+        }
+
+        @Override
+        public String getMessage() {
+            return msg;
+        }
+    }
+    
     public static class MgmtWorkflowNotFoundException extends Exception {
         private WorkflowCaller caller;
         

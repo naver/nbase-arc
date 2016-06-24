@@ -17,7 +17,7 @@
 package com.navercorp.nbasearc.confmaster.server.watcher;
 
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.UPDATE_HEARTBEAT_CHECKER;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.TOTAL_INSPECTION;
 
 import org.apache.zookeeper.WatchedEvent;
 import org.springframework.context.ApplicationContext;
@@ -34,7 +34,7 @@ public class WatchEventHandlerFd extends WatchEventHandler {
     public void onChildEvent(WatchedEvent event) throws MgmtZooKeeperException {
         registerBoth(event.getPath());
         
-        workflowExecutor.perform(UPDATE_HEARTBEAT_CHECKER);
+        workflowExecutor.perform(TOTAL_INSPECTION);
     }
     
     @Override

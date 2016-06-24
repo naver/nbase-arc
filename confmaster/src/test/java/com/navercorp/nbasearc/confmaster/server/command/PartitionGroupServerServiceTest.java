@@ -32,6 +32,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
 import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
@@ -46,6 +47,9 @@ public class PartitionGroupServerServiceTest extends BasicSetting {
 
     @Autowired
     private PhysicalMachineClusterImo pmClusterImo;
+    
+    @Autowired
+    ConfMaster confMaster;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -56,6 +60,7 @@ public class PartitionGroupServerServiceTest extends BasicSetting {
     @Before
     public void before() throws Exception {
         super.before();
+        confMaster.setState(ConfMaster.RUNNING);
     }
 
     @After

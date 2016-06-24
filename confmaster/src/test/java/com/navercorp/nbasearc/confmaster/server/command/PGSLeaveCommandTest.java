@@ -23,16 +23,21 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.server.cluster.PGSComponentMock;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
 public class PGSLeaveCommandTest extends BasicSetting {
 
+    @Autowired
+    ConfMaster confMaster;
+    
     @BeforeClass
     public static void beforeClass() throws Exception {
         BasicSetting.beforeClass();
@@ -41,6 +46,7 @@ public class PGSLeaveCommandTest extends BasicSetting {
     @Before
     public void before() throws Exception {
         super.before();
+        confMaster.setState(ConfMaster.RUNNING);
     }
     
     @After

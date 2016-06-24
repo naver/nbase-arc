@@ -30,6 +30,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
 import com.navercorp.nbasearc.confmaster.context.ContextChain;
 import com.navercorp.nbasearc.confmaster.context.ContextType;
@@ -50,6 +51,9 @@ public class WorkflowExecutor {
     @Autowired
     private ThreadPool executor;
     
+    @Autowired
+    private ConfMaster confMaster;
+    
     private Map<String, WorkflowCaller> workflowMethods = new HashMap<String, WorkflowCaller>();
     private Map<String, LockCaller> lockMethods = new HashMap<String, LockCaller>();
     private Map<String, ContextType> ctMap = new HashMap<String, ContextType>();
@@ -65,7 +69,7 @@ public class WorkflowExecutor {
         ctMap.put(YELLOW_JOIN, ContextType.YJ);
         ctMap.put(OPINION_DISCARD, ContextType.HB);
         ctMap.put(OPINION_PUBLISH, ContextType.HB);
-        ctMap.put(UPDATE_HEARTBEAT_CHECKER, ContextType.HB);
+        ctMap.put(TOTAL_INSPECTION, ContextType.HB);
     }
     
     public static final String COMMON_STATE_DECISION = "CommonStateDecision";
@@ -78,7 +82,7 @@ public class WorkflowExecutor {
     public static final String YELLOW_JOIN = "YellowJoin";
     public static final String OPINION_DISCARD = "OpinionDiscard";
     public static final String OPINION_PUBLISH = "OpinionPublish";
-    public static final String UPDATE_HEARTBEAT_CHECKER = "UpdateHeartbeatChecker";
+    public static final String TOTAL_INSPECTION = "TotalInspectionWorkflow";
     
     public void initialize() {
         Map<String, Object> servies = context.getBeansWithAnnotation(Service.class);
@@ -136,13 +140,17 @@ public class WorkflowExecutor {
         if (!checkPrivilege(workflow)) {
             return null;
         }
+
+        if (confMaster.getState() != ConfMaster.RUNNING) {
+            return null;
+        }
         
         Object[] objects = new Object[args.length];
         for (int i = 0; i < objects.length; i++) {
             objects[i] = args[i];
         }
         WorkflowTemplate wf = new WorkflowTemplate(
-                workflow, objects, context, workflowMethods, lockMethods);
+                workflow, objects, context, workflowMethods, lockMethods);        
         ExecutionContext<Object> c = 
                 new ExecutionContext<Object>(wf, getContextType(workflow), executor);
         return executor.perform(c);
@@ -151,6 +159,10 @@ public class WorkflowExecutor {
     public Future<Object> performDelayed(String workflow, long delay, TimeUnit timeUnit,
             Object... args) {
         if (!checkPrivilege(workflow)) {
+            return null;
+        }
+
+        if (confMaster.getState() != ConfMaster.RUNNING) {
             return null;
         }
         
@@ -178,14 +190,13 @@ public class WorkflowExecutor {
         WorkflowTemplate wf = new WorkflowTemplate(
                 workflow, objects, context, workflowMethods, lockMethods);
         ContextChain.setNextJob(wf, 0, TimeUnit.MILLISECONDS);
-        return;
     }
 
-    public Future<Object> performContextContinueDelayed(String workflow,
+    public void performContextContinueDelayed(String workflow,
             long delay, TimeUnit timeUnit, Object... args)
             throws MgmtDuplicatedReservedCallException {
         if (!checkPrivilege(workflow)) {
-            return null;
+            return;
         }
         
         Object[] objects = new Object[args.length];
@@ -195,7 +206,6 @@ public class WorkflowExecutor {
         WorkflowTemplate wf = new WorkflowTemplate(
                 workflow, objects, context, workflowMethods, lockMethods);
         ContextChain.setNextJob(wf, delay, timeUnit);
-        return null;
     }
     
     public boolean checkPrivilege(String workflow) {
