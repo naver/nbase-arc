@@ -37,6 +37,7 @@ import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
@@ -79,7 +80,8 @@ public class GatewayService {
 
     @CommandMapping(
             name="gw_add",
-            usage="gw_add <cluster_name> <gwid> <pm_name> <pm_ip> <port>")
+            usage="gw_add <cluster_name> <gwid> <pm_name> <pm_ip> <port>",
+            requiredState=ConfMaster.RUNNING)
     public String gwAdd(String clusterName, String gwId, String pmName,
             String pmIp, Integer port) throws MgmtZooKeeperException,
             NoNodeException {
@@ -149,7 +151,8 @@ public class GatewayService {
     
     @CommandMapping(
             name="gw_affinity_sync",
-            usage="gw_affinity_sync <cluster_name>")
+            usage="gw_affinity_sync <cluster_name>",
+            requiredState=ConfMaster.RUNNING)
     public String gwAffinitySync(String clusterName) throws MgmtZooKeeperException {
         Cluster cluster = clusterImo.get(clusterName);
         if (cluster == null) {
@@ -168,7 +171,8 @@ public class GatewayService {
     
     @CommandMapping(
             name="gw_del",
-            usage="gw_del <cluster_name> <gwid>")
+            usage="gw_del <cluster_name> <gwid>",
+            requiredState=ConfMaster.RUNNING)
     public String gwDel(String clusterName, String gwId)
             throws MgmtZNodeDoesNotExistException, ConfMasterException,
             MgmtZooKeeperException {
@@ -232,7 +236,8 @@ public class GatewayService {
     @CommandMapping(
             name="gw_info",
             usage="gw_info <cluster_name> <gw_id>\r\n" +
-                    "get information of a Gateway")
+                    "get information of a Gateway",
+            requiredState=ConfMaster.READY)
     public String gwInfo(String clusterName, String gwid)
             throws KeeperException, InterruptedException, IOException {
         Cluster cluster = clusterImo.get(clusterName);
@@ -291,7 +296,8 @@ public class GatewayService {
     @CommandMapping(
             name="gw_ls",
             usage="gw_ls <cluster_name>\r\n" +
-                    "show a list of Gateways")
+                    "show a list of Gateways",
+            requiredState=ConfMaster.READY)
     public String gwLs(String clusterName) {
         // Check
         if (null == clusterImo.get(clusterName)) {

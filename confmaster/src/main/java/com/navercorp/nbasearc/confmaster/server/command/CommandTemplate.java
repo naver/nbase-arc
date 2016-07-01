@@ -35,8 +35,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.convert.support.DefaultConversionService;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandNotFoundException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtStateNotSatisfiedException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
@@ -54,15 +56,17 @@ public class CommandTemplate implements Callable<JobResult> {
     private final Map<String, LockCaller> lockMethods;
     
     private final DefaultConversionService cs = new DefaultConversionService();
+    private final ConfMaster confMaster;
     
     public CommandTemplate(String request, CommandCallback callback, 
             ApplicationContext context, Map<String, CommandCaller> commandMethods, 
-            Map<String, LockCaller> lockMethods) {
+            Map<String, LockCaller> lockMethods, ConfMaster confMaster) {
         this.request = request;
         this.callback = callback;
         this.context = context;
         this.commandMethods = commandMethods;
         this.lockMethods = lockMethods;
+        this.confMaster = confMaster;
     }
     
     @Override
@@ -136,7 +140,7 @@ public class CommandTemplate implements Callable<JobResult> {
     }
     
     private void validRequest(String[] args) throws MgmtCommandNotFoundException,
-            MgmtCommandWrongArgumentException {
+            MgmtCommandWrongArgumentException, MgmtStateNotSatisfiedException {
         final String command = args[0];
         
         if (LeaderState.isLeader()) {
@@ -155,6 +159,13 @@ public class CommandTemplate implements Callable<JobResult> {
         }
         
         final CommandCaller caller = commandMethods.get(command);
+
+        final int cmState = confMaster.getState();
+        if (cmState < caller.getRequiredState()) {
+            throw new MgmtStateNotSatisfiedException("-ERR required state is "
+                    + caller.getRequiredState() + ", but " + cmState);
+        }
+        
         final int arity = args.length - 1;
         
         switch (caller.getArityType()) {

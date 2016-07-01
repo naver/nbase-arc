@@ -16,7 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.leaderelection;
 
-import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.UPDATE_HEARTBEAT_CHECKER;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.TOTAL_INSPECTION;
 
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
@@ -24,6 +24,7 @@ import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
@@ -58,6 +59,9 @@ public class LeaderElectionHandler implements LeaderElectionAware {
     
     @Autowired
     private LeaderElectionSupport electionSupport;
+    
+    @Autowired
+    private ConfMaster confMaster;
     
     public LeaderElectionHandler() {
     }
@@ -97,6 +101,8 @@ public class LeaderElectionHandler implements LeaderElectionAware {
             return;
         }
         
+        boolean fromFollower = LeaderState.isFollower();
+        
         Logger.info("become leader");
         LeaderState.setLeader();
         
@@ -111,9 +117,23 @@ public class LeaderElectionHandler implements LeaderElectionAware {
         
         confmasterService.loadAll();
         
-        initialCheck();
-        
         znodeStructAffinity.updateZNodeDirectoryStructure(config.getCharset());
+        
+        /*
+         * Leader ConfMaster.state transition:
+         *   LOADING ----> READY --(start)--> RUNNING
+         * Follower ConfMaster.state transition:
+         *   LOADING ----> RUNNING --(become leader)--> RUNNING
+         *   
+         * When leader election is triggered by a crash of previous leader, 
+         * no one can type cm_start command. 
+         * Therefore followers get RUNNING-state without cm_start.  
+         */
+        if (!fromFollower) {
+            confMaster.setState(ConfMaster.READY);
+        } else {
+            workflowExecutor.perform(TOTAL_INSPECTION);
+        }
     }
 
     public void becomeFollower() throws NoNodeException, MgmtZooKeeperException {
@@ -129,10 +149,8 @@ public class LeaderElectionHandler implements LeaderElectionAware {
         LeaderState.setFollower();
 
         confmasterService.loadAll();
-    }
-    
-    private void initialCheck() {
-        workflowExecutor.perform(UPDATE_HEARTBEAT_CHECKER);
+        
+        confMaster.setState(ConfMaster.RUNNING);
     }
     
     public String getCurrentLeaderHost() 

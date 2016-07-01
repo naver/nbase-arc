@@ -72,8 +72,8 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
         
         hbcRefData = new HBRefData();
         hbcRefData.setZkData(getData().getState(), getData().getStateTimestamp(), stat.getVersion())
-                  .setLastState(Constant.SERVER_STATE_UNKNOWN)
-                  .setLastStateTimestamp(0L)
+                  .setLastState(getData().getState())
+                  .setLastStateTimestamp(getData().getStateTimestamp())
                   .setSubmitMyOpinion(false);
     }
     

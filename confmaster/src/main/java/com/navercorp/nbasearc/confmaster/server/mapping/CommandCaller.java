@@ -29,6 +29,11 @@ public class CommandCaller extends Caller {
         CommandMapping command = getMethod().getAnnotation(CommandMapping.class);
         return command.usage();
     }
+    
+    public int getRequiredState() {
+        CommandMapping command = getMethod().getAnnotation(CommandMapping.class);
+        return command.requiredState();
+    }
 
     @Override
     public String toString() {

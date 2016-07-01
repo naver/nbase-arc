@@ -33,7 +33,6 @@ public class Constant {
     public static final String PGS_ROLE_MASTER_IN_PONG = "2";
     public static final String PGS_ROLE_SLAVE_IN_PONG = "3";
 
-    public static final String SERVER_STATE_UNKNOWN = "?";
     public static final String SERVER_STATE_NORMAL = "N";
     public static final String SERVER_STATE_LCONN = "L";
     public static final String SERVER_STATE_FAILURE = "F";
@@ -47,6 +46,8 @@ public class Constant {
     public static final String EXCEPTIONMSG_INCONSISTENCE = "-ERR zookeeper znode structure is inconsistent with memory.";
     public static final String EXCEPTIONMSG_JSON_FORMATTING_ERROR = "-ERR internal json formatting error.";
     public static final String EXCEPTIONMSG_COMMAND_NOT_FOUND = "-ERR command not found";
+    public static final String EXCEPTIONMSG_CM_NOT_READY = "-ERR not ready to start";
+    public static final String EXCEPTIONMSG_CM_ALREADY_RUNNING = "-ERR already running";
 
     public static final String EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST = "-ERR pm does not exist. ";
     public static final String EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST = "-ERR cluster does not exist. ";

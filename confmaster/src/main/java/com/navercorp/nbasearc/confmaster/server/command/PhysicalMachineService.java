@@ -27,6 +27,7 @@ import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
@@ -56,7 +57,8 @@ public class PhysicalMachineService {
  
     @CommandMapping(name="pm_add",
             usage="pm_add <pm_name> <pm_ip>\r\n" +
-                    "add a physical machine")
+                    "add a physical machine",
+            requiredState=ConfMaster.RUNNING)
     public String pmAdd(String pmName, String pmIp)
             throws MgmtZooKeeperException, NodeExistsException, NoNodeException {
         // Check
@@ -90,7 +92,8 @@ public class PhysicalMachineService {
 
     @CommandMapping(name="pm_del",
             usage="pm_del <pm_name>\r\n" +
-                    "delete a physical machine")
+                    "delete a physical machine",
+            requiredState=ConfMaster.RUNNING)
     public String pmDel(String pmName) throws MgmtZooKeeperException {
         // Check
         PhysicalMachine pm = pmImo.get(pmName);
@@ -152,7 +155,8 @@ public class PhysicalMachineService {
 
     @CommandMapping(name="pm_info",
             usage="pm_info <pm_name>\r\n" +
-                    "get information of a Physical Machine")
+                    "get information of a Physical Machine",
+            requiredState=ConfMaster.READY)
     public String pmInfo(String pmName) {
         // In Memory
         PhysicalMachine pm = pmImo.get(pmName);
@@ -182,7 +186,8 @@ public class PhysicalMachineService {
 
     @CommandMapping(name="pm_ls",
             usage="pm_ls\r\n" +
-                    "show a list of Physical Machines")
+                    "show a list of Physical Machines",
+            requiredState=ConfMaster.READY)
     public String pmLs() {
         // In Memory
         List<PhysicalMachine> pmList = pmImo.getAll();

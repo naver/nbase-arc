@@ -32,6 +32,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Controller;
 import org.springframework.stereotype.Service;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.context.ContextType;
 import com.navercorp.nbasearc.confmaster.context.ExecutionContext;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
@@ -49,6 +50,9 @@ public class CommandExecutor {
     
     @Autowired
     private ThreadPool executor;
+    
+    @Autowired
+    private ConfMaster confMaster;
     
     private Map<String, CommandCaller> commandMethods = new HashMap<String, CommandCaller>();
     private Map<String, LockCaller> lockMethods = new HashMap<String, LockCaller>();
@@ -111,7 +115,7 @@ public class CommandExecutor {
     
     public Future<JobResult> perform(final String request, final CommandCallback callback) {
         CommandTemplate ct = new CommandTemplate(
-                request, callback, context, commandMethods, lockMethods);
+                request, callback, context, commandMethods, lockMethods, confMaster);
         ExecutionContext<JobResult> ec = new ExecutionContext<JobResult>(ct, ContextType.CM, executor);
         return executor.perform(ec);
     }

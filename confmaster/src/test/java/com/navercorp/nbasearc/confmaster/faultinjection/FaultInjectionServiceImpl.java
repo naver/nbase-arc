@@ -20,6 +20,7 @@ import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.server.command.FaultInjectionService;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
@@ -50,9 +51,11 @@ public class FaultInjectionServiceImpl extends FaultInjectionService {
     @Autowired
     MGSetquorumFI mgSetquorum;
     
-    @CommandMapping(name = "fi_add", usage = "fi_add <workflow> <where> <successFail> <count>\r\n"
+    @CommandMapping(name = "fi_add", 
+            usage = "fi_add <workflow> <where> <successFail> <count>\r\n"
             + "workflow: RA, QA, ME, YJ, BJ, MG\r\n"
-            + "where: master, slave, lconn, setquorum")
+            + "where: master, slave, lconn, setquorum",
+            requiredState=ConfMaster.LOADING)
     public String fiAdd(String workflow, String where, boolean successFail, int count) {
         workflow = workflow.toLowerCase();
         where = where.toLowerCase();
@@ -110,7 +113,9 @@ public class FaultInjectionServiceImpl extends FaultInjectionService {
     public void fiAddLock() {
     }
 
-    @CommandMapping(name = "fi_count", usage = "fi_count <workflow> <where>")
+    @CommandMapping(name = "fi_count", 
+            usage = "fi_count <workflow> <where>",
+            requiredState=ConfMaster.LOADING)
     public String fiCount(String workflow, String where) {
         workflow = workflow.toLowerCase();
         where = where.toLowerCase();

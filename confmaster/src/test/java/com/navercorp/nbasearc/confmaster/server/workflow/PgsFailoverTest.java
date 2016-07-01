@@ -35,10 +35,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
@@ -48,6 +50,9 @@ import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
 public class PgsFailoverTest extends BasicSetting {
+    
+    @Autowired
+    ConfMaster confMaster;
     
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -59,6 +64,7 @@ public class PgsFailoverTest extends BasicSetting {
     public void before() throws Exception {
         super.before();
         MockitoAnnotations.initMocks(this);
+        confMaster.setState(ConfMaster.RUNNING);
     }
     
     @After

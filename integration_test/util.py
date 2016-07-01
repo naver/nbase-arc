@@ -1999,8 +1999,11 @@ def worklog_info( leader_cm ):
 """
 Returns true if successful or false otherwise
 """
-def is_leader_cm( cc ):
-    reply = cm_command( cc['ip'], cc['cm_port'], 'cluster_ls')
+def is_leader_cm(cc):
+    return _is_leader_cm(cc['ip'], cc['cm_port'])
+
+def _is_leader_cm(ip, port):
+    reply = cm_command(ip, port, 'cluster_ls')
     jobj = json.loads(reply)
 
     if jobj['state'] == 'success':
@@ -2140,8 +2143,27 @@ def start_confmaster( id, port, context ):
         kill_proc( p )
         return -1
     else:
+        if _is_leader_cm('localhost', port):
+            if start_cm('localhost', port) == False:
+                kill_proc( p )
+                return -1
         return 0
 
+def start_cm(ip, port):
+    try:
+        response = cm_command(ip, port, 'cm_start')
+
+        try:
+            json_fmt = json.loads(response.strip())
+            if json_fmt["state"] == "success":
+                return True
+        except ValueError as e:
+            log('json decode error. "%s", response: "%s"' % (str(e), response))
+
+    except socket.error:
+        log('wait for connection established to confmaster, port=%d' % port)
+
+    return False
 
 def do_logutil_cmd (id, subcmd):
     parent_dir, log_dir = smr_log_dir( id )

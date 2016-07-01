@@ -28,10 +28,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ClientSessionHandler.ReplyFormatter;
@@ -47,6 +49,9 @@ public class RoleChangeWorkflowTest extends BasicSetting {
     MimicPGS mimics[] = new MimicPGS[MAX_PGS];
     ReplyFormatter replyFormatter = new ReplyFormatter();
     
+    @Autowired
+    ConfMaster confMaster;
+    
     @BeforeClass
     public static void beforeClass() throws Exception {
         BasicSetting.beforeClass();
@@ -55,6 +60,7 @@ public class RoleChangeWorkflowTest extends BasicSetting {
     @Before
     public void before() throws Exception {
         super.before();
+        confMaster.setState(ConfMaster.RUNNING);
         
         MockitoAnnotations.initMocks(this);
         
