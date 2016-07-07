@@ -41,11 +41,13 @@ ARRAY_HEAD (argpos_array, ArgPos, INIT_ARRAY_COUNT);
  * |                                       end
  * start
  */
+#define MAX_MULTIBULK_DEPTH 7
 struct ParseContext
 {
   int type;
   sbuf_pos pos;
-  int multibulklen;
+  int mbulkdepth;
+  int mbulklen[MAX_MULTIBULK_DEPTH];
   long bulklen;
   struct argpos_array args;
   mempool_hdr_t *mp_parse_ctx;
@@ -202,7 +204,6 @@ inlineParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
     {
       return PARSE_INSUFFICIENT_DATA;
     }
-
   // Copy parsed data to sds and free the data from the stream.
   tmp_sbuf = stream_create_sbuf (stream, next_pos);
   aux = makeSdsFromSbuf (tmp_sbuf);
@@ -215,7 +216,6 @@ inlineParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
       *err = sdsnew ("Protocol error: unbalanced quotes in request");
       return PARSE_ERROR;
     }
-
   // Copy remaining data to sds and free the data from the stream.
   tmp_sbuf = stream_create_sbuf (stream, stream_last_pos (stream));
   remaining = makeSdsFromSbuf (tmp_sbuf);
@@ -269,7 +269,7 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
   last = stream_last_pos (stream);
 
   /* Get Multibulk Length */
-  if (ctx->multibulklen == 0)
+  if (ctx->mbulklen[ctx->mbulkdepth] == 0)
     {
       ret = parseNumber (ctx->pos, last, &next_pos, &ll);
       if (ret == PARSE_INSUFFICIENT_DATA)
@@ -287,7 +287,7 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	  return PARSE_ERROR;
 	}
       ctx->pos = next_pos;
-      ctx->multibulklen = ll;
+      ctx->mbulklen[ctx->mbulkdepth] = ll;
 
       /* Null Bulk */
       if (ll <= 0)
@@ -297,7 +297,7 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	}
     }
 
-  while (ctx->multibulklen)
+  while (ctx->mbulklen[ctx->mbulkdepth])
     {
       /* Get Bulk Length */
       if (ctx->bulklen == -1)
@@ -340,7 +340,7 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
       appendArgposToArray (ctx, ctx->pos, ctx->bulklen);
       ctx->pos = next_pos;
       ctx->bulklen = -1;
-      ctx->multibulklen--;
+      ctx->mbulklen[ctx->mbulkdepth]--;
     }
 
   *query = stream_create_sbuf (stream, ctx->pos);
@@ -358,8 +358,19 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 
   last = stream_last_pos (stream);
 
-  while (ctx->multibulklen)
+  while (1)
     {
+      if (ctx->mbulklen[ctx->mbulkdepth] == 0)
+	{
+	  if (ctx->mbulkdepth == 0)
+	    {
+	      break;
+	    }
+	  ctx->mbulkdepth--;
+	  ctx->mbulklen[ctx->mbulkdepth]--;
+	  continue;
+	}
+
       if (ctx->bulklen == -1)
 	{
 	  if (SBUF_POS_EQUAL (&ctx->pos, &last))
@@ -378,7 +389,7 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 		}
 	      appendArgposToArray (ctx, arg.start, arg.len);
 	      ctx->pos = next_pos;
-	      ctx->multibulklen--;
+	      ctx->mbulklen[ctx->mbulkdepth]--;
 	      break;
 	    case TYPE_BULK:
 	      ret = parseNumber (ctx->pos, last, &next_pos, &ll);
@@ -399,7 +410,38 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 		{
 		  appendArgposToArray (ctx, ctx->pos, ll);
 		  ctx->bulklen = -1;
-		  ctx->multibulklen--;
+		  ctx->mbulklen[ctx->mbulkdepth]--;
+		}
+	      break;
+	    case TYPE_MULTIBULK:
+	      ret = parseNumber (ctx->pos, last, &next_pos, &ll);
+	      if (ret == PARSE_INSUFFICIENT_DATA)
+		{
+		  return PARSE_INSUFFICIENT_DATA;
+		}
+	      else if (ret == PARSE_ERROR)
+		{
+		  *err = sdsnew ("Protocol error: invalid multibulk length");
+		  return PARSE_ERROR;
+		}
+	      ctx->pos = next_pos;
+
+	      if (ll <= 0)
+		{
+		  /*  Null Multibulk  */
+		  ctx->mbulklen[ctx->mbulkdepth]--;
+		}
+	      else
+		{
+		  ctx->mbulkdepth++;
+		  if (ctx->mbulkdepth == MAX_MULTIBULK_DEPTH)
+		    {
+		      *err =
+			sdsnew
+			("No support for nested multi bulk replies with depth > 7");
+		      return PARSE_ERROR;
+		    }
+		  ctx->mbulklen[ctx->mbulkdepth] = ll;
 		}
 	      break;
 	    default:
@@ -423,7 +465,7 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
       appendArgposToArray (ctx, ctx->pos, ctx->bulklen);
       ctx->pos = next_pos;
       ctx->bulklen = -1;
-      ctx->multibulklen--;
+      ctx->mbulklen[ctx->mbulkdepth]--;
     }
   *query = stream_create_sbuf (stream, ctx->pos);
   return PARSE_COMPLETE;
@@ -525,7 +567,8 @@ createParseContext (mempool_hdr_t * mp_parse_ctx, sbuf_hdr * stream)
 
   ctx->type = 0;
   ctx->pos = stream_start_pos (stream);
-  ctx->multibulklen = 0;
+  ctx->mbulkdepth = 0;
+  ctx->mbulklen[ctx->mbulkdepth] = 0;
   ctx->bulklen = -1;
   ARRAY_INIT (&ctx->args);
   ctx->mp_parse_ctx = mp_parse_ctx;
@@ -537,7 +580,8 @@ resetParseContext (ParseContext * ctx, sbuf_hdr * stream)
 {
   ctx->pos = stream_start_pos (stream);
   ctx->type = 0;
-  ctx->multibulklen = 0;
+  ctx->mbulkdepth = 0;
+  ctx->mbulklen[ctx->mbulkdepth] = 0;
   ctx->bulklen = -1;
   ARRAY_CLEAR (&ctx->args);
 }
@@ -603,7 +647,7 @@ replyParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
   switch (ctx->type)
     {
     case TYPE_MULTIBULK:
-      if (ctx->multibulklen == 0)
+      if (ctx->mbulkdepth == 0 && ctx->mbulklen[ctx->mbulkdepth] == 0)
 	{
 	  ret = parseNumber (ctx->pos, last, &next_pos, &ll);
 	  if (ret == PARSE_INSUFFICIENT_DATA)
@@ -617,19 +661,20 @@ replyParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
 	    }
 
 	  ctx->pos = next_pos;
-	  ctx->multibulklen = ll;
-	}
+	  ctx->mbulklen[ctx->mbulkdepth] = ll;
 
-      /* Null Bulk */
-      if (ctx->multibulklen <= 0)
-	{
-	  *query = stream_create_sbuf (stream, ctx->pos);
-	  return PARSE_COMPLETE;
+	  /*  Null Multibulk */
+	  if (ctx->mbulklen[ctx->mbulkdepth] <= 0)
+	    {
+	      *query = stream_create_sbuf (stream, ctx->pos);
+	      return PARSE_COMPLETE;
+	    }
 	}
       break;
     case TYPE_INLINE:
     case TYPE_BULK:
-      ctx->multibulklen = 1;
+      assert (ctx->mbulkdepth == 0);
+      ctx->mbulklen[ctx->mbulkdepth] = 1;
       break;
     case TYPE_UNKNOWN:
       *err =
