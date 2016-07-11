@@ -31,7 +31,7 @@ To use it just:
 Configure RedisClusterTemplate:
 ~~~
     <bean id="gatewayConfig" class="com.navercorp.redis.cluster.gateway.GatewayConfig">
-      <property name="zkAddress" value="zookeeper-address""/>
+      <property name="zkAddress" value="zookeeper-address"/>
       <property name="clusterName" value="cluster-name"/>
     </bean>
 
