@@ -35,12 +35,12 @@ Configure RedisClusterTemplate:
       <property name="clusterName" value="cluster-name"/>
     </bean>
 
-    <bean id="redisCulsterConnectionFactory" class="com.navercorp.redis.cluster.spring.RedisClusterConnectionFactory" destroy-method="destroy">
+    <bean id="redisClusterConnectionFactory" class="com.navercorp.redis.cluster.spring.RedisClusterConnectionFactory" destroy-method="destroy">
         <property name="config" ref="gatewayConfig"/>
     </bean>
 
     <bean id="redisTemplate" class="com.navercorp.redis.cluster.spring.StringRedisClusterTemplate">
-        <property name="connectionFactory" ref="redisCulsterConnectionFactory"/>
+        <property name="connectionFactory" ref="redisClusterConnectionFactory"/>
     </bean>
 ~~~
 
