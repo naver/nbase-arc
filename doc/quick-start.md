@@ -42,6 +42,10 @@ Run Configuration master
 ```shell
 $ cd $HOME/nbase-arc/confamster
 $ ./confmaster-<version>.sh
+
+# Send cm_start command to Configuration master
+$ echo cm_start | nc {machine IP} 1122
+{"state":"success","msg":"+OK"}
 ```
 
 #### Install mgmt tool
