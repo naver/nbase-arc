@@ -44,5 +44,7 @@ redis-gateway: $(OBJECT)
 gcov:
 	$(MAKE) GCOV_FLAGS="-fprofile-arcs -ftest-coverage"
 
+test:
+
 clean:
 	$(RM) redis-gateway $(OBJECT) $(GCOV_DATA)
