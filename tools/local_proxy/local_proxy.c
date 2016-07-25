@@ -72,6 +72,7 @@ typedef struct conf_t
   char *zk_addr;
   int port;
   int daemonize;
+  int query_timeout_millis;
   arc_conf_t capi_conf;
 } conf_t;
 
@@ -104,6 +105,9 @@ typedef struct server_t
 
   /* CAPI configuration */
   conf_t *conf;
+
+  /* CAPI query timeout */
+  int query_timeout_millis;
 } server_t;
 
 server_t server;
@@ -405,6 +409,18 @@ initFromConfigBuffer (sds config, conf_t * conf)
 	      goto err;
 	    }
 	}
+      else if (!strcasecmp (argv[0], "local_proxy_query_timeout_millis")
+	       && argc == 2)
+	{
+	  conf->query_timeout_millis = atoi (argv[1]);
+	  if (conf->query_timeout_millis < 1000
+	      || conf->query_timeout_millis > 600000)
+	    {
+	      sdsfreesplitres (argv, argc);
+	      err = "Invalid local_proxy_query_timeout_millis";
+	      goto err;
+	    }
+	}
       else
 	{
 	  sdsfreesplitres (argv, argc);
@@ -432,6 +448,7 @@ initializeConfigStructure (conf_t * conf)
   conf->zk_addr = NULL;
   conf->port = -1;
   conf->daemonize = 0;
+  conf->query_timeout_millis = 3000;
   arc_init_conf (&conf->capi_conf);
 }
 
@@ -587,6 +604,7 @@ initConfig (int argc, char **argv)
       perror ("Can not initialize from config file");
       exit (EXIT_FAILURE);
     }
+  server.query_timeout_millis = server.conf->query_timeout_millis;
 }
 
 static arc_t *
@@ -657,6 +675,7 @@ reconfigThread (arc_t * initial_arc)
 	  server.arc_ref->refcount = 1;
 	  tmp_conf = server.conf;
 	  server.conf = new_conf;
+	  server.query_timeout_millis = server.conf->query_timeout_millis;
 	  pthread_mutex_unlock (&server.reconfig_lock);
 
 	  release_arc_ref (tmp_arc_ref);
@@ -824,22 +843,29 @@ addReplyFromCapi (client_t * c, arc_reply_t * reply)
     }
 }
 
-static void
-processReply (client_t * c)
+static int
+processReply (client_t * c, int *be_errno)
 {
   arc_reply_t *reply;
-  int be_errno;
+  int ret;
 
   /* Make reply buffer */
   while (1)
     {
-      arc_get_reply (c->rqst, &reply, &be_errno);
+      ret = arc_get_reply (c->rqst, &reply, be_errno);
+      if (ret == -1)
+	{
+	  return -1;
+	}
       if (!reply)
-	break;
+	{
+	  break;
+	}
       addReplyFromCapi (c, reply);
       arc_free_reply (reply);
       c->total_append_command--;
     }
+  return 0;
 }
 
 static int
@@ -1088,18 +1114,46 @@ clientThread (void *arg)
 	      processInputBuffer (c);
 	      if (c->total_append_command)
 		{
-		  int be_errno;
+		  int arc_errno, arc_be_errno, be_errno;
 		  arc_ref_t *arc_ref;
 
 		  arc_ref = acquire_arc_ref ();
-
-		  arc_do_request (arc_ref->arc, c->rqst, 1000, &be_errno);
-		  processReply (c);
+		  ret =
+		    arc_do_request (arc_ref->arc, c->rqst,
+				    server.query_timeout_millis, &be_errno);
+		  if (ret == -1)
+		    {
+		      arc_errno = errno;
+		      arc_be_errno = be_errno;
+		    }
+		  else
+		    {
+		      ret = processReply (c, &be_errno);
+		      if (ret == -1)
+			{
+			  arc_errno = errno;
+			  arc_be_errno = be_errno;
+			}
+		    }
 		  arc_free_request (c->rqst);
-
 		  release_arc_ref (arc_ref);
 
 		  c->rqst = arc_create_request ();
+
+		  if (ret == -1)
+		    {
+		      if (arc_errno == ARC_ERR_TIMEOUT
+			  || (arc_errno == ARC_ERR_BACKEND
+			      && arc_be_errno == ARC_ERR_TIMEOUT))
+			{
+			  addReplyStr (c, "-ERR Redis Timeout\r\n");
+			}
+		      else
+			{
+			  addReplyStr (c, "-ERR Internal Error\r\n");
+			}
+		      c->flags |= REDIS_CLOSE_AFTER_REPLY;
+		    }
 		}
 	    }
 	  else
