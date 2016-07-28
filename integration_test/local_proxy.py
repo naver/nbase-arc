@@ -49,16 +49,7 @@ class TestLocalProxy(unittest.TestCase):
         if default_cluster.finalize(self.cluster) is not 0:
             util.log('failed to test_local_proxy.finalize')
 
-    def test_local_proxy(self, arch=64):
-        util.print_frame()
-
-        # Clean server log file
-        p = util.exec_proc_async(util.capi_dir(0),
-                'rm capi_server-*',
-                True, None, subprocess.PIPE, None)
-
-        p.wait()
-
+    def run_test_server(self, arch=64):
         # run test server
         _capi_server_conf = """
 zookeeper 127.0.0.1:2181
@@ -73,6 +64,7 @@ max_fd 4096
 conn_reconnect_millis 1000
 zk_reconnect_millis 1000
 zk_session_timeout_millis 10000
+local_proxy_query_timeout_millis 1000
         """ % self.cluster['cluster_name']
         old_cwd = os.path.abspath( os.getcwd() )
         os.chdir(util.capi_dir(0))
@@ -88,6 +80,26 @@ zk_session_timeout_millis 10000
 
         capi_server = util.exec_proc_async(util.capi_dir(0),
                             cmd, True, None, subprocess.PIPE, None)
+
+        return capi_server
+
+    def stop_test_server(self, capi_server):
+        # Terminate test server
+        capi_server.send_signal(signal.SIGTERM)
+        capi_server.wait()
+
+    def test_local_proxy(self, arch=64):
+        util.print_frame()
+
+        # Clean server log file
+        p = util.exec_proc_async(util.capi_dir(0),
+                'rm capi_server-*',
+                True, None, subprocess.PIPE, None)
+
+        p.wait()
+
+        # run test server
+        capi_server = self.run_test_server(arch)
 
         # ping check
         while True:
@@ -154,5 +166,34 @@ zk_session_timeout_millis 10000
             self.assertTrue(load_gen_thrd_list[i].isConsistent(), 'Inconsistent after sending signal')
 
         # Terminate test server
-        capi_server.send_signal(signal.SIGTERM)
-        capi_server.wait()
+        self.stop_test_server(capi_server)
+
+    def test_local_proxy_be_timeout(self, arch=64):
+        util.print_frame()
+
+        # run test server
+        capi_server = self.run_test_server(arch)
+
+        # ping check
+        while True:
+            try:
+                t = telnetlib.Telnet('127.0.0.1', 6200)
+                break
+            except:
+                time.sleep(1)
+                continue
+
+        server = self.cluster['servers'][0]
+        redis = telnetlib.Telnet(server['ip'], server['redis_port'])
+        redis.write('debug sleep 5\r\n')
+
+        startTime = time.time()
+        t.write("INFO\r\nPING\r\n")
+        ret = t.read_until('\r\n', 10)
+        endTime = time.time()
+
+        # Terminate test server
+        self.stop_test_server(capi_server)
+
+        self.assertTrue('-ERR Redis Timeout' in ret)
+        self.assertTrue(endTime-startTime < 3)

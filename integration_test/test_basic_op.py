@@ -98,6 +98,7 @@ max_fd 4096
 conn_reconnect_millis 1000
 zk_reconnect_millis 1000
 zk_session_timeout_millis 10000
+local_proxy_query_timeout_millis 10000
         """ % self.cluster['cluster_name']
         old_cwd = os.path.abspath( os.getcwd() )
         os.chdir(util.capi_dir(0))
