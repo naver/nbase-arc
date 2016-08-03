@@ -124,7 +124,7 @@ def copy_checkpoint_from_master(cluster_name, pg_id, pm_ip, smr_base_port):
 
     # Get checkpoint from master
     range = '0-8191'
-    if execute(remote.get_checkpoint, master['ip'], master['redis_port'], 'dump.rdb', range , smr_base_port) == False:
+    if execute(remote.get_checkpoint, master['ip'], master['redis_port'], 'dump.rdb', range , smr_base_port)[host] == False:
         warn(red("[%s] Get checkpoint fail, SRC_IP:%s, SRC_PORT:%d, FILE_NAME:%s, PN_PG_MAP:%s" % (host, master['ip'], master['redis_port'], 'dump.rdb', range)))
         return False
 
@@ -1261,7 +1261,7 @@ def menu_recover_cluster():
 
     try:
         # Recover Gateway
-        show_info.menu_show_all(cluster_name)
+        show_info.menu_show_gw_list(cluster_name)
         s = prompt(cyan("GW information ([GW_ID or all])"))
         if s != '':
             gw_list = cm.get_gw_list(cluster_name)
@@ -1343,7 +1343,7 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
             warn(red("[%s] smr directory doesn't exist. PATH:%s" % (host, smr_path)))
             return False
 
-        # Check smr directory
+        # Check redis directory
         redis_path = '%s/%d/redis' % (config.REMOTE_PGS_DIR, smr_base_port)
         if execute(remote.path_exist, redis_path)[host] == False:
             warn(red("[%s] redis directory doesn't exist. PATH:%s" % (host, redis_path)))
@@ -1382,12 +1382,12 @@ def recover_pg(cluster_name, pg_id, cronsave_num, log_delete_delay):
 
         # Start Redis process
         if execute(remote.is_redis_process_exist, smr_base_port)[host] == False:
-            pongs = ['+OK 1']
-            if execute(remote.start_redis_process, ip, smr_base_port, redis_port, cluster_name, pongs)[host] != True:
+            expected = ['+OK 1', '+OK 2', '+OK 3']
+            if execute(remote.start_redis_process, ip, smr_base_port, redis_port, cluster_name, expected)[host] != True:
                 warn(red("[%s] Start Redis fail, PGS_ID:%d, PORT:%d" % (host, pgs_id, redis_port)))
                 return False
 
-    # PGS Join - others
+    # Check state
     for pgs in recover_list:
         pgs_id = pgs['pgs_id']
         ip = pgs['ip']
@@ -2241,13 +2241,13 @@ def menu_deploy_bash_profile():
             ip = pm_json['pm_info']['ip']
             host = config.USERNAME + '@' + ip
             env.hosts = [host]
-            if execute(remote.deploy_arc_bash_profile, ip) == False:
+            if execute(remote.deploy_arc_bash_profile, ip)[host] == False:
                 return False
     else:
         for ip in pm_ip.split(" "):
             host = config.USERNAME + '@' + ip
             env.hosts = [host]
-            if execute(remote.deploy_arc_bash_profile, ip) == False:
+            if execute(remote.deploy_arc_bash_profile, ip)[host] == False:
                 return False
 
     return True
