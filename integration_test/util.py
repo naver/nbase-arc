@@ -574,6 +574,14 @@ def role_change( cc, cluster_name, pgs_id ):
     else:
         return int(jobj['data']['master'])
 
+def pg_dq(cm, cluster_name, pg_id):
+    cmd = 'pg_dq %s %d' % (cluster_name, pg_id)
+    reply = cm_command(cm['ip'], cm['cm_port'], cmd)
+    jsonObj = json.loads(reply)
+    if jsonObj['state'] != 'success':
+        log('pg_dq fail. CMD:%s, REPLY:%s' % (cmd, reply[:-1]))
+        return False
+    return True
 
 def check_if_smr_is_running_properly( ip, mgmt_port, timeout=1 ):
     max_try = 100

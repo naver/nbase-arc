@@ -43,12 +43,13 @@ public class RoleChangeWorkflow {
     final RedisServerImo rsImo;
 
     final PartitionGroup pg;
-    final PartitionGroupServer masterHint;
+    // first come first served
+    final List<PartitionGroupServer> masterHints;
     
     // Result
     String resultString = null;
 
-    public RoleChangeWorkflow(PartitionGroup pg, PartitionGroupServer masterHint, ApplicationContext context) {
+    public RoleChangeWorkflow(PartitionGroup pg, List<PartitionGroupServer> masterHints, ApplicationContext context) {
         this.context = context;
         this.config = context.getBean(Config.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
@@ -57,16 +58,16 @@ public class RoleChangeWorkflow {
         this.rsImo = context.getBean(RedisServerImo.class);
 
         this.pg = pg;
-        this.masterHint = masterHint;
+        this.masterHints = masterHints;
     }
 
     public void execute() {
         try {
             _execute();
         } catch (Exception e) {
-            resultString = "-ERR role change fail. masterHint: " + masterHint
+            resultString = "-ERR role change fail. masterHint: " + masterHints
                     + ", exception: " + e.getMessage();
-            Logger.error(resultString, masterHint);
+            Logger.error(resultString, masterHints);
         }
     }
     
@@ -75,8 +76,6 @@ public class RoleChangeWorkflow {
                 .getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
                         Integer.valueOf(pg.getName())));
         final PartitionGroupServer master = pg.getMaster(joinedPgsList);
-        final List<PartitionGroupServer> initialSlaveList = pg
-                .getSlaves(joinedPgsList);
         
         final String cmd = "role lconn";
         Logger.info("RC pgs: {}, cmd: \"{}\"", master, cmd);
@@ -93,7 +92,7 @@ public class RoleChangeWorkflow {
             ra.execute();
 
             MasterElectionWorkflow me = new MasterElectionWorkflow(pg,
-                    masterHint, false, context);
+                    masterHints, false, context);
             me.execute();
 
             YellowJoinWorkflow yj = new YellowJoinWorkflow(pg, false, context);
@@ -107,8 +106,10 @@ public class RoleChangeWorkflow {
         }
 
         List<String> resSlaveJoinFail = new ArrayList<String>();
-        for (PartitionGroupServer pgs : initialSlaveList) {
-            if (pgs == masterHint) {
+        PartitionGroupServer newMaster = null;
+        for (PartitionGroupServer pgs : joinedPgsList) {
+            if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)) {
+                newMaster = pgs;
                 continue;
             }
             
@@ -118,7 +119,7 @@ public class RoleChangeWorkflow {
         }
 
         resultString = "{\"master\":"
-                + masterHint.getName()
+                + newMaster.getName()
                 + ",\"role_slave_error\":["
                 + StringUtils.arrayToDelimitedString(
                         resSlaveJoinFail.toArray(), ", ") + "]}";
