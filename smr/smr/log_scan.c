@@ -36,12 +36,16 @@ struct logMmap_
   long long seq;		//start address
   smrLogAddr *addr;		// mempory mapped address
   int offset;			// available offset
+  int del_onclose;		// delete this structure on close
+  int decache;			// decache this map
 };
-#define init_log_mmap(s) do {   \
-  dlisth_init(&(s)->head);      \
-  (s)->seq = 0LL;               \
-  (s)->addr = NULL;             \
-  (s)->offset = 0LL;            \
+#define init_log_mmap(s, d) do {   \
+  dlisth_init(&(s)->head);         \
+  (s)->seq = 0LL;                  \
+  (s)->addr = NULL;                \
+  (s)->offset = 0LL;               \
+  (s)->del_onclose = (d);          \
+  (s)->decache = 0;                \
 } while (0)
 
 struct logScan_
@@ -82,7 +86,8 @@ static long long min_ll (long long a, long long b);
 static int scan_consec_size (logScan * scan, long long seq);
 static char *scan_seq_to_addr (logScan * scan, long long seq);
 static int scan_map (logScan * scan, long long seq, smrLogAddr ** addr);
-static void scan_unmap (logScan * scan, long long seq, smrLogAddr * addr);
+static void scan_unmap (logScan * scan, long long seq, smrLogAddr * addr,
+			int decache);
 static int scan_open (logScan * scan, long long seq);
 static int scan_next (logScan * scan);
 static int scan_close (logScan * scan);
@@ -106,7 +111,7 @@ scan_consec_size (logScan * scan, long long seq)
 {
   long long end_pos;
 
-  end_pos = (scan->end_limit == -1LL) ? scan->seq_end : scan->end_limit;
+  end_pos = scan->seq_end;
   return min_ll (end_pos, seq_round_up (seq)) - seq;
 }
 
@@ -143,10 +148,13 @@ scan_map (logScan * scan, long long seq, smrLogAddr ** addr)
 }
 
 static void
-scan_unmap (logScan * scan, long long seq, smrLogAddr * addr)
+scan_unmap (logScan * scan, long long seq, smrLogAddr * addr, int decache)
 {
   smrlog_munmap (scan->smrlog, addr);
-  (void) smrlog_os_decache (scan->smrlog, seq);
+  if (decache)
+    {
+      (void) smrlog_os_decache (scan->smrlog, seq);
+    }
 }
 
 static int
@@ -199,7 +207,7 @@ scan_next (logScan * scan)
       ERRNO_POINT ();
       return -1;
     }
-  init_log_mmap (lm);
+  init_log_mmap (lm, 1);
 
   ret = scan_map (scan, target_seq, &addr);
   if (ret < 0)
@@ -208,6 +216,8 @@ scan_next (logScan * scan)
       goto error;
     }
   assert (addr != NULL);
+  lm->decache =
+    (addr_npage_in_memory (addr, scan->smrlog->page_size, NULL, NULL) == 0);
 
   lm->seq = target_seq;
   lm->addr = addr;
@@ -218,6 +228,10 @@ scan_next (logScan * scan)
     }
   dlisth_insert_before (&lm->head, &scan->mmaps);
   scan->seq_end = lm->seq + lm->offset;
+  if (scan->end_limit != -1LL && scan->seq_end > scan->end_limit)
+    {
+      scan->seq_end = scan->end_limit;
+    }
   return 1;			//has more
 
 error:
@@ -225,7 +239,7 @@ error:
     {
       if (lm->addr != NULL)
 	{
-	  scan_unmap (scan, lm->seq, lm->addr);
+	  scan_unmap (scan, lm->seq, lm->addr, lm->decache);
 	}
       free (lm);
     }
@@ -243,8 +257,11 @@ scan_close (logScan * scan)
 
       lm = (logMmap *) scan->mmaps.next;
       dlisth_delete (&lm->head);
-      scan_unmap (scan, lm->seq, lm->addr);
-      free (lm);
+      if (lm->del_onclose)
+	{
+	  scan_unmap (scan, lm->seq, lm->addr, lm->decache);
+	  free (lm);
+	}
     }
 
   init_log_scan (scan, NULL);
@@ -262,8 +279,11 @@ scan_release_unused_maps (logScan * scan)
       if (lm->seq + SMR_LOG_FILE_DATA_SIZE <= scan->seq)
 	{
 	  dlisth_delete (&lm->head);
-	  scan_unmap (scan, lm->seq, lm->addr);
-	  free (lm);
+	  if (lm->del_onclose)
+	    {
+	      scan_unmap (scan, lm->seq, lm->addr, lm->decache);
+	      free (lm);
+	    }
 	}
       else
 	{
@@ -432,8 +452,7 @@ scan_process (logScan * scan, smrlog_scanner scanner, void *arg)
   init_scan_arg (&scan_arg);
   scan_arg.cont = 1;
 
-  saved_tsz = tsz =
-    ((scan->end_limit == -1LL) ? scan->seq_end : scan->end_limit) - scan->seq;
+  saved_tsz = tsz = scan->seq_end - scan->seq;
   saved_seq = seq = scan->seq;
 
   /* set invariants */
@@ -558,4 +577,118 @@ smrlog_scan (smrLog * smrlog, long long start, long long end,
 
   scan_close (&scan);
   return ret;
+}
+
+//
+// time range scanner
+//
+
+struct trScan
+{
+  int count;
+  long long ts;			//in
+  long long ts_max;
+  long long ts_min;
+  long long nearest_dataseq;
+  long long nearest_ts;
+};
+#define init_tr_scan(s, t) do {     \
+  (s)->count = 0;                   \
+  (s)->ts = (t);                    \
+  (s)->ts_max = -1LL;               \
+  (s)->ts_min = -1LL;               \
+  (s)->nearest_dataseq = -1LL;      \
+  (s)->nearest_ts = -1LL;           \
+} while(0)
+
+// assumes that timestamp and sequence number are monotonic increasing
+static int
+tr_scanner (void *arg, long long seq, long long timestamp,
+	    int hash, unsigned char *buf, int size)
+{
+  struct trScan *tr = (struct trScan *) arg;
+
+  if (tr->count++ == 0)
+    {
+      tr->nearest_ts = tr->ts_min = tr->ts_max = timestamp;
+      tr->nearest_dataseq = seq;
+    }
+
+  if (tr->ts_max < timestamp)
+    {
+      tr->ts_max = timestamp;
+    }
+
+  if (llabs (tr->ts - timestamp) < llabs (tr->ts - tr->nearest_ts))
+    {
+      tr->nearest_ts = timestamp;
+      tr->nearest_dataseq = seq;
+    }
+
+  return 1;
+}
+
+int
+smrlog_get_tsrange_and_nearestseq (smrLog * handle, smrLogAddr * addr,
+				   long long msec, int *found,
+				   long long *ts_min, long long *ts_max,
+				   long long *nearest_seq)
+{
+  int ret;
+  int msg_found = 0, start_off;
+  logMmap mm;
+  logScan scan;
+  struct trScan tr;
+
+  if (handle == NULL || addr == NULL || found == NULL || ts_min == NULL
+      || ts_max == NULL || nearest_seq == NULL)
+    {
+      errno = EINVAL;
+      return -1;
+    }
+  *found = 0;
+
+  ret = smrlog_get_first_msg_offset (handle, addr, &msg_found, &start_off);
+  if (ret < 0)
+    {
+      return -1;
+    }
+  else if (msg_found == 0)
+    {
+      return 0;
+    }
+
+  // make fake logScan instance
+  init_log_mmap (&mm, 0);
+  mm.seq = addr->seq;
+  mm.addr = addr;
+  mm.offset = smrlog_get_offset (handle, addr);
+  if (mm.offset < 0)
+    {
+      return -1;
+    }
+
+  init_log_scan (&scan, handle);
+  scan.smrlog = handle;
+  dlisth_insert_before (&mm.head, &scan.mmaps);
+  scan.seq = addr->seq + start_off;
+  scan.seq_end = addr->seq + mm.offset;
+
+  // call time range scan
+  init_tr_scan (&tr, msec);
+  ret = scan_process (&scan, tr_scanner, &tr);
+  if (ret < 0)
+    {
+      return -1;
+    }
+
+  if (tr.count > 0)
+    {
+      *found = 1;
+      *ts_max = tr.ts_max;
+      *ts_min = tr.ts_min;
+      *nearest_seq = tr.nearest_dataseq - SMR_OP_SESSION_DATA_OFFSET;
+    }
+
+  return 0;
 }
