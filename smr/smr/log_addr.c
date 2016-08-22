@@ -355,6 +355,61 @@ addr_offset (smrLogAddr * log_addr)
 }
 
 int
+addr_npage_in_memory (smrLogAddr * addr, int page_size,
+		      void (*reside_callback) (int, void *), void *arg)
+{
+  int ret;
+  unsigned char buf[16640];	// 65M/4096 bytes
+  unsigned char *vec = NULL;
+  int need_bytes;
+  int i, nreside = 0;
+
+  if (addr == NULL)
+    {
+      return 0;
+    }
+
+  /* check data portion only (TODO) */
+  need_bytes = (SMR_LOG_FILE_DATA_SIZE + page_size - 1) / page_size;
+  if (need_bytes > sizeof (buf))
+    {
+      vec = malloc (need_bytes);
+      if (vec == NULL)
+	{
+	  goto done;
+	}
+    }
+  else
+    {
+      vec = &buf[0];
+    }
+
+  memset (vec, 0, need_bytes);	// make valgrind happy
+  ret = mincore (addr->addr, SMR_LOG_FILE_DATA_SIZE, vec);
+  if (ret < 0)
+    {
+      goto done;
+    }
+
+  for (i = 0; i < need_bytes; i++)
+    {
+      int r = vec[i] & 1;
+      if (r && reside_callback != NULL)
+	{
+	  reside_callback (i, arg);
+	}
+      nreside += r;
+    }
+
+done:
+  if (vec != NULL && vec != &buf[0])
+    {
+      free (vec);
+    }
+  return nreside;
+}
+
+int
 dev_truncate (logDev * dev, long long base_seq, long long seq)
 {
   smrLogAddr *addr = NULL;

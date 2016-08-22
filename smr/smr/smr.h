@@ -110,6 +110,7 @@
  *   data      (<length> byte) 
  */
 #define SMR_OP_SESSION_DATA    'd'
+#define SMR_OP_SESSION_DATA_OFFSET 21
 /* special hash value that is used in migration */
 #define SMR_SESSION_DATA_HASH_ALL  (-1)	// e.g.) multi key operation
 #define SMR_SESSION_DATA_HASH_NONE (-2)	// e.g.) read only or bad query (needed to reply error in order)

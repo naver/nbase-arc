@@ -942,3 +942,39 @@ smrlog_recover (smrLog * handle, long long *minseq, long long *maxseq,
   clear_recover_state (&rs);
   return 0;
 }
+
+int
+smrlog_get_first_msg_offset (smrLog * handle, smrLogAddr * addr, int *found,
+			     int *off)
+{
+  long long commit_seq;
+  int offset;
+  int ret;
+
+  if (addr->seq == 0)
+    {
+      *found = 1;
+      *off = 0;
+      return 0;
+    }
+
+  offset = smrlog_get_offset (handle, addr);
+  if (offset < 0)
+    {
+      return -1;
+    }
+
+  ret =
+    find_commit_seq_msg (addr->addr, 0, offset, 1, found, off, &commit_seq);
+  if (ret < 0)
+    {
+      return ret;
+    }
+
+  // More greedy
+  if (*found && commit_seq >= addr->seq)
+    {
+      *off = (int) (commit_seq - addr->seq);
+    }
+  return 0;
+}

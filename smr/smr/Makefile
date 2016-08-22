@@ -41,4 +41,4 @@ smr-logutil : smr_logutil.c
 	$(CC) -o smr-logutil $(DEFS) $(CFLAGS) $(DEBUG) $(OBJECT) $(LINKS) $<
 
 clean:
-	rm -rf *.o  $(MYLIB) smr-logutil *.gcno *.gcda *.gcov
+	rm -rf *.o  $(MYLIB) smr-logutil *.gcno *.gcda *.gcov *~

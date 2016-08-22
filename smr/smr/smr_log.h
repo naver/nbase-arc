@@ -118,6 +118,8 @@ struct smrLogAddr_
 extern int smrlog_recover (smrLog * handle, long long *min_seq,
 			   long long *max_seq, long long *msg_min_seq,
 			   long long *msg_max_seq, long long *max_commit_seq);
+extern int smrlog_get_first_msg_offset (smrLog * handle, smrLogAddr * addr,
+					int *found, int *off);
 /* log_log.c */
 extern int smrlog_open_master (char *basedir);
 extern int smrlog_unlink_master (char *basedir);
@@ -165,4 +167,10 @@ typedef int (*smrlog_scanner) (void *arg, long long seq, long long timestamp,
 // return -1 when error, 0 or 1 if success 
 extern int smrlog_scan (smrLog * smrlog, long long start, long long end,
 			smrlog_scanner scanner, void *arg);
+extern int smrlog_get_tsrange_and_nearestseq (smrLog * handle,
+					      smrLogAddr * addr,
+					      long long msec, int *found,
+					      long long *ts_min,
+					      long long *ts_max,
+					      long long *nearest_seq);
 #endif

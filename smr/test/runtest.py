@@ -38,6 +38,7 @@ integrated_tests = [
     './test_ping_during_log_send.py',
     './test_be_reconf.py',
     './test_quorum.py',
+    './test_logutil.py',
     ]
 
 for test in unit_tests:

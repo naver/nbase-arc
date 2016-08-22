@@ -102,6 +102,9 @@ extern int addr_truncate (smrLogAddr * addr, int offset);
 extern int addr_is_finalized (smrLogAddr * addr);
 extern int addr_finalize (smrLogAddr * addr);
 extern int addr_offset (smrLogAddr * addr);
+extern int addr_npage_in_memory (smrLogAddr * addr, int page_size,
+				 void (*reside_callback) (int, void *),
+				 void *arg);
 extern int dev_truncate (logDev * dev, long long base_seq, long long seq);
 
 #endif
