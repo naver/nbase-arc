@@ -548,7 +548,7 @@ format_binary (char *buf, int bufsz, char *data, int data_size)
 
   for (i = 0; i < count; i++, bp++, dp++)
     {
-      if (isprint (*dp))
+      if (isprint ((unsigned char)*dp))
 	{
 	  *bp = *dp;
 	}

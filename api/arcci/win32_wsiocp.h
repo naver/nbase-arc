@@ -74,10 +74,8 @@ typedef void fnDelCommState(void *apistate, aeCommState *sockState);
 int aeInitWinSock(void);
 void aeWinInit(void *state, HANDLE iocp, fnGetCommState *getCommState, fnDelCommState *delCommState);
 void aeWinCleanup();
-HANDLE aeWinGetIOCP();
-void aeWinSetIOCP(HANDLE iocph);
-void *aeWinGetIOCPState();
-void aeWinSetIOCPState(void *iocp_state);
+aeCommState *aeGetCommState(void *apistate, socket_t fd);
+void aeDelCommState(void *apistate, aeCommState *commState);
 
 #endif
 #endif

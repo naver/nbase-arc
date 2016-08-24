@@ -318,6 +318,11 @@ int aeWinListen(socket_t sock, int backlog);
 socket_t aeWinAccept(socket_t fd, struct sockaddr *sa, socklen_t *len);
 int aeWinSocketConnect(socket_t fd, const struct sockaddr *sa, int len);
 
+HANDLE aeWinGetIOCP();
+void aeWinSetIOCP(HANDLE iocph);
+void *aeWinGetIOCPState();
+void aeWinSetIOCPState(void *iocp_state);
+
 int strerror_r(int err, char* buf, size_t buflen);
 char *wsa_strerror(int err);
 
