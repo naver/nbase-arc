@@ -16,6 +16,7 @@
 #include <stdarg.h>
 #include <signal.h>
 #include <assert.h>
+#include <process.h>
 
 #include "arcci.h"
 
