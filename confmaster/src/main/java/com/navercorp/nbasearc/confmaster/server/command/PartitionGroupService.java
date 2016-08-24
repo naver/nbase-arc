@@ -21,6 +21,7 @@ import static com.navercorp.nbasearc.confmaster.Constant.Color.GREEN;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
 import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.zookeeper.KeeperException;
@@ -356,7 +357,16 @@ public class PartitionGroupService {
             }
         }
         
-        RoleChangeWorkflow rc = new RoleChangeWorkflow(pg, masterCandidate, context);
+        List<PartitionGroupServer> masterHints = new ArrayList<PartitionGroupServer>();
+        masterHints.add(masterCandidate);
+        for (PartitionGroupServer pgs : joinedPgsList) {
+            if (pgs.getData().getColor() == GREEN
+                    && pgs.getData().getRole().equals(PGS_ROLE_SLAVE)
+                    && pgs != masterCandidate) {
+                masterHints.add(pgs);
+            }
+        }
+        RoleChangeWorkflow rc = new RoleChangeWorkflow(pg, masterHints, context);
         try {
             rc.execute();
         } catch (Exception e) {

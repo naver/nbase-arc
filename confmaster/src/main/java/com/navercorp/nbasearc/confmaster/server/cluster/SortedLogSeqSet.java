@@ -47,13 +47,21 @@ public class SortedLogSeqSet extends TreeSet<LogSequence> {
         });
     }
 
-    public int index(PartitionGroupServer pgs) {
-        int pos = 0;
+    public int stdCompetitionRank(PartitionGroupServer pgs) {
+        int rank = 0;
+        int tie = 0;
+        long prevScore = -1;
         for (LogSequence ls : this) {
-            if (ls.getPgs() == pgs) {
-                return pos;
+            if (ls.getMax() == prevScore) {
+                tie += 1;
             } else {
-                pos++;
+                rank += tie + 1;
+                tie = 0;
+            }
+            prevScore = ls.getMax();
+
+            if (ls.getPgs() == pgs) {
+                return rank;
             }
         }
         return -1;

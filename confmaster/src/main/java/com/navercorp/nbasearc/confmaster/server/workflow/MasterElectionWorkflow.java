@@ -54,10 +54,10 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
     final MERoleMaster roleMaster;
     final MERoleLconn roleLconn;
 
-    final PartitionGroupServer masterHint;
+    final List<PartitionGroupServer> masterHints;
     
     public MasterElectionWorkflow(PartitionGroup pg,
-            PartitionGroupServer masterHint, boolean cascading,
+            List<PartitionGroupServer> masterHints, boolean cascading,
             ApplicationContext context) {
         super(cascading, pg, context.getBean(PartitionGroupImo.class));
         
@@ -71,7 +71,7 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
         this.roleMaster = context.getBean(MERoleMaster.class);
         this.roleLconn = context.getBean(MERoleLconn.class);
 
-        this.masterHint = masterHint;
+        this.masterHints = masterHints;
     }
 
     @Override
@@ -128,14 +128,19 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
             System.out.println(e.getPgs() + " " + e.getMax());
         }
 
-        PartitionGroupServer newMaster;
-        LogSequence newMasterLog;
-        if (masterHint != null) {
-            if (pg.isMasterCandidate(masterHint, logs, joinedPgsList)) {
-                throw new MgmtSmrCommandException(masterHint + " has no recent logs");
+        PartitionGroupServer newMaster = null;
+        LogSequence newMasterLog = null;
+        if (masterHints != null) {
+            for (PartitionGroupServer masterHint : masterHints) {
+                if (pg.isMasterCandidate(masterHint, logs, joinedPgsList)) {
+                    newMaster = masterHint;
+                    newMasterLog = logs.get(masterHint);
+                    break;
+                }
             }
-            newMaster = masterHint;
-            newMasterLog = logs.get(masterHint);
+            if (newMaster == null) {
+                throw new MgmtSmrCommandException(masterHints + " has no recent logs");
+            }
         } else {
             newMaster = pg.chooseMasterRandomly(logs, joinedPgsList);
             newMasterLog = logs.get(newMaster);

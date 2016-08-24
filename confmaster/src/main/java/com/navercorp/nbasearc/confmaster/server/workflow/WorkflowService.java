@@ -22,6 +22,7 @@ import static com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderStat
 import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.Future;
 
 import org.apache.zookeeper.KeeperException.NoNodeException;
@@ -160,9 +161,9 @@ public class WorkflowService {
 
     @WorkflowMapping(name = MASTER_ELECTION, privilege = LEADER)
     public Future<JobResult> masterElection(PartitionGroup pg,
-            PartitionGroupServer masterHint, long epoch,
+            List<PartitionGroupServer> masterHints, long epoch,
             ApplicationContext context) throws Exception {
-        MasterElectionWorkflow wf = new MasterElectionWorkflow(pg, masterHint,
+        MasterElectionWorkflow wf = new MasterElectionWorkflow(pg, masterHints,
                 true, context);
         checkEpochAndExecute(wf, epoch, pg.getLastWfEpoch());
         return null;

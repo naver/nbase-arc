@@ -22,6 +22,9 @@ import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -208,12 +211,15 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         mimics[1].mSmr.setSeqLog(100, 100, 100, 100);
         mimics[2].mSmr.setSeqLog(0, 0, 0, 0);
         
-        RoleChangeWorkflow rc = new RoleChangeWorkflow(getPg(), getPgs(2), context);
+        List<PartitionGroupServer> masterHints = new ArrayList<PartitionGroupServer>();
+        masterHints.add(getPgs(2));
+        RoleChangeWorkflow rc = new RoleChangeWorkflow(getPg(), masterHints, context);
         rc.execute();
-        assertTrue(rc.getResultString().contains(
-                        "-ERR role change fail. masterHint: test_cluster/pg:0/pgs:2, "
-                                + "exception: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtSmrCommandException. "
-                                + "test_cluster/pg:0/pgs:2 has no recent logs"));
+        assertEquals(
+                "-ERR role change fail. masterHint: [test_cluster/pg:0/pgs:2], "
+                        + "exception: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtSmrCommandException. "
+                        + "[test_cluster/pg:0/pgs:2] has no recent logs",
+                rc.getResultString());
         
         // Recovery
         MasterFinder mf = new MasterFinder(getPgsList()); 
@@ -226,7 +232,10 @@ public class RoleChangeWorkflowTest extends BasicSetting {
             await("test for slave recovery.").atMost(assertionTimeout, SECONDS).until(rv);
         }
         
-        rc = new RoleChangeWorkflow(getPg(), getPgs(1), context);
+        masterHints.clear();
+        masterHints.add(getPgs(2));
+        masterHints.add(getPgs(1));
+        rc = new RoleChangeWorkflow(getPg(), masterHints, context);
         rc.execute();
         assertEquals("{\"master\":1,\"role_slave_error\":[]}", rc.getResultString());
     }
@@ -241,13 +250,16 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         
         mimics[0].mSmr.setSeqLog(100, 100, 200, 100);
         mimics[1].mSmr.setSeqLog(0, 0, 0, 0);
-        
-        RoleChangeWorkflow rc = new RoleChangeWorkflow(getPg(), getPgs(1), context);
+
+        List<PartitionGroupServer> masterHints = new ArrayList<PartitionGroupServer>();
+        masterHints.add(getPgs(1));
+        RoleChangeWorkflow rc = new RoleChangeWorkflow(getPg(), masterHints, context);
         rc.execute();
-        assertTrue(rc.getResultString().contains(
-                        "-ERR role change fail. masterHint: test_cluster/pg:0/pgs:1, "
-                                + "exception: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtSmrCommandException. "
-                                + "test_cluster/pg:0/pgs:1 has no recent logs"));
+        assertEquals(
+                "-ERR role change fail. masterHint: [test_cluster/pg:0/pgs:1], "
+                        + "exception: com.navercorp.nbasearc.confmaster.ConfMasterException$MgmtSmrCommandException. "
+                        + "[test_cluster/pg:0/pgs:1] has no recent logs",
+                rc.getResultString());
         
         // Recovery
         MasterFinder mf = new MasterFinder(getPgsList()); 
@@ -267,7 +279,8 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         mimics[0].mSmr.setSeqLog(100, 100, 200, 100);
         mimics[1].mSmr.setSeqLog(100, 100, 200, 100);
         
-        rc = new RoleChangeWorkflow(getPg(), getPgs(1), context);
+        masterHints.add(getPgs(1));
+        rc = new RoleChangeWorkflow(getPg(), masterHints, context);
         rc.execute();
         assertEquals("{\"master\":1,\"role_slave_error\":[]}", rc.getResultString());
     }

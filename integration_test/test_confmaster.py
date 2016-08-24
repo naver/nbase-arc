@@ -1784,3 +1784,45 @@ class TestConfMaster(unittest.TestCase):
             ret = default_cluster.finalize( self.cluster ) 
             self.assertEquals( ret, 0, 'failed to TestClusteredConfigurator.finalize' )
 
+    def test_role_change_log_rank(self):
+        util.print_frame()
+        load_gen_list = {}
+        try:
+            ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+            self.assertEquals( ret, 0, 'failed to TestConfMaster.initialize' )
+
+            # start load generator
+            for i in range( len(self.cluster['servers']) ):
+                server = self.cluster['servers'][i]
+                load_gen = load_generator.LoadGenerator(server['id'], server['ip'], server['gateway_port'], timeout=10)
+                load_gen.start()
+                load_gen_list[i] = load_gen
+
+            # decrease PG.Quorum
+            ret = util.pg_dq(self.leader_cm, self.cluster['cluster_name'], self.cluster['servers'][0]['pg_id'])
+            self.assertTrue(ret, 'Failed to pg_dq')
+
+            for i in range(10):
+                # get master, slave1, slave2
+                m, s1, s2 = util.get_mss( self.cluster )
+                self.assertNotEqual( m, None, 'master is None.' )
+                self.assertNotEqual( s1, None, 'slave1 is None.' )
+                self.assertNotEqual( s2, None, 'slave2 is None.' )
+
+                util.log( 'Loop:%d, role_change, master:%d' % (i, m['id']) )
+                self.role_change(m)
+
+                for i in range(len(load_gen_list)):
+                    self.assertTrue(load_gen_list[i].consistency, 'data consistency error')
+
+        finally:
+            # shutdown load generators
+            for i in range(len(load_gen_list)):
+                load_gen_list[i].quit()
+                load_gen_list[i].join()
+                load_gen_list.pop(i, None)
+
+            # shutdown cluster
+            ret = default_cluster.finalize( self.cluster )
+            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+

@@ -221,11 +221,11 @@ public class PartitionGroup extends ZNode<PartitionGroupData> {
     
     public boolean isMasterCandidate(PartitionGroupServer pgs,
             SortedLogSeqSet logSeqMap, List<PartitionGroupServer> pgsList) {
-        final int index = logSeqMap.index(pgs);
-        if (index == -1) {
-            return true;
+        final int rank = logSeqMap.stdCompetitionRank(pgs) - 1;
+        if (rank < 0) {
+            return false;
         }
-        return index > getData().getQuorum() - getD(pgsList);
+        return rank <= getData().getQuorum() - getD(pgsList);
     }
 
     /**

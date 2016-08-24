@@ -16,59 +16,44 @@
 
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.BeforeClass;
+import org.codehaus.jackson.map.ObjectMapper;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.MockitoAnnotations;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
-import com.navercorp.nbasearc.confmaster.BasicSetting;
-import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
-public class SortedLogSeqSetTest extends BasicSetting {
-    
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        LeaderState.setLeader();
-        BasicSetting.beforeClass();
-    }
-    
-    @Before
-    public void before() throws Exception {
-        super.before();
-        MockitoAnnotations.initMocks(this);
-    }
-    
-    @After
-    public void after() throws Exception {
-        super.after();
-    }
+public class SortedLogSeqSetTest {
 
+    @Autowired
+    ApplicationContext context;
+
+    final String clusterName = "test_cluster";
+    final ObjectMapper mapper = new ObjectMapper();
+    final PartitionGroupServerData data = PartitionGroupServerData.builder()
+            .build();
+    
     @Test
     public void sortLogSequence() throws Exception {
-        // Initialize
-        createCluster();
-        createPm();
-        createPg();
-
-        // Create master
-        for (int i = 0; i < MAX_PGS; i++) {
-            createPgs(i);
-            mockPgs(i);
-            joinPgs(i);
+        final int MAX = 3;
+        final byte[] raw = mapper.writeValueAsBytes(data);
+        PartitionGroupServer []objs = new PartitionGroupServer[MAX];
+        for (int i = 0; i < MAX; i++) {
+            objs[i] = new PartitionGroupServer(context, String.valueOf(i),
+                    String.valueOf(i), clusterName, raw);
         }
         
         // Sort descending order
         SortedLogSeqSet slss = new SortedLogSeqSet();
-        for (int i = 1; i <= MAX_PGS; i++) {
-            LogSequence ls = new LogSequence(getPgs(i-1));
+        for (int i = 1; i <= MAX; i++) {
+            LogSequence ls = new LogSequence(objs[i-1]);
             ls.min = i * 100;
             ls.logCommit = i * 200;
             ls.max = i * 300;
@@ -76,18 +61,18 @@ public class SortedLogSeqSetTest extends BasicSetting {
             slss.add(ls);
         }
         
-        assertEquals(0, slss.index(getPgs(2)));
-        assertEquals(1, slss.index(getPgs(1)));
-        assertEquals(2, slss.index(getPgs(0)));
+        assertEquals(1, slss.stdCompetitionRank(objs[2]));
+        assertEquals(2, slss.stdCompetitionRank(objs[1]));
+        assertEquals(3, slss.stdCompetitionRank(objs[0]));
         
-        assertLogSeq(slss.get(getPgs(0)), 100, 200, 300, 200);
-        assertLogSeq(slss.get(getPgs(1)), 200, 400, 600, 400);
-        assertLogSeq(slss.get(getPgs(2)), 300, 600, 900, 600);
+        assertLogSeq(slss.get(objs[0]), 100, 200, 300, 200);
+        assertLogSeq(slss.get(objs[1]), 200, 400, 600, 400);
+        assertLogSeq(slss.get(objs[2]), 300, 600, 900, 600);
 
         // Equal LogSequences
         slss = new SortedLogSeqSet();
-        for (int i = 1; i <= MAX_PGS; i++) {
-            LogSequence ls = new LogSequence(getPgs(0));
+        for (int i = 1; i <= MAX; i++) {
+            LogSequence ls = new LogSequence(objs[0]);
             ls.min = 100;
             ls.logCommit = 200;
             ls.max = 300;
@@ -99,8 +84,8 @@ public class SortedLogSeqSetTest extends BasicSetting {
 
         // Different sequences, but equal PGS 
         slss = new SortedLogSeqSet();
-        for (int i = 1; i <= MAX_PGS; i++) {
-            LogSequence ls = new LogSequence(getPgs(0));
+        for (int i = 1; i <= MAX; i++) {
+            LogSequence ls = new LogSequence(objs[0]);
             ls.min = i * 100;
             ls.logCommit = i * 200;
             ls.max = i * 300;
@@ -112,8 +97,8 @@ public class SortedLogSeqSetTest extends BasicSetting {
 
         // Different PGSes, but equal sequence
         slss = new SortedLogSeqSet();
-        for (int i = 1; i <= MAX_PGS; i++) {
-            LogSequence ls = new LogSequence(getPgs(i - 1));
+        for (int i = 1; i <= MAX; i++) {
+            LogSequence ls = new LogSequence(objs[i - 1]);
             ls.min = 100;
             ls.logCommit = 200;
             ls.max = 300;
@@ -122,6 +107,54 @@ public class SortedLogSeqSetTest extends BasicSetting {
         }
         
         assertEquals(3, slss.size());
+    }
+
+    private void _rankLogSequence(int arySize, PartitionGroupServer[] objs,
+            int[] seqMaxs, int[] expectedRanks) throws Exception {
+
+        // Sort descending order
+        SortedLogSeqSet slss = new SortedLogSeqSet();
+        for (int i = 0; i < arySize; i++) {
+            LogSequence ls = new LogSequence(objs[i]);
+            ls.min = seqMaxs[i] - 10;
+            ls.logCommit = seqMaxs[i];
+            ls.max = seqMaxs[i];
+            ls.beCommit = seqMaxs[i];
+            slss.add(ls);
+        }
+
+        assertEquals(arySize, slss.size());
+        for (int i = 0; i < arySize; i++) {
+            assertEquals(expectedRanks[i], slss.stdCompetitionRank(objs[i]));
+        }
+    }
+    
+    @Test
+    public void rankLogSequence() throws Exception {
+        final int MAX = 100;
+        byte []raw = mapper.writeValueAsBytes(data);
+
+        PartitionGroupServer []objs = new PartitionGroupServer[MAX];
+        for (int i = 0; i < MAX; i++) {
+            objs[i] = new PartitionGroupServer(context, String.valueOf(i),
+                    String.valueOf(i), clusterName, raw);
+        }
+        
+        _rankLogSequence(10, objs, 
+                new int[]{ 10, 20, 20, 40, 50, 60, 70, 70, 70, 100 }, 
+                new int[]{ 10, 8, 8, 7, 6, 5, 2, 2, 2, 1 });
+
+        _rankLogSequence(10, objs, 
+                new int[]{ 100, 70, 70, 70, 60, 50, 40, 20, 20, 10 }, 
+                new int[]{ 1, 2, 2, 2, 5, 6, 7, 8, 8, 10 });
+
+        _rankLogSequence(10, objs, 
+                new int[]{ 10, 10, 70, 70, 70, 100, 100, 100, 100, 10 }, 
+                new int[]{ 8, 8, 5, 5, 5, 1, 1, 1, 1, 8 });
+
+        _rankLogSequence(10, objs, 
+                new int[]{ 100, 100, 70, 70, 70, 10, 10, 10, 10, 100 }, 
+                new int[]{ 1, 1, 4, 4, 4, 7, 7, 7, 7, 1 });
     }
     
     private void assertLogSeq(LogSequence ls, long min, long commit, long max, long be) {
@@ -132,3 +165,4 @@ public class SortedLogSeqSetTest extends BasicSetting {
     }
 
 }
+
