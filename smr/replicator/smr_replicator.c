@@ -5196,8 +5196,9 @@ info_replicator (smrReplicator * rep, gpbuf_t * gp)
   if (rep->role == MASTER)
     {
       ret =
-	gpbuf_printf (gp, "quorum_policy:quorum=%d has_members=%d",
-		      rep->commit_quorum, rep->has_quorum_members);
+	gpbuf_printf (gp, "quorum_policy:quorum=%d has_members=%s",
+		      rep->commit_quorum,
+		      rep->has_quorum_members ? "y" : "n");
       CHECK (ret);
       if (rep->has_quorum_members)
 	{
@@ -5208,7 +5209,7 @@ info_replicator (smrReplicator * rep, gpbuf_t * gp)
 		{
 		  break;
 		}
-	      ret = gpbuf_printf (gp, "%d ", rep->quorum_members[i]);
+	      ret = gpbuf_printf (gp, " %d", rep->quorum_members[i]);
 	      CHECK (ret);
 	    }
 	}
