@@ -812,7 +812,7 @@ print_raw (unsigned char *buf, int len)
   char out_buf[8010];
   char *op, *start;
   const static char hexa[] =
-    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 'a', 'b', 'c', 'd', 'e', 'f' };
+    { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
 
   dp = buf;
   op = start = &out_buf[0];
