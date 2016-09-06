@@ -172,7 +172,6 @@ int aeWinQueueAccept(SOCKET listensock) {
 /* listen using extension function to get faster accepts */
 int aeWinListen(SOCKET sock, int backlog) {
     aeCommState *commstate;
-    DWORD result, bytes;
 
     if ((commstate = aeGetCommState(iocpState, (int)sock)) == NULL) {
         errno = WSAEINVAL;
@@ -374,7 +373,7 @@ int aeWinSocketSend(socket_t fd, char *buf, int len, int flags,
 
 /* for non-blocking connect with IOCP */
 int aeWinSocketConnect(socket_t fd, const struct sockaddr *sa, int len) {
-    DWORD result, bytes;
+    DWORD result;
     SOCKET sock = (SOCKET)fd;
     aeCommState *commstate;
     struct sockaddr_in addr;

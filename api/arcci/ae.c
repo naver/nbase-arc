@@ -53,6 +53,77 @@
 #include "ae_epoll.c"
 #endif
 
+#ifdef _WIN32
+static unsigned int dictFdHash(const void *key)
+{
+    return (unsigned int)key;
+}
+
+static unsigned int dictFdHashKeyCompare(void *privdata, const void *key1, const void *key2)
+{
+    return key1 == key2;
+}
+
+static dictType fdiDictType = {
+    dictFdHash,
+    NULL,
+    NULL,
+    dictFdHashKeyCompare,
+    NULL,
+    NULL,
+};
+
+static fdi_t getNextFDIAvailable(aeEventLoop *eventLoop)
+{
+    listIter *rp_ptr;
+    listNode *fdi_node;
+    fdi_t fdi;
+
+    if (listLength(eventLoop->fdiMap->recycle_pool) > 0)
+    {
+        rp_ptr = listGetIterator(eventLoop->fdiMap->recycle_pool, AL_START_HEAD);
+        fdi_node = listNext(rp_ptr);
+        fdi = (fdi_t)fdi_node->value;
+        listDelNode(eventLoop->fdiMap->recycle_pool, fdi_node);
+        listReleaseIterator(rp_ptr);
+        return fdi;
+    }
+    return eventLoop->fdiMap->next_available++;
+}
+
+static fdi_t lookupFDI(aeEventLoop *eventLoop, socket_t s)
+{
+    dictEntry *entry = dictFind(eventLoop->fdiMap->map, (void *)s);
+    if (entry == NULL)
+    {
+        return INVALID_FDI;
+    }
+    fdi_t fdi = (fdi_t)entry->v.u64;
+    return fdi;
+}
+
+static fdi_t mapFDToIndex(aeEventLoop *eventLoop, socket_t s)
+{
+    fdi_t fdi = getNextFDIAvailable(eventLoop);
+    if (dictAdd(eventLoop->fdiMap->map, (void *)s, (void *)fdi) != DICT_OK)
+    {
+        return INVALID_FDI;
+    }
+    return fdi;
+}
+
+static void unmapFDToIndex(aeEventLoop *eventLoop, socket_t s)
+{
+    fdi_t fdi = lookupFDI(eventLoop, s);
+    if (fdi == INVALID_FDI)
+    {
+        return;
+    }
+    dictDelete(eventLoop->fdiMap->map, (void *)s);
+    listAddNodeTail(eventLoop->fdiMap->recycle_pool, (void *)fdi);
+}
+#endif
+
 aeEventLoop *aeCreateEventLoop(int setsize) {
     aeEventLoop *eventLoop;
     int i;
@@ -73,9 +144,23 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
      * vector with it. */
     for (i = 0; i < setsize; i++)
         eventLoop->events[i].mask = AE_NONE;
+#ifdef _WIN32
+    if ((eventLoop->fdiMap = zmalloc(sizeof(fd_index_map_t))) == NULL) goto err;
+    eventLoop->fdiMap->map = dictCreate(&fdiDictType, NULL);
+    eventLoop->fdiMap->recycle_pool = listCreate();
+    if (eventLoop->fdiMap->map == NULL || eventLoop->fdiMap->recycle_pool == NULL) goto err;
+    eventLoop->fdiMap->next_available = 3;	// stdin(0), stdout(1) and stderr(2)
+#endif
     return eventLoop;
 
 err:
+#ifdef _WIN32
+    if (eventLoop->fdiMap) {
+        if (eventLoop->fdiMap->map != NULL) dictRelease(eventLoop->fdiMap->map);
+        if (eventLoop->fdiMap->recycle_pool != NULL) listRelease(eventLoop->fdiMap->recycle_pool);
+        zfree(eventLoop->fdiMap);
+    }
+#endif
     if (eventLoop) {
         zfree(eventLoop->events);
         zfree(eventLoop->fired);
@@ -86,6 +171,11 @@ err:
 
 void aeDeleteEventLoop(aeEventLoop *eventLoop) {
     aeApiFree(eventLoop);
+#ifdef _WIN32
+    dictRelease(eventLoop->fdiMap->map);
+    listRelease(eventLoop->fdiMap->recycle_pool);
+    zfree(eventLoop->fdiMap);
+#endif
     zfree(eventLoop->events);
     zfree(eventLoop->fired);
     zfree(eventLoop);
@@ -99,11 +189,26 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, socket_t fd, int mask,
         aeFileProc *proc, void *clientData)
 {
     aeFileEvent *fe;
-    if (fd >= eventLoop->setsize) {
+    int fdi;
+    
+#ifdef _WIN32
+    fdi = lookupFDI(eventLoop, fd);
+    if (fdi == INVALID_FDI) {
+        fdi = mapFDToIndex(eventLoop, fd);
+        if (fdi == INVALID_FDI) {
+            errno = EBADF;
+            return AE_ERR;
+        }
+    }
+#else
+    fdi = fd;
+#endif
+
+    if (fdi >= eventLoop->setsize) {
         errno = ERANGE;
         return AE_ERR;
     }
-    fe = &eventLoop->events[fd];
+    fe = &eventLoop->events[fdi];
 
     if (aeApiAddEvent(eventLoop, fd, mask) == -1)
         return AE_ERR;
@@ -111,20 +216,37 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, socket_t fd, int mask,
     if (mask & AE_READABLE) fe->rfileProc = proc;
     if (mask & AE_WRITABLE) fe->wfileProc = proc;
     fe->clientData = clientData;
-    if (fd > eventLoop->maxfd)
-        eventLoop->maxfd = fd;
+    if (fdi > eventLoop->maxfd)
+        eventLoop->maxfd = fdi;
     return AE_OK;
 }
 
 void aeDeleteFileEvent(aeEventLoop *eventLoop, socket_t fd, int mask)
 {
     aeFileEvent *fe;
-    if (fd >= eventLoop->setsize) return;
-    fe = &eventLoop->events[fd];
+    int fdi;
+
+#ifdef _WIN32
+    fdi = lookupFDI(eventLoop, fd);
+    if (fdi == INVALID_FDI) {
+        errno = EBADF;
+        return;
+    }
+#else
+    fdi = fd;
+#endif
+    
+    if (fdi >= eventLoop->setsize) {
+#ifdef _WIN32
+        unmapFDToIndex(eventLoop, fd);
+#endif
+        return;
+    }
+    fe = &eventLoop->events[fdi];
 
     if (fe->mask == AE_NONE) return;
     fe->mask = fe->mask & (~mask);
-    if (fd == eventLoop->maxfd && fe->mask == AE_NONE) {
+    if (fdi == eventLoop->maxfd && fe->mask == AE_NONE) {
         /* Update the max fd */
         socket_t j;
 
@@ -132,13 +254,29 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, socket_t fd, int mask)
             if (eventLoop->events[j].mask != AE_NONE) break;
         eventLoop->maxfd = j;
     }
+#ifdef _WIN32
+    if (fe->mask == AE_NONE) {
+        unmapFDToIndex(eventLoop, fd);
+    }
+#endif
     aeApiDelEvent(eventLoop, fd, mask);
 }
 
 int aeGetFileEvents(aeEventLoop *eventLoop, socket_t fd) {
     aeFileEvent *fe;
-    if (fd >= eventLoop->setsize) return 0;
-    fe = &eventLoop->events[fd];
+    int fdi;
+
+#ifdef _WIN32
+    fdi = lookupFDI(eventLoop, fd);
+    if (fdi == INVALID_FDI) {
+        return 0;
+    }
+#else
+    fdi = fd;
+#endif
+
+    if (fdi >= eventLoop->setsize) return 0;
+    fe = &eventLoop->events[fdi];
 
     return fe->mask;
 }
@@ -369,7 +507,15 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         numevents = aeApiPoll(eventLoop, tvp);
         for (j = 0; j < numevents; j++) {
+#ifdef _WIN32
+            const int fdi = lookupFDI(eventLoop, eventLoop->fired[j].fd);
+            if (fdi == INVALID_FDI) {
+                continue;
+            }
+            aeFileEvent *fe = &eventLoop->events[fdi];
+#else
             aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
+#endif
             int mask = eventLoop->fired[j].mask;
 	    socket_t fd = eventLoop->fired[j].fd;
             int rfired = 0;

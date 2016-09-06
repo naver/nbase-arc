@@ -34,6 +34,10 @@
 #define __AE_H__
 
 #include "os.h"
+#ifdef _WIN32
+#include "dict.h"
+#include "adlist.h"
+#endif
 
 #define AE_OK 0
 #define AE_ERR -1
@@ -60,6 +64,16 @@ typedef int aeTimeProc(struct aeEventLoop *eventLoop, long long id, void *client
 typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientData);
 typedef void aeBeforeSleepProc(struct aeEventLoop *eventLoop);
 
+#ifdef _WIN32
+#define INVALID_FDI -1
+typedef int fdi_t;		// File Descriptor Index
+typedef struct fd_index_map_t
+{
+    dict *map;
+    list *recycle_pool;
+    int next_available;
+} fd_index_map_t;
+#endif
 /* File event structure */
 typedef struct aeFileEvent {
     int mask; /* one of AE_(READABLE|WRITABLE) */
@@ -97,6 +111,9 @@ typedef struct aeEventLoop {
     int stop;
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
+#ifdef _WIN32
+    fd_index_map_t *fdiMap;
+#endif
 } aeEventLoop;
 
 /* Prototypes */
