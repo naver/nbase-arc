@@ -199,6 +199,10 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
       int ret;
       int length, skip;
 
+      ret = msg_seek_read (seek, curr - 1, 1, &cmd);
+      CHECK_NOMORE ();
+      msg_end = curr;
+
       ret = msg_seek_read (seek, curr, 1, &cmd);
       CHECK_NOMORE ();
 
@@ -208,7 +212,7 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
 	case SMR_OP_SESSION_CLOSE:
 	  // command, sid
 	  skip = 1 + sizeof (int);
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	case SMR_OP_SESSION_DATA:
 	  // command, sid, hash, timestamp 
@@ -220,16 +224,16 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
 	  length = ntohl (length);
 	  // skip length and data
 	  skip += sizeof (int) + length;
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	case SMR_OP_NODE_CHANGE:
 	  // 
 	  skip = 1 + sizeof (short);
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	case SMR_OP_SEQ_COMMITTED:
 	  skip = SMR_OP_SEQ_COMMITTED_SZ;
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	default:
 	  ERRNO_POINT ();
