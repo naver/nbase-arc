@@ -440,6 +440,7 @@ logical_recover (smrLog * handle, recoverState * rs)
 	find_commit_seq_msg (addr->addr, from, to, 0, &found, &roff, &cseq);
       if (ret < 0)
 	{
+	  addr = NULL;		// ownership moved to seek structure
 	  ERRNO_POINT ();
 	  goto error;
 	}
@@ -454,12 +455,14 @@ logical_recover (smrLog * handle, recoverState * rs)
 	  ret = msg_seek_find_msg_end (&seek, begin, &msg_max_seq);
 	  if (ret < 0)
 	    {
+	      addr = NULL;
 	      ERRNO_POINT ();
 	      goto error;
 	    }
 	  break;
 	}
     }
+  addr = NULL;
   clear_msg_seek (handle, &seek);
 
   /* 
