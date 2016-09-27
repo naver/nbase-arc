@@ -193,7 +193,7 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
   long long curr = begin;
   long long msg_end = begin;
 
-  while (curr < seek->limit)
+  while (curr <= seek->limit)
     {
       char cmd;
       int ret;
@@ -374,6 +374,7 @@ logical_recover (smrLog * handle, recoverState * rs)
       return 0;
     }
 
+  init_msg_seek (&seek);
 
   /* 
    * - find msg_min_seq, msg_max_seq 
@@ -409,7 +410,6 @@ logical_recover (smrLog * handle, recoverState * rs)
 	}
     }
 
-  init_msg_seek (&seek);
   seek.limit = max_seq;
   /* -1 for the case where max_seq is end of the log file */
   for (seq = seq_round_down (max_seq - 1);
