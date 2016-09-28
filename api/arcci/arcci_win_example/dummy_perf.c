@@ -1,13 +1,7 @@
+#include <stdlib.h>
 #include <stdio.h>
-#ifndef WIN32
-#include <unistd.h>
-#include <pthread.h>
-#include <sys/time.h>
-#else
 #include <Windows.h>
 #include <time.h>
-#endif
-#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
@@ -35,6 +29,7 @@ static volatile int ok_to_run = 0;
 static volatile int global_tick = 0;
 #define BUF_LARGE_SIZE	10*1024
 static char *buf_large = NULL;
+CRITICAL_SECTION global_lock;
 
 /* --------------- */
 /* LOCAL FUNCTIONS */
@@ -171,6 +166,7 @@ worker_thread(void *data)
         arc_free_request(rqst);
 
         /* print stats */
+        EnterCriticalSection(&global_lock);
         if (local_tick != global_tick)
         {
             printf("[%d][%d] %lld %lld\n", global_tick, arg->tid,
@@ -179,12 +175,14 @@ worker_thread(void *data)
             saved_count = count;
             saved_error = error;
         }
+        LeaveCriticalSection(&global_lock);
 
         if (next_rqst != 0)
         {
             goto peek_rqst;
         }
     }
+
     return 0;
 }
 
@@ -278,7 +276,7 @@ void test_commands(char *zk_addr, char *cluster_name)
     conf.conn_reconnect_millis = 5000;
     conf.init_timeout_millis = 5000;
     conf.num_conn_per_gw = 256;
-    conf.max_fd = 0x7FFFF;
+    conf.max_fd = 1024;
 
     arc = arc_new_zk(zk_addr, cluster_name, &conf);
     if (arc == NULL) {
@@ -288,12 +286,12 @@ void test_commands(char *zk_addr, char *cluster_name)
 
     printf("START\n");
 
-    for (i = 0; i < 10; i++)
+    for (i = 0; i < 100; i++)
     {
         rqst = arc_create_request();
         assert(rqst != NULL);
 
-        for (j = 0; j < 100; j++)
+        for (j = 0; j < 1; j++)
         {
             ret = arc_append_command(rqst, "set haha%d-%d hoho%d-%0d", i, j, i, j);
             assert(ret == 0);
@@ -540,38 +538,129 @@ void test_sortedset(char *zk_addr, char *cluster_name)
     arc_destroy(arc);
 }
 
+int createDummyHandles(const int count)
+{
+    HANDLE hMutex = CreateMutex(NULL, FALSE, NULL);
+    HANDLE hMutexDup = NULL;
+
+    for (int i = 0; i < count; i++)
+    {
+        if (0 == DuplicateHandle(GetCurrentProcess(), hMutex, 
+            GetCurrentProcess(), &hMutexDup, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+const char *usage = "usage : arcci_win_example.exe <num_cluster> <zookeeper_address_1> <cluster_name_1> <num_thread_1> <zookeeper_address_2> <cluster_name_2> <num_thread_2> ... <run_time>\n";
+
 int main(int argc, char **argv)
 {
     int ret = 0;
-    char *zk_addr;
-    char *cluster_name;
-    int num_thr = 10;
-    int run_sec = 30;
+    int num_cluster = 0;
+    char **zk_addr;
+    char **cluster_name;
+    int *num_thr;
+    int num_thr_tot;
+    int i, j;
+    int argv_idx;
+    arc_t *arc;
+    int widx;
+    struct worker_arg *workers = NULL;
 
-    if (argc < 5)
+    if (argc < 4)
     {
-    	printf("usage : arcci_win_example.exe <zookeeper_address> <cluster_name> <num_thread> <run_time>\n");
+    	printf(usage);
     	exit(-1);
     }
 
-    zk_addr = argv[1];
-    cluster_name = argv[2];
-    num_thr = atoi(argv[3]);
-    run_sec = atoi(argv[4]);
+    num_cluster = atoi(argv[1]);
+    if (num_cluster <= 0 || argc != num_cluster * 3 + 2)
+    {
+        printf(usage);
+        exit(-1);
+    }
+
+    widx = 0;
+    num_thr_tot = 0;
+    num_thr = (int*)malloc(sizeof(int) * num_cluster);
+    zk_addr = (char**)malloc(sizeof(char*) * num_cluster);
+    cluster_name = (char**)malloc(sizeof(char*) * num_cluster);
+    for (i = 0; i < num_cluster; i++)
+    {
+        argv_idx = 3 * i + 1;
+        zk_addr[i] = argv[argv_idx + 1];
+        cluster_name[i] = argv[argv_idx + 2];
+        num_thr[i] = atoi(argv[argv_idx + 3]);
+        num_thr_tot += num_thr[i];
+    }
+
+    ok_to_run = 1;
+    InitializeCriticalSection(&global_lock);
+    workers = (struct worker_arg*)malloc(sizeof(struct worker_arg) * num_thr_tot);
+    assert(workers != NULL);
 
     buf_large = (char*)malloc(BUF_LARGE_SIZE);
     memset(buf_large, 'A', BUF_LARGE_SIZE);
     buf_large[BUF_LARGE_SIZE - 1] = '\0';
 
-    ret = dummy_perf_multi_instance(zk_addr, cluster_name, num_thr, run_sec);
+    createDummyHandles(50000);
 
-    /*
-    test_commands(zk_addr, cluster_name);
-    test_tripleS(zk_addr, cluster_name);
-    test_list(zk_addr, cluster_name);
-    test_sortedset(zk_addr, cluster_name);
-    */
+    for (i = 0; i < num_cluster; i++)
+    {
+        arc_conf_t conf;
+        arc_init_conf(&conf);
+        conf.log_level = ARC_LOG_LEVEL_INFO;
+        conf.zk_reconnect_millis = 3000;
+        conf.init_timeout_millis = 5000;
+        conf.conn_reconnect_millis = 5000;
+        conf.num_conn_per_gw = 2;
+        conf.max_fd = 1024;
 
+        /* launch workers */
+        for (j = 0; j < num_thr[i]; j++)
+        {
+            /*
+            char log_prefix[64];
+            _snprintf(log_prefix, 64, "arcci_%s_%d", cluster_name[i], j);
+            conf.log_file_prefix = log_prefix;
+            */
+            conf.log_file_prefix = NULL;
+
+            arc = arc_new_zk(zk_addr[i], cluster_name[i], &conf);
+            assert(arc != NULL);
+
+            workers[widx].arc = arc;
+            workers[widx].tid = i;
+            workers[widx].thr = (HANDLE)_beginthreadex(NULL, 0, worker_thread, &workers[widx], 0, NULL);
+            if (workers[widx].thr <= 0)
+            {
+                exit(-1);
+            }
+            widx++;
+        }
+    }
+
+    for (int i = 0; i < 10; i++) {
+        printf("(%d/10)", i);
+        getchar();
+    }
+
+    /* wait for the worker thread to finish */
+    ok_to_run = 0;
+    for (i = 0; i < num_thr_tot; i++)
+    {
+        WaitForSingleObject(workers[i].thr, INFINITE);
+        arc_destroy(workers[i].arc);
+    }
+
+    free(zk_addr);
+    free(cluster_name);
+    free(num_thr);
+    free(workers);
     free(buf_large);
+    DeleteCriticalSection(&global_lock);
     return ret;
 }

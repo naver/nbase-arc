@@ -3983,8 +3983,6 @@ zk_getaffinity_completion (int rc, const char *value,
   char *aff_ary[CLUSTER_SIZE];	// pointer to affinity property value over buf (peek)
   int i, j, n_item;
 
-  LOG_INFO (be, "Callback zk_getaffinity_completion rc:%d value:%s", rc,
-	    value ? value : "");
   if (rc != ZOK || value == NULL || value_len < 0)
     {
       LOG_ERROR (be,
@@ -3997,11 +3995,14 @@ zk_getaffinity_completion (int rc, const char *value,
   if (!buf)
     {
       LOG_ERROR (be, "Failed to allocate temporay memory. size:%d",
-		 strlen (value));
+		 value_len);
       return;
     }
   memcpy (buf, value, value_len);
   buf[value_len] = '\0';
+  
+  LOG_INFO (be, "Callback zk_getaffinity_completion rc:%d value:%s", rc,
+	    buf);
 
   // Parse affinity data
   if (aff_data_parse_check_and_peek (be, buf, gwid_ary, aff_ary, &n_item) < 0)
@@ -4049,7 +4050,7 @@ zk_getaffinity_completion (int rc, const char *value,
 			  // already registered
 			  break;
 			}
-		      else if (pn_gw_aff->r_ids[k] == -1)
+		      else if (pn_gw_aff->w_ids[k] == -1)
 			{
 			  pn_gw_aff->w_ids[k] = gwid;
 			  break;
