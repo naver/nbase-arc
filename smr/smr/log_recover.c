@@ -193,11 +193,15 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
   long long curr = begin;
   long long msg_end = begin;
 
-  while (curr < seek->limit)
+  while (curr <= seek->limit)
     {
       char cmd;
       int ret;
       int length, skip;
+
+      ret = msg_seek_read (seek, curr - 1, 1, &cmd);
+      CHECK_NOMORE ();
+      msg_end = curr;
 
       ret = msg_seek_read (seek, curr, 1, &cmd);
       CHECK_NOMORE ();
@@ -208,7 +212,7 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
 	case SMR_OP_SESSION_CLOSE:
 	  // command, sid
 	  skip = 1 + sizeof (int);
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	case SMR_OP_SESSION_DATA:
 	  // command, sid, hash, timestamp 
@@ -220,16 +224,16 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
 	  length = ntohl (length);
 	  // skip length and data
 	  skip += sizeof (int) + length;
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	case SMR_OP_NODE_CHANGE:
 	  // 
 	  skip = 1 + sizeof (short);
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	case SMR_OP_SEQ_COMMITTED:
 	  skip = SMR_OP_SEQ_COMMITTED_SZ;
-	  msg_end = curr += skip;
+	  curr += skip;
 	  break;
 	default:
 	  ERRNO_POINT ();
@@ -370,6 +374,7 @@ logical_recover (smrLog * handle, recoverState * rs)
       return 0;
     }
 
+  init_msg_seek (&seek);
 
   /* 
    * - find msg_min_seq, msg_max_seq 
@@ -405,7 +410,6 @@ logical_recover (smrLog * handle, recoverState * rs)
 	}
     }
 
-  init_msg_seek (&seek);
   seek.limit = max_seq;
   /* -1 for the case where max_seq is end of the log file */
   for (seq = seq_round_down (max_seq - 1);
@@ -440,6 +444,7 @@ logical_recover (smrLog * handle, recoverState * rs)
 	find_commit_seq_msg (addr->addr, from, to, 0, &found, &roff, &cseq);
       if (ret < 0)
 	{
+	  addr = NULL;		// ownership moved to seek structure
 	  ERRNO_POINT ();
 	  goto error;
 	}
@@ -454,12 +459,14 @@ logical_recover (smrLog * handle, recoverState * rs)
 	  ret = msg_seek_find_msg_end (&seek, begin, &msg_max_seq);
 	  if (ret < 0)
 	    {
+	      addr = NULL;
 	      ERRNO_POINT ();
 	      goto error;
 	    }
 	  break;
 	}
     }
+  addr = NULL;
   clear_msg_seek (handle, &seek);
 
   /* 
