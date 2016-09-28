@@ -75,17 +75,14 @@ static dictType fdiDictType = {
 
 static fdi_t getNextFDIAvailable(aeEventLoop *eventLoop)
 {
-    listIter *rp_ptr;
     listNode *fdi_node;
     fdi_t fdi;
 
     if (listLength(eventLoop->fdiMap->recycle_pool) > 0)
     {
-        rp_ptr = listGetIterator(eventLoop->fdiMap->recycle_pool, AL_START_HEAD);
-        fdi_node = listNext(rp_ptr);
+        fdi_node = listFirst(eventLoop->fdiMap->recycle_pool);
         fdi = (fdi_t)fdi_node->value;
         listDelNode(eventLoop->fdiMap->recycle_pool, fdi_node);
-        listReleaseIterator(rp_ptr);
         return fdi;
     }
     return eventLoop->fdiMap->next_available++;
