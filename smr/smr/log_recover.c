@@ -186,7 +186,7 @@ msg_seek_read (msgSeek * seek, long long seq, int size, char *buf)
   return size;
 }
 
-#define CHECK_NOMORE() if (ret==0) break
+#define CHECK_NOMORE() if (ret==0) goto end
 static int
 msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
 {
@@ -240,6 +240,7 @@ msg_seek_find_msg_end (msgSeek * seek, long long begin, long long *last)
 	  return -1;
 	}
     }
+end:
   *last = msg_end;
   return 0;
 }
