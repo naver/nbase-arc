@@ -1428,6 +1428,9 @@ void createSharedObjects(void) {
     shared.rpop = createStringObject("RPOP",4);
     shared.lpop = createStringObject("LPOP",4);
     shared.lpush = createStringObject("LPUSH",5);
+#ifdef NBASE_ARC
+    arc_shared_init();
+#endif
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] = createObject(OBJ_STRING,(void*)(long)j);
         shared.integers[j]->encoding = OBJ_ENCODING_INT;
@@ -4001,6 +4004,10 @@ int main(int argc, char **argv) {
      * so that we can easily execute an RDB check on loading errors. */
     if (strstr(argv[0],"redis-check-rdb") != NULL)
         redis_check_rdb_main(argc,argv);
+#ifdef NBASE_ARC
+    arc_tool_hook (argc, argv);
+    arc_init_server_config (argc, argv);
+#endif
 
     if (argc >= 2) {
         j = 1; /* First option to parse in argv[] */
@@ -4074,6 +4081,9 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
+#ifdef NBASE_ARC
+    arc_main_hook(argc, argv);
+#endif
     initServer();
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);

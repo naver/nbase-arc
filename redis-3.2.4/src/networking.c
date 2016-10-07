@@ -127,6 +127,9 @@ client *createClient(int fd) {
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     if (fd != -1) listAddNodeTail(server.clients,c);
     initClientMultiState(c);
+#ifdef NBASE_ARC
+    arc_smrc_create(c);
+#endif
     return c;
 }
 
@@ -681,6 +684,9 @@ static void acceptCommonHandler(int fd, int flags, char *ip) {
 
     server.stat_numconnections++;
     c->flags |= flags;
+#ifdef NBASE_ARC
+    arc_smrc_accept_bh(c);
+#endif
 }
 
 void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
@@ -873,6 +879,9 @@ void freeClient(client *c) {
     zfree(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);
+#ifdef NBASE_ARC
+    arc_smrc_free(c);
+#endif
     zfree(c);
 }
 
@@ -1047,7 +1056,7 @@ void resetClient(client *c) {
 
 int processInlineBuffer(client *c) {
     char *newline;
-    int argc, j;
+    int argc, j, has_cr = 0;
     sds *argv, aux;
     size_t querylen;
 
@@ -1064,8 +1073,10 @@ int processInlineBuffer(client *c) {
     }
 
     /* Handle the \r\n case. */
-    if (newline && newline != c->querybuf && *(newline-1) == '\r')
+    if (newline && newline != c->querybuf && *(newline-1) == '\r') {
         newline--;
+	has_cr = 1;
+    }
 
     /* Split the input buffer up to the \r\n */
     querylen = newline-(c->querybuf);
@@ -1085,7 +1096,7 @@ int processInlineBuffer(client *c) {
         c->repl_ack_time = server.unixtime;
 
     /* Leave data after the first line of the query in the buffer */
-    sdsrange(c->querybuf,querylen+2,-1);
+    sdsrange(c->querybuf,querylen+1+has_cr,-1);
 
     /* Setup argv array on client structure */
     if (argc) {
@@ -1109,6 +1120,9 @@ int processInlineBuffer(client *c) {
 /* Helper function. Trims query buffer to make the function that processes
  * multi bulk requests idempotent. */
 static void setProtocolError(client *c, int pos) {
+#ifdef NBASE_ARC
+    arc_smrc_set_protocol_error(c);
+#endif
     if (server.verbosity <= LL_VERBOSE) {
         sds client = catClientInfoString(sdsempty(),c);
         serverLog(LL_VERBOSE,
@@ -1437,6 +1451,9 @@ sds catClientInfoString(sds s, client *client) {
     if (client->flags & CLIENT_CLOSE_ASAP) *p++ = 'A';
     if (client->flags & CLIENT_UNIX_SOCKET) *p++ = 'U';
     if (client->flags & CLIENT_READONLY) *p++ = 'r';
+#ifdef NBASE_ARC
+    if (client->flags & CLIENT_LOCAL_CONN) *p++ = 'L';
+#endif
     if (p == flags) *p++ = 'N';
     *p++ = '\0';
 

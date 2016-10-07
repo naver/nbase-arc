@@ -185,6 +185,11 @@ void loadServerConfigFromString(char *config) {
         }
         sdstolower(argv[0]);
 
+#ifdef NBASE_ARC
+        if (!arc_config_cmp_load(argc, argv, &err)) {
+	    if (err != NULL) goto loaderr;
+	}
+#endif
         /* Execute config directives */
         if (!strcasecmp(argv[0],"timeout") && argc == 2) {
             server.maxidletime = atoi(argv[1]);
@@ -723,6 +728,10 @@ void configSetCommand(client *c) {
     serverAssertWithInfo(c,c->argv[3],sdsEncodedObject(c->argv[3]));
     o = c->argv[3];
 
+#ifdef NBASE_ARC
+    if (arc_config_set(c)) return;
+#endif
+
     if (0) { /* this starts the config_set macros else-if chain. */
 
     /* Special fields that can't be handled with general macros. */
@@ -1117,6 +1126,9 @@ void configGetCommand(client *c) {
     config_get_numerical_field("cluster-slave-validity-factor",server.cluster_slave_validity_factor);
     config_get_numerical_field("repl-diskless-sync-delay",server.repl_diskless_sync_delay);
     config_get_numerical_field("tcp-keepalive",server.tcpkeepalive);
+#ifdef NBASE_ARC
+    arc_config_get();
+#endif
 
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
@@ -1778,6 +1790,9 @@ int rewriteConfig(char *path) {
     /* Step 2: rewrite every single option, replacing or appending it inside
      * the rewrite state. */
 
+#ifdef NBASE_ARC
+    arc_rewrite_config();
+#endif
     rewriteConfigYesNoOption(state,"daemonize",server.daemonize,0);
     rewriteConfigStringOption(state,"pidfile",server.pidfile,CONFIG_DEFAULT_PID_FILE);
     rewriteConfigNumericalOption(state,"port",server.port,CONFIG_DEFAULT_SERVER_PORT);

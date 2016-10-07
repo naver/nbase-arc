@@ -9,6 +9,7 @@ redis-check-dump
 redis-cli
 redis-sentinel
 redis-server
+redis-arc
 doc-tools
 release
 misc/*

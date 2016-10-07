@@ -125,6 +125,9 @@ void processUnblockedClients(void) {
             if (c->querybuf && sdslen(c->querybuf) > 0) {
                 processInputBuffer(c);
             }
+#ifdef NBASE_ARC
+	    arc_smrc_try_process(c);
+#endif
         }
     }
 }

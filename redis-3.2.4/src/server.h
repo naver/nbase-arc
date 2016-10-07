@@ -563,6 +563,9 @@ typedef struct readyList {
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct client {
+#ifdef NBASE_ARC
+    struct arcClient *smr;
+#endif
     uint64_t id;            /* Client incremental unique ID. */
     int fd;                 /* Client socket. */
     redisDb *db;            /* Pointer to currently SELECTed DB. */
@@ -629,6 +632,9 @@ struct sharedObjectsStruct {
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk,
     *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *rpop, *lpop,
     *lpush, *emptyscan, *minstring, *maxstring,
+#ifdef NBASE_ARC
+    *db_version, *db_smr_mstime, *db_migrate_slot, *db_migclear_slot, *addreply_through_smr,
+#endif
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
@@ -1672,4 +1678,7 @@ int memtest_preserving_test(unsigned long *m, size_t bytes, int passes);
 #define redisDebugMark() \
     printf("-- MARK %s:%d --\n", __FILE__, __LINE__)
 
+#ifdef NBASE_ARC
+#include "arc_server.h"
+#endif
 #endif
