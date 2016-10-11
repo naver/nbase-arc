@@ -329,6 +329,22 @@ def stop_smr_process(port):
     print green('[%s] Stop SMR success' % env.host_string)
     return True
 
+"""
+parameter : list of smr_base_ports, [smr_base_port, ...]
+return : dict of results, {smr_base_port: <True|False>, ...}
+"""
+@parallel(pool_size=10)
+def exist_smr_list_memlog(smr_base_port_list):
+    out = {}
+    for smr_base_port in smr_base_port_list: 
+        try:
+            ret = exist_smr_memlog(smr_base_port)
+        except:
+            warn(red("[%s] exist_smr_memlog fail. %s" % (env.host_string, sys.exc_info()[0])))
+            ret = 'Error'
+        out[smr_base_port] = ret
+    return out
+
 def exist_smr_memlog(smr_base_port):
     puts(magenta("Does SMR memlog exist?"))
 
@@ -584,7 +600,7 @@ def get_redis_pid(ip, port):
 
         conn.write('info server\r\n')
         while True:
-            ret = conn.read_until('\r\n', 1)
+            ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
             if ret == '\r\n': break;
             if ret.find('process_id') != -1:
                 pid = int(ret[11:].strip())
@@ -607,15 +623,15 @@ def bgsave_redis_server(ip, port):
         conn = telnetlib.Telnet(ip, port)
 
         conn.write('time\r\n')
-        conn.read_until('\r\n', 1)
-        conn.read_until('\r\n', 1)
-        ret = conn.read_until('\r\n', 1)
+        conn.read_until('\r\n', config.TELNET_TIMEOUT)
+        conn.read_until('\r\n', config.TELNET_TIMEOUT)
+        ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
         redis_server_time = int(ret.strip())
-        conn.read_until('\r\n', 1)
-        conn.read_until('\r\n', 1)
+        conn.read_until('\r\n', config.TELNET_TIMEOUT)
+        conn.read_until('\r\n', config.TELNET_TIMEOUT)
 
         conn.write('bgsave\r\n')
-        ret = conn.read_until('\r\n', 1)
+        ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
         if ret != '+Background saving started\r\n':
             warn(red('[%s] BGSAVE fail, Can not connect to Redis server. %s:%d' % (env.host_string, ip, port)))
             conn.close()
@@ -651,7 +667,7 @@ def get_quorum(master):
     try:            
         conn = telnetlib.Telnet(ip, port)
         conn.write('getquorum\r\n')
-        ret = conn.read_until('\r\n', 1)
+        ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
         return int(ret.strip())
     except:
         warn(red('[%s] Get quorum fail, Can not connect to SMR replicator. %s:%d' % (env.host_string, ip, port)))
@@ -673,7 +689,7 @@ def check_quorum(pgs_list, quorum):
             
             conn = telnetlib.Telnet(ip, smr_base_port+3)
             conn.write('ping\r\n')
-            ret = conn.read_until('\r\n', 1)
+            ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
             if '+OK 2' in ret: 
                 master_found = True
                 break;

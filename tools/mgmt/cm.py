@@ -27,7 +27,6 @@ import util
 import importlib
 from gw_cmd import *
 
-timeout = 300
 config = None
 
 def set_config(config_module):
@@ -41,7 +40,7 @@ def init():
     try:
         cm_conn = telnetlib.Telnet(config.CONF_MASTER_IP, config.CONF_MASTER_PORT)
         cm_conn.write('cluster_ls\r\n')
-        ret = cm_conn.read_until('\r\n', timeout)
+        ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
         ret = json.loads(ret)
         if 'redirect' == ret['state']:
             cm_conn.close()
@@ -50,7 +49,7 @@ def init():
             config.CONF_MASTER_PORT = int(ret['data']['port'])
             cm_conn = telnetlib.Telnet(config.CONF_MASTER_IP, config.CONF_MASTER_PORT)
             cm_conn.write('cluster_ls\r\n')
-            ret = cm_conn.read_until('\r\n', timeout)
+            ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
             ret = json.loads(ret)
             if 'success' != ret['state']:
                 warn(red('Can not connect to Conf master. Aborting...'))
@@ -67,7 +66,7 @@ def init():
 
 def pm_ls():
     cm_conn.write('pm_ls\r\n')
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret.encode('ascii'))
     if json_data['state'] != 'success':
         warn(red("Get pm_ls fail."))
@@ -77,7 +76,7 @@ def pm_ls():
 def pm_info(pm_name):
     cmd = 'pm_info %s\r\n' % pm_name
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Get pm_info fail."))
@@ -87,7 +86,7 @@ def pm_info(pm_name):
 def pm_add(name, ip):
     cmd = 'pm_add %s %s\r\n' % (name, ip)
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red('PM Add fail. cmd:%s, ret:%s' % (cmd[:-2], ret.strip())))
@@ -96,7 +95,7 @@ def pm_add(name, ip):
 
 def cluster_ls():
     cm_conn.write('cluster_ls\r\n')
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Cluster '%s' doesn't exist." % cluster_name))
@@ -105,7 +104,7 @@ def cluster_ls():
 
 def cluster_add(name, quorum_policy):
     cm_conn.write('cluster_add %s %s\r\n' % (name, quorum_policy))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Add cluster '%s' fail." % name))
@@ -114,7 +113,7 @@ def cluster_add(name, quorum_policy):
 
 def cluster_del(name):
     cm_conn.write('cluster_del %s\r\n' % (name))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Delete cluster '%s' fail." % name))
@@ -123,16 +122,17 @@ def cluster_del(name):
 
 def cluster_info(cluster_name):
     cm_conn.write('cluster_info %s\r\n' % cluster_name)
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Cluster '%s' doesn't exist." % cluster_name))
         return None
+    json_data['data']['cluster_name'] = cluster_name
     return json_data
 
 def pg_add(cluster_name, pg_id):
     cm_conn.write('pg_add %s %d\r\n' % (cluster_name, pg_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Add PG '%d' fail." % pg_id))
@@ -141,7 +141,7 @@ def pg_add(cluster_name, pg_id):
 
 def pg_del(cluster_name, pg_id):
     cm_conn.write('pg_del %s %d\r\n' % (cluster_name, pg_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         warn(red("Delete PG '%d' fail." % pg_id))
@@ -164,7 +164,7 @@ def pg_infos(cluster_name, pg_ids):
 
     pg_list = []
     for i in range(len(pg_ids)):
-        reply = cm_conn.read_until('\r\n', timeout)
+        reply = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
         pg_json = pgstr_to_json(int(pg_ids[i]), reply, slot_map)
         pg_list.append(pg_json)
 
@@ -192,7 +192,7 @@ def pg_info(cluster_name, pg_id, cluster_json=None):
     slot_map = util.slot_rle_to_map(cluster_json['data']['cluster_info']['PN_PG_Map'])
 
     cm_conn.write('pg_info %s %d\r\n' % (cluster_name, pg_id))
-    reply = cm_conn.read_until('\r\n', timeout)
+    reply = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     return pgstr_to_json(pg_id, reply, slot_map)
 
 def pgstr_to_json(pg_id, json_str, slot_map):
@@ -283,15 +283,15 @@ def get_joined_pgs_count(cluster_name, pg_id):
 
 def pgs_info(cluster_name, pgs_id):
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         return None
 
     json_data['data']['pgs_id'] = pgs_id
     json_data['data']['pg_id'] = json_data['data']['pg_ID']
-    json_data['data']['ip'] = json_data['data']['pm_IP']
-    json_data['data']['pm_name'] = json_data['data']['pm_Name']
+    json_data['data']['ip'] = json_data['data']['pm_IP'].encode('ascii')
+    json_data['data']['pm_name'] = json_data['data']['pm_Name'].encode('ascii')
     json_data['data']['redis_port'] = json_data['data']['backend_Port_Of_Redis']
     json_data['data']['smr_base_port'] = json_data['data']['replicator_Port_Of_SMR']
     json_data['data']['mgmt_port'] = json_data['data']['management_Port_Of_SMR']
@@ -307,14 +307,14 @@ def pgs_add(cluster_name, pgs_id, pg_id, pm_name, pm_ip, port, host):
 
     cmd = 'pgs_add %s %d %d %s %s %d %d\r\n' % (cluster_name, pgs_id, pg_id, pm_name, pm_ip, port, port + 9)
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Add fail. cmd:%s, ret:%s' % (host, cmd[:-2], ret.strip())))
         return False
 
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     print ret.strip() + '\n'
 
     print green('[%s] PGS Add success' % host)
@@ -323,7 +323,7 @@ def pgs_add(cluster_name, pgs_id, pg_id, pm_name, pm_ip, port, host):
 def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
     print magenta("\n[%s] PGS Join" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] PGS Join, PGS_ID:%d. Continue?' % (host, pgs_id))):
@@ -331,7 +331,7 @@ def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
         return False
 
     cm_conn.write('pgs_join %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Join fail, ret:%s' % (host, ret.strip())))
@@ -342,7 +342,7 @@ def pgs_join(cluster_name, pgs_id, ip, smr_base_port, host):
 def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True, forced=False):
     print magenta("\n[%s] PGS Leave" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] PGS Leave, PGS_ID:%d. Continue?' % (host, pgs_id))):
@@ -353,7 +353,7 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True, forced=Fal
     if forced:
         cmd = cmd + ' forced'
     cm_conn.write(cmd + '\r\n')
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Leave fail, ret:%s' % (host, ret.strip())))
@@ -367,12 +367,12 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True, forced=Fal
 
             while True:
                 conn.write('info clients\r\n')
-                reply = conn.read_until('\r\n', timeout)
+                reply = conn.read_until('\r\n', config.TELNET_TIMEOUT)
                 size = int(reply[1:])
 
                 readlen = 0
                 while readlen <= size:
-                    ret = conn.read_until('\r\n', timeout)
+                    ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
                     readlen += len(ret)
                     ret = ret.strip()
                     if ret.find('connected_clients') != -1 and ret.find(':') != -1:
@@ -397,7 +397,7 @@ def pgs_leave(cluster_name, pgs_id, ip, redis_port, host, check=True, forced=Fal
 def pgs_lconn(cluster_name, pgs_id, ip, smr_base_port, host):
     print magenta("\n[%s] PGS lconn" % host)
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] PGS lconn, PGS_ID:%d. Continue?' % (host, pgs_id))):
@@ -405,7 +405,7 @@ def pgs_lconn(cluster_name, pgs_id, ip, smr_base_port, host):
         return False
 
     cm_conn.write('pgs_lconn %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS lconn fail, ret:%s' % (host, ret.strip())))
@@ -417,7 +417,7 @@ def pgs_lconn(cluster_name, pgs_id, ip, smr_base_port, host):
 
         while True:
             conn.write('ping\r\n')
-            ret = conn.read_until('\r\n', timeout)
+            ret = conn.read_until('\r\n', config.TELNET_TIMEOUT)
             print yellow('[%s] >>> %s' % (host, ret.strip()))
             if '+OK 1' in ret: break
             time.sleep(0.5)
@@ -435,14 +435,14 @@ def pgs_del(cluster_name, pgs_id, host):
         return False
 
     cm_conn.write('pgs_del %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] PGS Del fail, ret:%s' % (host, ret.strip())))
         return False
 
     cm_conn.write('pgs_info %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] == 'success':
         warn(red('[%s] PGS Del fail, ret:%s' % (host, ret.strip())))
@@ -456,7 +456,7 @@ def role_change(cluster_name, pgs_id, host):
     print magenta("\n[%s] Role Change" % host)
 
     cm_conn.write('role_change %s %d\r\n' % (cluster_name, pgs_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         print green("[%s] Role Change fail, ret:%s" % (host, ret.strip()))
@@ -489,7 +489,7 @@ def get_gw_list(cluster_name):
 
 def gw_info(cluster_name, gw_id):
     cm_conn.write('gw_info %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success':
         return None
@@ -505,7 +505,7 @@ def gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=0):
 
     cmd = 'gw_add %s %d %s %s %d\r\n' % (cluster_name, gw_id, pm_name, ip, port)
     cm_conn.write(cmd)
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] GW Add fail, ret:%s' % (host, ret.strip())))
@@ -547,7 +547,7 @@ def gw_del(cluster_name, gw_id, ip, port):
     host = ip
     print magenta("\n[%s] GW Del" % host)
     cm_conn.write('gw_info %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     print ret.strip() + '\n'
             
     if config.confirm_mode and not confirm(cyan('[%s] GW Del, GW_ID:%d. Continue?' % (host, gw_id))):
@@ -555,7 +555,7 @@ def gw_del(cluster_name, gw_id, ip, port):
         return False
 
     cm_conn.write('gw_del %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red('[%s] GW Del fail, ret:%s' % (host, ret.strip())))
@@ -619,7 +619,7 @@ def mig2pc(cluster_name, src_pg_id, dst_pg_id, range_from, range_to):
     cmd = 'mig2pc %s %d %d %d %d' % (cluster_name, src_pg_id, dst_pg_id, range_from, range_to)
     print cyan('Command : ' + cmd)
     cm_conn.write(cmd + '\r\n')
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     try:
         json_data = json.loads(ret)
         if json_data['state'] != 'success' or json_data['msg'] != '+OK':
@@ -636,7 +636,7 @@ def slot_set_pg(cluster_name, dst_pg_id, range_from, range_to):
     cmd = 'slot_set_pg %s %d:%d %d' % (cluster_name, range_from, range_to, dst_pg_id)
     print cyan('Command : ' + cmd)
     cm_conn.write(cmd + '\r\n')
-    ret = cm_conn.read_until('\r\n', timeout)
+    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(ret)
     if json_data['state'] != 'success' or json_data['msg'] != '+OK':
         warn(red("%s fail." % cmd))
@@ -645,7 +645,7 @@ def slot_set_pg(cluster_name, dst_pg_id, range_from, range_to):
 
 def pgs_ls(cluster_name):
     cm_conn.write('pgs_ls %s\r\n' % cluster_name)
-    reply = cm_conn.read_until('\r\n', timeout)
+    reply = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
     json_data = json.loads(reply)
     if json_data['state'] != 'success':
         return None

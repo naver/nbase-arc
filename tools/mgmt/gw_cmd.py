@@ -20,6 +20,7 @@ from fabric.contrib.console import *
 import sys
 import traceback
 import telnetlib
+import config
 
 class GwCmd():
     ip = None
@@ -81,7 +82,7 @@ class GwCmd():
     def request(self, req):
         try:
             self.conn.write(req + '\r\n')
-            reply = self.conn.read_until('\r\n', 3)
+            reply = self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
             if len(reply) == '':
                 warn(red('[%s:%d] Reply is Null.' % (self.ip, self.port)))
                 return None
@@ -94,7 +95,7 @@ class GwCmd():
             readlen = 0
             readbuf = ''
             while readlen <= size:
-                reply = self.conn.read_until('\r\n', 3)
+                reply = self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
                 readlen += len(reply)
                 readbuf += reply
 

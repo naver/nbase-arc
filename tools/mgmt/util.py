@@ -491,8 +491,8 @@ def get_redis_client_connection_count(ip, port):
     conn = telnetlib.Telnet(ip, port)
     conn.write('client list\r\n')
 
-    conn.read_until('\r\n')
-    reply = conn.read_until('\r\n')
+    conn.read_until('\r\n', config.TELNET_TIMEOUT)
+    reply = conn.read_until('\r\n', config.TELNET_TIMEOUT)
 
     connection_cnt = 0
     for line in reply.split('\n'):
@@ -682,4 +682,98 @@ def make_dict_traverser(dictionary):
     return Traverser(dictionary,
             lambda d: d if isinstance(d, dict) else {},
             lambda d, k: d[k] if d.has_key(k) else None)
+
+class DeployedPgsInfoReader(threading.Thread):
+    """
+    All pgs in pgs_list must have the same ip.
+    """
+    def __init__(self, pgs_list, memlog):
+        threading.Thread.__init__(self)
+        self.pgs_list = pgs_list
+        self.memlog = memlog
+
+    def run(self):
+        smr_base_port_list = map(lambda pgs : pgs['smr_base_port'], self.pgs_list)
+
+        host = config.USERNAME + '@' + self.pgs_list[0]['ip']
+        with settings(hide('running', 'stdout', 'user')):
+            # Get memlog info
+            if self.memlog == True:
+                memlog_info = execute(remote.exist_smr_list_memlog, smr_base_port_list, hosts=[host])[host]
+                for pgs in self.pgs_list:
+                    pgs['memlog'] = memlog_info[pgs['smr_base_port']]
+            else:
+                for pgs in self.pgs_list:
+                    pgs['memlog'] = 'Skip'
+
+            # Get active role
+            for pgs in self.pgs_list:
+                try:
+                    pgs['active_role'] = get_role_of_smr(pgs['ip'], pgs['mgmt_port'], verbose=False)
+                    if pgs['active_role'] == 'M':
+                        pgs['quorum'] = remote.get_quorum(pgs)
+                    else:
+                        pgs['quorum'] = ''
+                except:
+                    warn(red("[%s:%d] Failed to get active role. %s" % (pgs['ip'], pgs['smr_base_port'], sys.exc_info()[0])))
+
+
+"""
+return : { ip : [pgs, ...], ...  }
+"""
+def classify_by_ip(result, pgs):
+    if result == None:
+        result = {}
+
+    if result.has_key(pgs['ip']):
+        result[pgs['ip']].append(pgs)
+    else:
+        result[pgs['ip']] = [pgs]
+
+    return result
+
+def get_all_pgs_info(cluster_name, memlog):
+    # Get cluster information
+    pgs_ls_json = cm.pgs_ls(cluster_name)
+    if pgs_ls_json  == None: 
+        warn(red("Failed to load list of pgs in %s" % cluster_name)) 
+        return None
+
+    # Get pgs id list
+    pgs_id_list = map(lambda pgs_id: int(pgs_id), pgs_ls_json['data']['list'])
+    if len(pgs_id_list) == 0:
+        return None
+
+    # Get pgs information
+    pgs_list = get_deployed_pgs_info(cluster_name, pgs_id_list, memlog)
+    if pgs_list == None:
+        return None
+
+    return sorted(pgs_list, key=lambda x: int(x['pgs_id']))
+
+def get_deployed_pgs_info(cluster_name, pgs_id_list, memlog):
+    if len(pgs_id_list) == 0:
+        return None
+
+    # Get pgs info
+    pgs_list = []
+    for pgs_id in pgs_id_list:
+        try:
+            pgs_list.append(cm.pgs_info(cluster_name, pgs_id)['data'])
+        except:
+            warn(red("Failed to get pgs info from confmaster. %s" % sys.exc_info()[0]))
+            return None
+
+    # Run threads to get memlog and active-role
+    pgs_readers = []
+    pgs_list_by_ip = reduce(classify_by_ip, pgs_list, None)
+    for ip, pl in pgs_list_by_ip.items():
+        reader = DeployedPgsInfoReader(pl, memlog)
+        reader.start()
+        pgs_readers.append(reader)
+
+    for r in pgs_readers:
+        r.join()
+
+    return pgs_list
 
