@@ -86,7 +86,11 @@
 /* NOTE: WHEN ADDING NEW RDB TYPE, UPDATE rdbIsObjectType() BELOW */
 
 /* Test if a type is an object type. */
+#ifdef NBASE_ARC
+#define rdbIsObjectType(t) ((t >= 0 && t <= 5) || (t >= 9 && t <= 14))
+#else
 #define rdbIsObjectType(t) ((t >= 0 && t <= 4) || (t >= 9 && t <= 14))
+#endif
 
 /* Special RDB opcodes (saved/loaded with rdbSaveType/rdbLoadType). */
 #define RDB_OPCODE_AUX        250

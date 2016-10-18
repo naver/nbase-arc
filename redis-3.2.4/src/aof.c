@@ -1082,6 +1082,10 @@ int rewriteAppendOnlyFile(char *filename) {
                 if (rewriteSortedSetObject(&aof,&key,o) == 0) goto werr;
             } else if (o->type == OBJ_HASH) {
                 if (rewriteHashObject(&aof,&key,o) == 0) goto werr;
+#ifdef NBASE_ARC
+            } else if (o->type == OBJ_SSS) {
+                if (arc_rewrite_sss_object(&aof, &key, o) == 0) goto werr;
+#endif
             } else {
                 serverPanic("Unknown object type");
             }

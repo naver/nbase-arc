@@ -82,6 +82,10 @@ struct _rio {
             sds buf;
         } fdset;
     } io;
+#ifdef NBASE_ARC
+    void *peeked_key; /* used to pass key for sss type object at rdbLoadObject */
+    struct arcRio *ario; /* used in rdbSaveRio */
+#endif
 };
 
 typedef struct _rio rio;

@@ -486,6 +486,9 @@ init_client (client * c)
   c->smr->bulklen = -1;
   c->smr->flags = 0;
   c->smr->protocol_error_reply = NULL;
+  c->smr->ckptdbfd = -1;
+  c->smr->ckptdboff = 0;
+  c->smr->ckptdbsize = 0;
 }
 
 static void
@@ -610,9 +613,9 @@ read_query_from_client (aeEventLoop * el, int fd, void *privdata, int mask)
   server.current_client = NULL;
 }
 
-/* ------------------ */
-/* Exported functions */
-/* ------------------ */
+/* ---------------------- */
+/* Exported arc functions */
+/* ---------------------- */
 void
 arc_smrc_create (client * c)
 {
@@ -630,6 +633,11 @@ arc_smrc_create (client * c)
 void
 arc_smrc_free (client * c)
 {
+  if (c == arc.checkpoint_client)
+    {
+      arc.checkpoint_client = NULL;
+    }
+
   if (c->smr != NULL)
     {
       sdsfree (c->smr->querybuf);
@@ -653,18 +661,22 @@ arc_smrc_free (client * c)
 
       sdsfree (c->smr->protocol_error_reply);
       c->smr->protocol_error_reply = NULL;
-    }
 
-  if (c == arc.checkpoint_client)
-    {
-      arc.checkpoint_client = NULL;
+      if (c->smr->ckptdbfd != -1)
+	{
+	  close (c->smr->ckptdbfd);
+	  c->smr->ckptdbfd = -1;
+	}
+
+      zfree (c->smr);
+      c->smr = NULL;
     }
 }
 
 void
 arc_smrc_accept_bh (client * c)
 {
-  if (is_client_from_lconn (c))
+  if (arc.cluster_mode && is_client_from_lconn (c))
     {
       c->flags |= CLIENT_LOCAL_CONN;
     }
@@ -693,6 +705,10 @@ arc_smrc_try_process (client * c)
 	}
     }
 }
+
+/* ----------------------- */
+/* Exported Redis commands */
+/* ----------------------- */
 
 /* Backend Ping command which is not replicated in smr */
 void

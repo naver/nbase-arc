@@ -694,6 +694,9 @@ void typeCommand(client *c) {
         case OBJ_SET: type = "set"; break;
         case OBJ_ZSET: type = "zset"; break;
         case OBJ_HASH: type = "hash"; break;
+#ifdef NBASE_ARC
+        case OBJ_SSS: type = "s3"; break;
+#endif
         default: type = "unknown"; break;
         }
     }

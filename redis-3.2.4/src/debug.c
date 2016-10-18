@@ -241,6 +241,10 @@ void computeDatasetDigest(unsigned char *final) {
                     xorDigest(digest,eledigest,20);
                 }
                 hashTypeReleaseIterator(hi);
+#ifdef NBASE_ARC
+            } else if (o->type == OBJ_SSS) {
+                arc_sss_compute_dataset_digest (o, digest);
+#endif
             } else {
                 serverPanic("Unknown object type");
             }
@@ -608,6 +612,10 @@ void serverLogObjectDebugInfo(robj *o) {
         serverLog(LL_WARNING,"Set size: %d", (int) setTypeSize(o));
     } else if (o->type == OBJ_HASH) {
         serverLog(LL_WARNING,"Hash size: %d", (int) hashTypeLength(o));
+#ifdef NBASE_ARC
+    } else if (o->type == OBJ_SSS) {
+        serverLog (LL_WARNING,"S3 object value count:%d",arc_sss_type_value_count (o));
+#endif
     } else if (o->type == OBJ_ZSET) {
         serverLog(LL_WARNING,"Sorted set size: %d", (int) zsetLength(o));
         if (o->encoding == OBJ_ENCODING_SKIPLIST)

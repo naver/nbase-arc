@@ -552,6 +552,10 @@ int rdbSaveObjectType(rio *rdb, robj *o) {
             return rdbSaveType(rdb,RDB_TYPE_HASH);
         else
             serverPanic("Unknown hash encoding");
+#ifdef NBASE_ARC
+    case OBJ_SSS:
+	return arc_rdb_save_sss_type(rdb, o);
+#endif
     default:
         serverPanic("Unknown object type");
     }
@@ -679,6 +683,11 @@ ssize_t rdbSaveObject(rio *rdb, robj *o) {
         } else {
             serverPanic("Unknown hash encoding");
         }
+#ifdef NBASE_ARC
+    } else if (o->type == OBJ_SSS) {
+	if ((n = arc_rdb_save_sss_object(rdb, o)) == -1) return -1;
+        nwritten += n;
+#endif
 
     } else {
         serverPanic("Unknown object type");
@@ -748,6 +757,9 @@ int rdbSaveInfoAuxFields(rio *rdb) {
     if (rdbSaveAuxFieldStrInt(rdb,"redis-bits",redis_bits) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"ctime",time(NULL)) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"used-mem",zmalloc_used_memory()) == -1) return -1;
+#ifdef NBASE_ARC
+    if (arc_rdb_save_aux_fields(rdb) == -1) return -1;
+#endif
     return 1;
 }
 
@@ -805,9 +817,15 @@ int rdbSaveRio(rio *rdb, int *error) {
             robj key, *o = dictGetVal(de);
             long long expire;
 
+#ifdef NBASE_ARC
+            if (arc_rdb_save_skip(keystr)) continue;
+#endif
             initStaticStringObject(key,keystr);
             expire = getExpire(db,&key);
             if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
+#ifdef NBASE_ARC
+            if (arc_rdb_save_onwrite(rdb, error) == -1) goto werr;
+#endif
         }
         dictReleaseIterator(di);
     }
@@ -877,7 +895,11 @@ int rdbSave(char *filename) {
     }
 
     rioInitWithFile(&rdb,fp);
+#ifdef NBASE_ARC
+    if (arc_rdb_save_rio_with_file(&rdb, fp, &error) == C_ERR) {
+#else
     if (rdbSaveRio(&rdb,&error) == C_ERR) {
+#endif
         errno = error;
         goto werr;
     }
@@ -956,6 +978,9 @@ int rdbSaveBackground(char *filename) {
         serverLog(LL_NOTICE,"Background saving started by pid %d",childpid);
         server.rdb_save_time_start = time(NULL);
         server.rdb_child_pid = childpid;
+#ifdef NBASE_ARC
+	arc.seqnum_before_bgsave = arc.smr_seqnum;
+#endif
         server.rdb_child_type = RDB_CHILD_TYPE_DISK;
         updateDictResizePolicy();
         return C_OK;
@@ -1135,6 +1160,10 @@ robj *rdbLoadObject(int rdbtype, rio *rdb) {
 
         /* All pairs should be read by now */
         serverAssert(len == 0);
+#ifdef NBASE_ARC
+    } else if (rdbtype == RDB_TYPE_SSS) {
+        if ((o = arc_rdb_load_sss_object(rdb)) == NULL) return NULL;
+#endif
     } else if (rdbtype == RDB_TYPE_LIST_QUICKLIST) {
         if ((len = rdbLoadLen(rdb,NULL)) == RDB_LENERR) return NULL;
         o = createQuicklistObject();
@@ -1364,6 +1393,9 @@ int rdbLoad(char *filename) {
             if ((auxkey = rdbLoadStringObject(&rdb)) == NULL) goto eoferr;
             if ((auxval = rdbLoadStringObject(&rdb)) == NULL) goto eoferr;
 
+#ifdef NBASE_ARC
+	    if(rdbver > 6 && arc_rdb_load_aux_fields_hook(auxkey, auxval)) continue;
+#endif
             if (((char*)auxkey->ptr)[0] == '%') {
                 /* All the fields with a name staring with '%' are considered
                  * information fields and are logged at startup with a log
@@ -1386,7 +1418,13 @@ int rdbLoad(char *filename) {
         /* Read key */
         if ((key = rdbLoadStringObject(&rdb)) == NULL) goto eoferr;
         /* Read value */
+#ifdef NBASE_ARC
+        (void) arc_rio_peek_key(&rdb, type, key);
+#endif
         if ((val = rdbLoadObject(type,&rdb)) == NULL) goto eoferr;
+#ifdef NBASE_ARC
+	if (rdbver == 6 && arc_rdb_load_aux_fields_hook(key, val) == 1) continue;
+#endif
         /* Check if the key already expired. This function is used when loading
          * an RDB file from disk, either at startup, or when an RDB was
          * received from the master. In the latter case, the master is
@@ -1462,6 +1500,9 @@ void backgroundSaveDoneHandlerDisk(int exitcode, int bysignal) {
     /* Possibly there are slaves waiting for a BGSAVE in order to be served
      * (the first stage of SYNC is a bulk transfer of dump.rdb) */
     updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, RDB_CHILD_TYPE_DISK);
+#ifdef NBASE_ARC
+    arc_bgsave_done_handler((!bysignal && exitcode == 0) ? C_OK : C_ERR);
+#endif
 }
 
 /* A background saving child (BGSAVE) terminated its work. Handle this.

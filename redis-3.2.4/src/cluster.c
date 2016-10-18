@@ -4508,6 +4508,9 @@ void restoreCommand(client *c) {
 
     rioInitWithBuffer(&payload,c->argv[3]->ptr);
     if (((type = rdbLoadObjectType(&payload)) == -1) ||
+#ifdef NBASE_ARC
+        arc_rio_peek_key(&payload, type, c->argv[1]) ||
+#endif
         ((obj = rdbLoadObject(type,&payload)) == NULL))
     {
         addReplyError(c,"Bad data format");

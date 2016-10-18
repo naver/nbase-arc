@@ -95,6 +95,9 @@ static const rio rioBufferIO = {
     0,              /* bytes read or written */
     0,              /* read/write chunk size */
     { { NULL, 0 } } /* union for io-specific vars */
+#ifdef NBASE_ARC
+    , NULL, NULL
+#endif
 };
 
 void rioInitWithBuffer(rio *r, sds s) {
@@ -148,6 +151,9 @@ static const rio rioFileIO = {
     0,              /* bytes read or written */
     0,              /* read/write chunk size */
     { { NULL, 0 } } /* union for io-specific vars */
+#ifdef NBASE_ARC
+    , NULL, NULL
+#endif
 };
 
 void rioInitWithFile(rio *r, FILE *fp) {
@@ -261,6 +267,9 @@ static const rio rioFdsetIO = {
     0,              /* bytes read or written */
     0,              /* read/write chunk size */
     { { NULL, 0 } } /* union for io-specific vars */
+#ifdef NBASE_ARC
+    , NULL, NULL
+#endif
 };
 
 void rioInitWithFdset(rio *r, int *fds, int numfds) {

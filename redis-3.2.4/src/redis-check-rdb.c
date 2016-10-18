@@ -279,6 +279,9 @@ int redis_check_rdb(char *rdbfilename) {
         rdbstate.keys++;
         /* Read value */
         rdbstate.doing = RDB_CHECK_DOING_READ_OBJECT_VALUE;
+#ifdef NBASE_ARC
+        (void) arc_rio_peek_key(&rdb, type, key);
+#endif
         if ((val = rdbLoadObject(type,&rdb)) == NULL) goto eoferr;
         /* Check if the key already expired. This function is used when loading
          * an RDB file from disk, either at startup, or when an RDB was

@@ -307,6 +307,9 @@ void decrRefCount(robj *o) {
         case OBJ_SET: freeSetObject(o); break;
         case OBJ_ZSET: freeZsetObject(o); break;
         case OBJ_HASH: freeHashObject(o); break;
+#ifdef NBASE_ARC
+        case OBJ_SSS: arc_free_sss_object(o); break;
+#endif
         default: serverPanic("Unknown object type"); break;
         }
         zfree(o);
@@ -673,6 +676,9 @@ char *strEncoding(int encoding) {
     case OBJ_ENCODING_INTSET: return "intset";
     case OBJ_ENCODING_SKIPLIST: return "skiplist";
     case OBJ_ENCODING_EMBSTR: return "embstr";
+#ifdef NBASE_ARC
+    case OBJ_ENCODING_SSS: return "sss";
+#endif
     default: return "unknown";
     }
 }

@@ -20,8 +20,9 @@ static int init_cron (struct aeEventLoop *eventLoop, long long id,
 static void init_smr_connect (void);
 static void init_smr_disconnect (void);
 static void init_check_smr_catchup (void);
-static void init_server_config (void);
+static void init_arc (void);
 static void init_server_post (void);
+static void init_redis_server (void);
 static void init_server_pre (void);
 static void ascii_art (void);
 
@@ -147,7 +148,7 @@ init_check_smr_catchup (void)
 }
 
 static void
-init_server_config (void)
+init_arc (void)
 {
   int i;
 
@@ -176,10 +177,10 @@ init_server_config (void)
   arc.cluster_mode = 0;
 
   /* Checkpoint */
-  arc.checkpoint_pid = -1;
   arc.checkpoint_filename = zstrdup ("checkpoint.rdb");
   arc.checkpoint_client = NULL;
   arc.checkpoint_seqnum = 0LL;
+  arc.checkpoint_slots = NULL;
 
   /* Cron save */
   arc.cronsave_params = NULL;
@@ -210,7 +211,7 @@ init_server_config (void)
   arc.seqnum_before_bgsave = 0LL;
   arc.smr_init_flags = ARC_SMR_INIT_NONE;
   arc.last_catchup_check_mstime = 0LL;
-  arc.smr_mstime = 0LL;
+  arc.smr_ts = 0LL;
   arc.smrlog_client = NULL;
   arc.smr_seqnum_reset = 0;
 
@@ -237,7 +238,7 @@ init_server_config (void)
   arc.mem_hard_limit_kb = 0;
 
   /* Local ip check */
-  arc.local_ip_addrs = arcx_get_local_ip_addrs ();
+  arc.local_ip_addrs = arcx_get_local_ip_addrs ();	//TODO why here?
 
 #ifdef COVERAGE_TEST
   arc.debug_mem_usage_fixed = 0;
@@ -323,6 +324,35 @@ init_server_post (void)
     }
 }
 
+/* nbase-arc specific */
+static void
+init_redis_server (void)
+{
+  int j;
+
+  arc.checkpoint_client = NULL;
+  arc.checkpoint_seqnum = 0;
+  arc.gc_line = zmalloc (sizeof (dlisth) * arc.gc_num_line);
+  for (j = 0; j < arc.gc_num_line; j++)
+    {
+      dlisth_init (&arc.gc_line[j]);
+    }
+  arc.gc_obc = arcx_sss_obc_new ();
+  serverAssert (arc.smrlog_client == NULL);
+  arc.smrlog_client = createClient (-1);	/* make fake client for excuting smr log */
+  dlisth_init (&arc.global_callbacks);
+#ifdef COVERAGE_TEST
+  /* initialize debugging value for injecting memory status */
+  arc.debug_mem_usage_fixed = 0;
+  arc.debug_total_mem_kb = 0;
+  arc.debug_free_mem_kb = 0;
+  arc.debug_cached_mem_kb = 0;
+  arc.debug_redis_mem_rss_kb = 0;
+#endif
+  arcx_set_memory_limit_values ();
+}
+
+
 static void
 init_server_pre (void)
 {
@@ -396,28 +426,7 @@ init_server_pre (void)
   server.repl_good_slaves_count = 0;
   updateCachedTime ();
 
-  /* nbase-arc specific */
-  arc.checkpoint_pid = -1;
-  arc.checkpoint_client = NULL;
-  arc.checkpoint_seqnum = 0;
-  arc.gc_line = zmalloc (sizeof (dlisth) * arc.gc_num_line);
-  for (j = 0; j < arc.gc_num_line; j++)
-    {
-      dlisth_init (&arc.gc_line[j]);
-    }
-  //arc.gc_obc = sssObcNew ();
-  serverAssert (arc.smrlog_client == NULL);
-  arc.smrlog_client = createClient (-1);	/* make fake client for excuting smr log */
-  dlisth_init (&arc.global_callbacks);
-#ifdef COVERAGE_TEST
-  /* initialize debugging value for injecting memory status */
-  arc.debug_mem_usage_fixed = 0;
-  arc.debug_total_mem_kb = 0;
-  arc.debug_free_mem_kb = 0;
-  arc.debug_cached_mem_kb = 0;
-  arc.debug_redis_mem_rss_kb = 0;
-#endif
-  arcx_set_memory_limit_values ();
+  init_redis_server ();
 
   /* 32 bit instances are limited to 4GB of address space, so if there is
    * no explicit limit in the user provided configuration we set a limit
@@ -541,7 +550,7 @@ smrcb_data (void *arg, long long seq, long long timestamp,
     }
 
   /* Normal command */
-  arc.smr_mstime = timestamp;
+  arc.smr_ts = timestamp;
   cmdflags = (0xFFFF0000 & sid) >> 16;
 
   /* Because we fixed the bug that causes timestamp be 0, 
@@ -771,15 +780,15 @@ arc_tool_hook (int argc, char **argv)
 }
 
 void
-arc_init_server_config (int argc, char **argv)
+arc_init_arc (void)
 {
-  UNUSED (argc);
+  init_arc ();
+}
 
-  if (strstr (argv[0], "redis-arc") == NULL)
-    {
-      return;
-    }
-  init_server_config ();
+void
+arc_init_redis_server (void)
+{
+  init_redis_server ();
 }
 
 void
@@ -792,6 +801,109 @@ arc_main_hook (int argc, char **argv)
 
   redis_arc_main (argc, argv);
 }
+
+static void
+try_cronsave (void)
+{
+  struct tm cur, last;
+  int j;
+
+  localtime_r (&server.unixtime, &cur);
+  localtime_r (&server.lastsave, &last);
+  for (j = 0; j < arc.cronsave_paramslen; j++)
+    {
+      struct cronsaveParam *csp = arc.cronsave_params + j;
+      if (last.tm_mday != cur.tm_mday)
+	{
+	  if (last.tm_hour < csp->hour
+	      || (last.tm_hour == csp->hour && last.tm_min < csp->minute)
+	      || csp->hour < cur.tm_hour
+	      || (csp->hour == cur.tm_hour && csp->minute <= cur.tm_min))
+	    {
+	      serverLog (LL_NOTICE, "Cron save %dh:%dm daily. Saving...",
+			 csp->hour, csp->minute);
+	      rdbSaveBackground (server.rdb_filename);
+	      break;
+	    }
+	}
+      else
+	{
+	  /* last.tm_mday == cur.tm_mday */
+	  if ((last.tm_hour < csp->hour
+	       || (last.tm_hour == csp->hour && last.tm_min < csp->minute))
+	      && (csp->hour < cur.tm_hour
+		  || (csp->hour == cur.tm_hour && csp->minute <= cur.tm_min)))
+	    {
+	      serverLog (LL_NOTICE, "Cron save %dh:%dm daily. Saving...",
+			 csp->hour, csp->minute);
+	      rdbSaveBackground (server.rdb_filename);
+	      break;
+	    }
+	}
+    }
+}
+
+static void
+try_seqsave (void)
+{
+  if (arc.seqsave_gap != -1
+      && arc.smr_seqnum - arc.last_bgsave_seqnum > arc.seqsave_gap)
+    {
+      serverLog (LL_NOTICE,
+		 "Sequence gap between last bgsave(%lld) and current(%lld) is more than %lld. Saving...",
+		 arc.last_bgsave_seqnum, arc.smr_seqnum, arc.seqsave_gap);
+      rdbSaveBackground (server.rdb_filename);
+    }
+}
+
+
+int
+arc_server_cron (void)
+{
+  int j;
+
+  // higher rate gc
+  if ((j = arcx_sss_gc_cron ()) > 0)
+    {
+      return j;
+    }
+
+  run_with_period (arc.gc_interval)
+  {
+    arcx_sss_garbage_collect (0);
+  }
+
+  run_with_period (1000)
+  {
+    if (arc.cluster_mode && server.rdb_child_pid != -1)
+      {
+	try_cronsave ();
+      }
+    if (arc.cluster_mode && server.rdb_child_pid != -1)
+      {
+	try_seqsave ();
+      }
+  }
+
+  // more to come... memory limit etc.
+  return 0;
+}
+
+int
+arc_expire_haveto_skip (sds key)
+{
+  if (arc.migrate_slot)
+    {
+      int slot = crc16 (key, sdslen (key)) % ARC_KS_SIZE;
+      if (bitmapTestBit ((unsigned char *) arc.migrate_slot, slot))
+	{
+	  /* do not expire keys in migration */
+	  return 1;
+	}
+    }
+  return 0;
+}
+
 #else
 // make compiler happy
 int arc_server_is_not_used = 1;

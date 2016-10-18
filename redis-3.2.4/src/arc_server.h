@@ -3,9 +3,10 @@
 
 #include "smr_be.h"
 
-/* -----------------  */
-/* server.h extension */
-/* -----------------  */
+/* ---------------------- */
+/* Redis header extension */
+/* ---------------------- */
+/* server.h */
 #define CMD_NOCLUSTER               16384
 //      OBJ_HASH                    4
 #define OBJ_SSS                     5
@@ -13,6 +14,9 @@
 #define OBJ_ENCODING_SSS            10
 //      CLIENT_LUA_DEBUG_SYNC       (1<<26)
 #define CLIENT_LOCAL_CONN           (1<<27)
+/* rdb.h */
+//      RDB_TYPE_HASH               4
+#define RDB_TYPE_SSS                5
 
 /* ----------- */
 /* Definitions */
@@ -119,10 +123,10 @@ struct arcServer
   int cluster_mode;		/* cluster mode */
 
   /* Checkpoint */
-  pid_t checkpoint_pid;
   char *checkpoint_filename;
   client *checkpoint_client;
   long long checkpoint_seqnum;
+  sds checkpoint_slots;
 
   /* Cron save */
   struct cronsaveParam *cronsave_params;	/* Cron style Save points array for RDB */
@@ -153,7 +157,7 @@ struct arcServer
   long long seqnum_before_bgsave;
   int smr_init_flags;
   long long last_catchup_check_mstime;
-  long long smr_mstime;		/* globally identical mstime */
+  long long smr_ts;		/* globally identical mstime */
   client *smrlog_client;	/* The "fake client" to executing smrlog without replying */
   int smr_seqnum_reset;
 
@@ -207,6 +211,11 @@ struct arcClient
   long bulklen;
   int flags;
   sds protocol_error_reply;
+
+  // checkpoint related
+  int ckptdbfd;
+  off_t ckptdboff;
+  off_t ckptdbsize;
 };
 
 /* -------- */
@@ -253,9 +262,62 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     /* Reserved object in order to reply through replication stream. */                \
     shared.addreply_through_smr = createStringObject("dummyobject_notused", 19);       \
 } while(0)
+
+//Note: last command must not ends with comma(,)
+#define ARC_REDIS_COMMAND_TBL                                         \
+    {"s3lget",s3lgetCommand,5,"r",0,NULL,2,2,1,0,0},                  \
+    {"s3lmget",s3lmgetCommand,-4,"r",0,NULL,2,2,1,0,0},               \
+    {"s3lkeys",s3lkeysCommand,-3,"r",0,NULL,2,2,1,0,0},               \
+    {"s3lvals",s3lvalsCommand,4,"r",0,NULL,2,2,1,0,0},                \
+    {"s3ladd",s3laddCommand,-7,"wm",0,NULL,2,2,1,0,0},                \
+    {"s3laddat",s3laddatCommand,-7,"wm",0,NULL,2,2,1,0,0},            \
+    {"s3lmadd",s3lmaddCommand,-7,"wm",0,NULL,2,2,1,0,0},              \
+    {"s3lrem",s3lremCommand,-4,"w",0,NULL,2,2,1,0,0},                 \
+    {"s3lmrem",s3lmremCommand,-5,"w",0,NULL,2,2,1,0,0},               \
+    {"s3lset",s3lsetCommand,-7,"wm",0,NULL,2,2,1,0,0},                \
+    {"s3lreplace",s3lreplaceCommand,8,"wm",0,NULL,2,2,1,0,0},         \
+    {"s3lcount",s3lcountCommand,-3,"r",0,NULL,2,2,1,0,0},             \
+    {"s3lexists",s3lexistsCommand,-5,"r",0,NULL,2,2,1,0,0},           \
+    {"s3lexpire",s3lexpireCommand,-4,"w",0,NULL,2,2,1,0,0},           \
+    {"s3lmexpire",s3lmexpireCommand,-6,"w",0,NULL,2,2,1,0,0},         \
+    {"s3lttl",s3lttlCommand,-5,"r",0,NULL,2,2,1,0,0},                 \
+    {"s3sget",s3sgetCommand,5,"r",0,NULL,2,2,1,0,0},                  \
+    {"s3smget",s3smgetCommand,-4,"r",0,NULL,2,2,1,0,0},               \
+    {"s3skeys",s3skeysCommand,-3,"r",0,NULL,2,2,1,0,0},               \
+    {"s3svals",s3svalsCommand,4,"r",0,NULL,2,2,1,0,0},                \
+    {"s3sadd",s3saddCommand,-7,"wm",0,NULL,2,2,1,0,0},                \
+    {"s3saddat",s3saddatCommand,-7,"wm",0,NULL,2,2,1,0,0},            \
+    {"s3smadd",s3smaddCommand,-7,"wm",0,NULL,2,2,1,0,0},              \
+    {"s3srem",s3sremCommand,-4,"w",0,NULL,2,2,1,0,0},                 \
+    {"s3smrem",s3smremCommand,-5,"w",0,NULL,2,2,1,0,0},               \
+    {"s3sset",s3ssetCommand,-7,"wm",0,NULL,2,2,1,0,0},                \
+    {"s3sreplace",s3sreplaceCommand,8,"wm",0,NULL,2,2,1,0,0},         \
+    {"s3scount",s3scountCommand,-3,"r",0,NULL,2,2,1,0,0},             \
+    {"s3sexists",s3sexistsCommand,-5,"r",0,NULL,2,2,1,0,0},           \
+    {"s3sexpire",s3sexpireCommand,-4,"w",0,NULL,2,2,1,0,0},           \
+    {"s3smexpire",s3smexpireCommand,-6,"w",0,NULL,2,2,1,0,0},         \
+    {"s3sttl",s3sttlCommand,-5,"r",0,NULL,2,2,1,0,0},                 \
+    {"s3keys",s3keysCommand,3,"r",0,NULL,2,2,1,0,0},                  \
+    {"s3count",s3countCommand,3,"r",0,NULL,2,2,1,0,0},                \
+    {"s3expire",s3expireCommand,4,"w",0,NULL,2,2,1,0,0},              \
+    {"s3rem",s3remCommand,3,"w",0,NULL,2,2,1,0,0},                    \
+    {"s3mrem",s3mremCommand,-4,"w",0,NULL,2,2,1,0,0},                 \
+    {"s3gc",s3gcCommand,2,"w",0,NULL,0,0,0,0,0},                       \
+    {"checkpoint",checkpointCommand,2,"ars",0,NULL,0,0,0,0,0},        \
+    {"migstart",migstartCommand,2,"aw",0,NULL,0,0,0,0,0},             \
+    {"migend",migendCommand,1,"aw",0,NULL,0,0,0,0,0},                 \
+    {"migconf",migconfCommand,-2,"aw",0,NULL,0,0,0,0,0},              \
+    {"migpexpireat",migpexpireatCommand,3,"w",0,NULL,1,1,1,0,0},      \
+    {"bping",bpingCommand,1,"r",0,NULL,0,0,0,0,0},                    \
+    {"quit",quitCommand,1,"r",0,NULL,0,0,0,0,0}                       \
+
 extern void arc_tool_hook (int argc, char **argv);
-extern void arc_init_server_config (int argc, char **argv);
+extern void arc_init_arc (void);
+extern void arc_init_redis_server (void);
 extern void arc_main_hook (int argc, char **argv);
+// return 0 to continue, hz otherwise
+extern int arc_server_cron (void);
+extern int arc_expire_haveto_skip (sds key);
 
 /* arc_networking.c */
 extern void arc_smrc_create (client * c);
@@ -264,57 +326,82 @@ extern void arc_smrc_accept_bh (client * c);
 extern void arc_smrc_set_protocol_error (client * c);
 extern void arc_smrc_try_process (client * c);
 
-/* arc_t_sss.c */
-extern int arc_rewrite_sss_object(rio *r, robj *key, robj *o);
-extern int arc_sss_type_value_count(robj *o);
-extern void arc_sss_compute_dataset_digest(robj *o);
+/* arc_sss.c */
+extern int arc_rewrite_sss_object (rio * r, robj * key, robj * o);
+extern int arc_sss_type_value_count (robj * o);
+extern void arc_sss_compute_dataset_digest (robj * o, unsigned char *digest);
+extern robj *arc_create_sss_object (robj * key);
+extern void arc_free_sss_object (robj * o);
+extern int arc_rdb_save_sss_type (rio * rdb, robj * o);
+extern int arc_rdb_save_sss_object (rio * rdb, robj * o);
+extern robj *arc_rdb_load_sss_object (rio * rdb);
+extern int arc_rio_peek_key (rio * rdb, int rdbtype, robj * key);
+
+/* arc_checkpoint.c */
+extern void arc_bgsave_done_handler (int ok);
+extern int arc_rdb_save_rio_with_file (rio * rdb, FILE * fp, int *error);
+extern int arc_rdb_save_onwrite (rio * rdb, int *error);
+extern int arc_rdb_save_skip (sds keystr);
+extern int arc_rdb_save_aux_fields (rio * rdb);
+extern int arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval);
+
 
 /* ------------------------- */
 /* Redis commands extensions */
 /* ------------------------- */
+/* arc_networking.c */
 extern void bpingCommand (client * c);
 extern void quitCommand (client * c);
-/* list semantic s3 commands */
-extern void s3lgetCommand(client *c);
-extern void s3lmgetCommand(client *c);
-extern void s3lkeysCommand(client *c);
-extern void s3lvalsCommand(client *c);
-extern void s3laddCommand(client *c);
-extern void s3laddatCommand(client *c);
-extern void s3lmaddCommand(client *c);
-extern void s3lremCommand(client *c);
-extern void s3lmremCommand(client *c);
-extern void s3lsetCommand(client *c);
-extern void s3lreplaceCommand(client *c);
-extern void s3lcountCommand(client *c);
-extern void s3lexistsCommand(client *c);
-extern void s3lexpireCommand(client *c);
-extern void s3lmexpireCommand(client *c);
-extern void s3lttlCommand(client *c);
-/* set semantic s3 commands */
-extern void s3sgetCommand(client *c);
-extern void s3smgetCommand(client *c);
-extern void s3skeysCommand(client *c);
-extern void s3svalsCommand(client *c);
-extern void s3saddCommand(client *c);
-extern void s3saddatCommand(client *c);
-extern void s3smaddCommand(client *c);
-extern void s3sremCommand(client *c);
-extern void s3smremCommand(client *c);
-extern void s3ssetCommand(client *c);
-extern void s3sreplaceCommand(client *c);
-extern void s3scountCommand(client *c);
-extern void s3sexistsCommand(client *c);
-extern void s3sexpireCommand(client *c);
-extern void s3smexpireCommand(client *c);
-extern void s3sttlCommand(client *c);
-/* generic s3 commands */
-extern void s3keysCommand(client *c);
-extern void s3countCommand(client *c);
-extern void s3expireCommand(client *c);
-extern void s3remCommand(client *c);
-extern void s3mremCommand(client *c);
-/* s3 gc */
-extern void s3gcCommand(client *c);
+
+/* arc_t_sss.c */
+// list semantic s3 commands 
+extern void s3lgetCommand (client * c);
+extern void s3lmgetCommand (client * c);
+extern void s3lkeysCommand (client * c);
+extern void s3lvalsCommand (client * c);
+extern void s3laddCommand (client * c);
+extern void s3laddatCommand (client * c);
+extern void s3lmaddCommand (client * c);
+extern void s3lremCommand (client * c);
+extern void s3lmremCommand (client * c);
+extern void s3lsetCommand (client * c);
+extern void s3lreplaceCommand (client * c);
+extern void s3lcountCommand (client * c);
+extern void s3lexistsCommand (client * c);
+extern void s3lexpireCommand (client * c);
+extern void s3lmexpireCommand (client * c);
+extern void s3lttlCommand (client * c);
+// set semantic s3 commands
+extern void s3sgetCommand (client * c);
+extern void s3smgetCommand (client * c);
+extern void s3skeysCommand (client * c);
+extern void s3svalsCommand (client * c);
+extern void s3saddCommand (client * c);
+extern void s3saddatCommand (client * c);
+extern void s3smaddCommand (client * c);
+extern void s3sremCommand (client * c);
+extern void s3smremCommand (client * c);
+extern void s3ssetCommand (client * c);
+extern void s3sreplaceCommand (client * c);
+extern void s3scountCommand (client * c);
+extern void s3sexistsCommand (client * c);
+extern void s3sexpireCommand (client * c);
+extern void s3smexpireCommand (client * c);
+extern void s3sttlCommand (client * c);
+// generic s3 commands
+extern void s3keysCommand (client * c);
+extern void s3countCommand (client * c);
+extern void s3expireCommand (client * c);
+extern void s3remCommand (client * c);
+extern void s3mremCommand (client * c);
+// s3 gc
+extern void s3gcCommand (client * c);
+
+/* arc_checkpoint.c */
+void checkpointCommand (client * c);
+void migstartCommand (client * c);
+void migendCommand (client * c);
+void migconfCommand (client * c);
+void migpexpireatCommand (client * c);
 
 #endif

@@ -123,6 +123,9 @@ struct redisServer server; /* server global state */
  *    are not fast commands.
  */
 struct redisCommand redisCommandTable[] = {
+#ifdef NBASE_ARC
+    ARC_REDIS_COMMAND_TBL,
+#endif
     {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
     {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
     {"setnx",setnxCommand,3,"wmF",0,NULL,1,1,1,0,0},
@@ -728,6 +731,9 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
     long long t = dictGetSignedIntegerVal(de);
     if (now > t) {
         sds key = dictGetKey(de);
+#ifdef NBASE_ARC
+	if(arc_expire_haveto_skip(key)) return 0;
+#endif
         robj *keyobj = createStringObject(key,sdslen(key));
 
         propagateExpire(db,keyobj);
@@ -1093,6 +1099,9 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     UNUSED(id);
     UNUSED(clientData);
 
+#ifdef NBASE_ARC
+    if ((j = arc_server_cron()) > 0) return j;
+#endif
     /* Software watchdog: deliver the SIGALRM that will reach the signal
      * handler if we don't return here fast enough. */
     if (server.watchdog_period) watchdogScheduleSignal(server.watchdog_period);
@@ -4006,7 +4015,7 @@ int main(int argc, char **argv) {
         redis_check_rdb_main(argc,argv);
 #ifdef NBASE_ARC
     arc_tool_hook (argc, argv);
-    arc_init_server_config (argc, argv);
+    arc_init_arc ();
 #endif
 
     if (argc >= 2) {
@@ -4083,6 +4092,7 @@ int main(int argc, char **argv) {
 
 #ifdef NBASE_ARC
     arc_main_hook(argc, argv);
+    arc_init_redis_server ();
 #endif
     initServer();
     if (background || server.pidfile) createPidFile();
