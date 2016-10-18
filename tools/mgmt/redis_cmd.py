@@ -20,6 +20,7 @@ from fabric.contrib.console import *
 import sys
 import traceback
 import telnetlib
+import config
 
 class RedisCmd():
     ip = None
@@ -50,7 +51,7 @@ class RedisCmd():
             self.conn = None
             self.conn = telnetlib.Telnet(self.ip, self.port)
             self.conn.write(req + '\r\n')
-            reply = self.conn.read_until('\r\n', 3)
+            reply = self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
             if reply == '':
                 warn(red('[%s:%d] Redis reply is Null.' % (self.ip, self.port)))
                 return -1
@@ -59,7 +60,7 @@ class RedisCmd():
             
             readlen = 0
             while readlen <= size:
-                reply = self.conn.read_until('\r\n', 3)
+                reply = self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
                 readlen += len(reply)
                 reply.strip()
                 if reply.find(':'):
@@ -86,9 +87,9 @@ class RedisCmd():
             self.conn = telnetlib.Telnet(self.ip, self.port)
 
             self.conn.write('info keyspace\r\n')
-            self.conn.read_until('\r\n')
-            self.conn.read_until('\r\n')
-            reply = self.conn.read_until('\r\n')
+            self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
+            self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
+            reply = self.conn.read_until('\r\n', config.TELNET_TIMEOUT)
             if reply == '\r\n':
                 return 0
             else:

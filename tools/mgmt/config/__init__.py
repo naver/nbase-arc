@@ -28,6 +28,8 @@ from conf_gateway import *
 from conf_smr import *
 import util
 
+TELNET_TIMEOUT = 300
+
 def check_config():
     # Check attributes
     attrs = [

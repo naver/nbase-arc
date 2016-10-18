@@ -29,6 +29,7 @@ from gw_cmd import *
 import remote
 import util
 import cm
+import string
 
 config = None
 
@@ -53,9 +54,24 @@ PGS_COLUMN =    '| PGS_ID | MGEN |       IP       |  PORT | ROLE | MEMLOG | QUOR
 PGS_FORMAT =    '| %(pgs_id)6d | %(master_Gen)4s |%(ip)15s |%(smr_base_port)6d | %(active_role)s(%(smr_role)s) | %(memlog)6s | %(quorum)6s |'
 PGS_HEADER = PGS_PARTITION + '\n' + PGS_COLUMN  + '\n' + PGS_PARTITION
 
+PG_PGS_PARTITION = PG_PARTITION[:-1] + PGS_PARTITION
+PG_PGS_HEADER = PG_PARTITION[:-1] + PGS_PARTITION + '\n' + PG_COLUMN[:-1] + PGS_COLUMN + '\n' + PG_PARTITION[:-1] + PGS_PARTITION
+
+CHECK_MEMLOG_PARTITION = '+--------+-----------+'
+CHECK_MEMLOG_COLUMN = '| OPTION | UNMATCHED |'
+CHECK_MEMLOG_FORMAT = '| %6s | %9s |'
+CHECK_MEMLOG_HEADER = CHECK_MEMLOG_PARTITION + '\n' + CHECK_MEMLOG_COLUMN  + '\n' + CHECK_MEMLOG_PARTITION 
+
 def set_config(config_module):
     global config
     config = config_module
+
+def prompt_show_memlog():
+    s = prompt(cyan("\nInput SHOW_MEMLOG(y/N)"))
+    if len(s) > 0 and string.lower(s) == 'y':
+        return True
+    else:
+        return False
 
 def main(args):
     args = args.encode('ascii').split(' ')
@@ -133,10 +149,11 @@ def menu_show_clusters():
             continue
 
         if menu_no == 0:
+            memlog = prompt_show_memlog()
             for i in range(len(cluster_name_list)):
                 cluster_name = cluster_name_list[i].encode('ascii')
                 print cyan(' #### ' + cluster_name + ' #### ')
-                menu_show_all(cluster_name)
+                show_all(cluster_name, memlog)
             continue
     
         menu_select_info(cluster_name_list[menu_no-1].encode('ascii'))
@@ -148,6 +165,7 @@ def menu_select_info(cluster_name):
                 ["PG list", menu_show_pg_list],
                 ["PG > PGS list", menu_show_pgs_list],
                 ["PGS", menu_show_pgs],
+                ["Check memlog option", menu_check_memlog_option],
            ]
 
     while True:
@@ -188,21 +206,68 @@ def show_opt(dick_name, d):
         print yellow(OPT_FORMAT % (dick_name, k, str(v)))
 
 def menu_show_all(cluster_name):
+    memlog = prompt_show_memlog()
+    show_all(cluster_name, memlog)
+
+def show_all(cluster_name, memlog):
     # Check cluster
-    json_data = cm.cluster_info(cluster_name)
-    if json_data == None: return
+    cluster_json = cm.cluster_info(cluster_name)
+    if cluster_json == None: return
 
     print ''
     if show_gw_list(cluster_name) == False:
         prompt("Press <Enter> to continue...")
     print ''
 
-    header = True
-    for pg in sorted(json_data['data']['pg_list'], key=lambda x: int(x['pg_id'])):
-        if show_pgs_list(cluster_name, int(pg['pg_id']), header, json_data) == False:
-            prompt("Press <Enter> to continue...")
-        header = False
+    pgs_list = util.get_all_pgs_info(cluster_name, memlog)
+
+    print yellow(PG_PGS_HEADER)
+    for pg in sorted(cluster_json['data']['pg_list'], key=lambda x: int(x['pg_id'])):
+        print_pgs_with_pg(cluster_json, int(pg['pg_id']),
+                filter(lambda pgs: pgs['pgs_id'] in pg['pg_data']['pgs_ID_List'], pgs_list))
+        print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
     print ''
+
+def pgs_view_style(pgs):
+    if pgs['active_role'] == 'M':
+        bold = True
+    else:
+        bold = False
+
+    if pgs['active_role'] != pgs['smr_role']:
+        color_function = magenta
+        abnormal = True
+    elif pgs['active_role'] == 'M' or pgs['active_role'] == 'S':
+        color_function = yellow
+        abnormal = False
+    else:
+        color_function = red
+        abnormal = True
+
+    return bold, color_function, abnormal
+
+def print_pgs_with_pg(cluster_json, pg_id, pgs_list):
+    # get specific pg info
+    pg = cm.pg_info(cluster_json['data']['cluster_name'], pg_id, cluster_json)
+
+    begin = True
+    pause = False
+    for pgs in sorted(pgs_list, key=lambda x: int(x['pgs_id'])):
+        bold, color_function, abnormal = pgs_view_style(pgs)
+
+        if abnormal:
+            pause = True
+
+        if begin:
+            prefix_pg = PG_FORMAT[:-1] % pg
+            begin = False
+        else:
+            prefix_pg = PG_PREFIX[:-1]
+
+        print yellow(prefix_pg[:-1]), color_function(PGS_FORMAT % pgs, bold)
+
+    if pause:        
+        prompt("Press <Enter> to continue...")
 
 def menu_show_pg_list(cluster_name):
     # Check cluster
@@ -278,15 +343,18 @@ def menu_show_pgs_list(cluster_name):
         sys.stdout.write(yellow('%4d' % pg_ids[i]))
 
     # Select PG
-    s = prompt(cyan('\nSelect PG number'))
-
+    s = prompt(cyan('\nInput PG_ID(number) SHOW_MEMLOG(y/N)'))
     try:
-        pg_id = int(s)
-        if show_pgs_list(cluster_name, pg_id, True, json_data) == False:
-            prompt("Press <Enter> to continue...")
+        toks = s.split(' ')
+        pg_id = int(toks[0])
+        if len(toks) == 2 and string.lower(toks[1]) == 'y':
+            memlog = True
+        else:
+            memlog = False
+
+        show_pgs_list(cluster_name, pg_id, True, json_data, memlog)
     except:
         pass
-
 
 """
 Show information of PGSes
@@ -301,72 +369,27 @@ Args:
 Returns:
     False if there is an error, otherwise show_pgs_list() returns True.
 """
-def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None):
+def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None, memlog=False):
     # Check cluster
     if cluster_json == None:
         cluster_json = cm.cluster_info(cluster_name)
         if cluster_json == None:
             return False
 
-    exist = [k for loop_pg_data in cluster_json['data']['pg_list'] 
-                    for k, v in loop_pg_data.iteritems() if k == 'pg_id' and int(v) == pg_id]
-    if len(exist) == 0:
+    pg = filter(lambda pg: int(pg['pg_id']) == pg_id, cluster_json['data']['pg_list'])
+    if len(pg) == 0:
         warn(red("PG '%d' doesn't exist." % pg_id))
         return True
+    pg = pg[0]
 
-    # get specific pg info
-    pg = cm.pg_info(cluster_name, pg_id, cluster_json)
+    # Get pgs info
+    pgs_list = util.get_deployed_pgs_info(cluster_name, pg['pg_data']['pgs_ID_List'], memlog)
 
-    if print_header:
-        print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
-        print yellow(PG_COLUMN[:-1] + PGS_COLUMN)
-        print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
-
-    # get all pgs info
-    pgs_list = cm.get_pgs_list(cluster_name, pg_id, cluster_json)  
-    if None == pgs_list:
-        print yellow('| %-57s |' % ("There is no PGS in PG '%d'." % pg_id))
-        print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
-        return True
-
-    for id, data in pgs_list.items():
-        # Get active role
-        data['active_role'] = util.get_role_of_smr(data['ip'], data['mgmt_port'], verbose=False)
-        if data['active_role'] == 'M':
-            data['quorum'] = remote.get_quorum(data)
-        else:
-            data['quorum'] = ''
-
-        # Get memlog
-        host = config.USERNAME + '@' + data['ip'].encode('ascii')
-        with settings(hide('warnings', 'running', 'stdout', 'user'), hosts=[host]):
-            data['memlog'] = execute(remote.exist_smr_memlog, data['smr_base_port'])[host]
-
-    pgs_state = True
-    begin = True
-    for pgs_id, pgs in sorted(pgs_list.items(), key=lambda x: int(x[0])):
-        if pgs['active_role'] == 'M':
-            bold = True
-        else:
-            bold = False
-
-        if begin:
-            prefix_pg = PG_FORMAT[:-1] % pg
-            begin = False
-        else:
-            prefix_pg = PG_PREFIX[:-1]
-
-        if pgs['active_role'] != pgs['smr_role']:
-            print yellow(prefix_pg[:-1]), magenta(PGS_FORMAT % pgs)
-            pgs_state = False
-        elif pgs['active_role'] == 'M' or pgs['active_role'] == 'S':
-            print yellow(prefix_pg[:-1]), yellow(PGS_FORMAT % pgs, bold)
-        else:
-            print yellow(prefix_pg[:-1]), red(PGS_FORMAT % pgs)
-            pgs_state = False
-            
-    print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
-    return pgs_state
+    # Print
+    print yellow(PG_PGS_HEADER)
+    print_pgs_with_pg(cluster_json, pg_id, pgs_list)
+    print yellow(PG_PGS_PARTITION)
+    print ''
 
 def menu_show_pgs(cluster_name):
     # Check cluster
@@ -390,48 +413,50 @@ def menu_show_pgs(cluster_name):
         sys.stdout.write(yellow('%4d' % pgs_ids[i]))
 
     # Select PGS
-    s = prompt(cyan('\nSelect PGS number'))
+    s = prompt(cyan('\nInput PGS_ID(number) SHOW_MEMLOG(y/N)'))
     try:
-        pgs_id = int(s.split(' ')[0])
-        show_pgs(cluster_name, pgs_id)
+        toks = s.split(' ')
+        pgs_id = int(toks[0])
+        if len(toks) == 2 and string.lower(toks[1]) == 'y':
+            memlog = True
+        else:
+            memlog = False
+        show_pgs(json_data, pgs_id, memlog)
     except:
-        pass
+        warn(red("Failed to show pgs info. %s" % sys.exc_info()[0]))
 
-def show_pgs(cluster_name, pgs_id):
-    pgs = cm.pgs_info(cluster_name, pgs_id)
-    if pgs == None:
+def show_pgs(cluster_json, pgs_id, memlog=False):
+    # Get pgs information
+    pgs_unit_set = util.get_deployed_pgs_info(cluster_json['data']['cluster_name'], [pgs_id], memlog)
+    if pgs_unit_set == None:
         warn(red("PGS '%d' doesn't exist." % pgs_id))
-        return
+        return None
 
-    pgs = pgs['data']
-    pgs['active_role'] = util.get_role_of_smr(pgs['ip'], pgs['mgmt_port'], verbose=False)
-    if pgs['active_role'] == 'M':
-        pgs['quorum'] = remote.get_quorum(pgs)
-    else:
-        pgs['quorum'] = ''
+    print yellow(PG_PGS_HEADER)
+    print_pgs_with_pg(cluster_json, int(pgs_unit_set[0]['pg_id']), pgs_unit_set)
+    print yellow(PG_PGS_PARTITION)
+    print ''
 
-    pg = cm.pg_info(cluster_name, pgs['pg_ID'])
-    if pg == None:
-        warn(red("PG '%d' doesn't exist." % pgs['pg_ID']))
-        return
+def menu_check_memlog_option(cluster_name):
+    opt_memlog = config.get_cluster_opt(cluster_name)('smr')('use_memlog').v()
+    pgs_readers = []
 
-    if pgs['active_role'] == 'M': 
-        bold = True
-    else: 
-        bold = False
-
-    prefix_pg = PG_FORMAT[:-1] % pg
+    pgs_list = util.get_all_pgs_info(cluster_name, True)
+    unmatched_list = filter(lambda pgs : pgs['memlog'] != opt_memlog, pgs_list)
 
     # Print
-    print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
-    print yellow(PG_COLUMN[:-1] + PGS_COLUMN)
-    print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
-
-    if pgs['active_role'] != pgs['smr_role']:
-        print yellow(prefix_pg[:-1]), magenta(PGS_FORMAT % pgs)
-    elif pgs['active_role'] == 'M' or pgs['active_role'] == 'S':
-        print yellow(prefix_pg[:-1]), yellow(PGS_FORMAT % pgs, bold)
+    print yellow(CHECK_MEMLOG_HEADER)
+    if len(unmatched_list) != 0:
+        print(red(CHECK_MEMLOG_FORMAT % (opt_memlog, len(unmatched_list))))
     else:
-        print yellow(prefix_pg[:-1]), red(PGS_FORMAT % pgs)
-            
-    print yellow(PG_PARTITION[:-1] + PGS_PARTITION)
+        print(yellow(CHECK_MEMLOG_FORMAT % (opt_memlog, len(unmatched_list))))
+    print(yellow(CHECK_MEMLOG_PARTITION + '\n'))
+
+    if len(unmatched_list) > 0:
+        print yellow(PGS_HEADER)
+        for pgs in unmatched_list:
+            bold, color_function, abnormal = pgs_view_style(pgs)
+            if pgs['memlog'] != opt_memlog:
+                print color_function(PGS_FORMAT % pgs, bold)
+        print yellow(PGS_PARTITION + '\n')
+
