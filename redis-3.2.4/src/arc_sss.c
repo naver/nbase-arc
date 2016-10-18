@@ -176,7 +176,7 @@ arc_rdb_load_sss_object (rio * rdb)
   RETURNIF (NULL, len == RDB_LENERR);
 
   key = rdb->peeked_key;
-  serverAssert (key != NULL && key->type == OBJ_SSS);
+  serverAssert (key != NULL);
 
   o = arc_create_sss_object (key);
   while (len > 0)
