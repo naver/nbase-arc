@@ -372,8 +372,8 @@ arc_rdb_save_skip (sds keystr)
     }
 
   keyhash = crc16 (keystr, sdslen (keystr));
-  return bitmapTestBit ((unsigned char *) arc.checkpoint_slots,
-			keyhash % ARC_KS_SIZE);
+  return !bitmapTestBit ((unsigned char *) arc.checkpoint_slots,
+			 keyhash % ARC_KS_SIZE);
 }
 
 static int
@@ -418,6 +418,14 @@ arc_rdb_save_aux_fields (rio * rdb)
 int
 arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval)
 {
+  char *p = auxkey->ptr;
+
+  // fast check
+  if (*p++ != '\001' || *p++ != '\002' || *p++ != '\003')
+    {
+      return 0;
+    }
+
   if (!compareStringObjects (auxkey, shared.db_version))
     {
       getLongLongFromObject (auxval, &arc.smr_seqnum);
