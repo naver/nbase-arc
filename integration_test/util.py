@@ -40,6 +40,8 @@ import string
 import process_mgmt
 import shutil
 import exceptions
+from arcci.arcci import *
+import pdb
 
 proc_mgmt = process_mgmt.ProcessMgmt()
 
@@ -297,6 +299,16 @@ def cm_command( ip, port, cmd, line=1 ):
     return ret
 
 
+def cm_success(reply):
+    jsonObj = json.loads(reply, encoding='ascii')
+    if jsonObj['state'] != 'success':
+        log('REPLY:%s' % reply[:-1])
+        return False, None
+    if jsonObj.has_key('data'):
+        return True, jsonObj['data']
+    return True, None
+
+
 def cluster_info(mgmt_ip, mgmt_port, cluster_name):
     reply = cm_command(mgmt_ip, mgmt_port, 'cluster_info %s' % cluster_name)
     log('cluster_info ret : %s' % reply)
@@ -327,6 +339,12 @@ def pg_info(mgmt_ip, mgmt_port, cluster_name, pg_id):
         return None
 
 
+def get_pgs_info_closure(mgmt_ip, mgmt_port, cluster_name, pgs_id):
+    def get_pgs_info_f():
+        return get_pgs_info(mgmt_ip, mgmt_port, cluster_name, pgs_id)
+    return get_pgs_info_f
+
+
 def get_pgs_info(mgmt_ip, mgmt_port, cluster_name, pgs_id):
     reply = cm_command(mgmt_ip, mgmt_port, 'pgs_info %s %s\r\n' % (cluster_name, pgs_id))
     ret = json.loads(reply)
@@ -349,6 +367,11 @@ def get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id):
     pgs_info = ret['data']
     return pgs_info
 
+
+def check_cluster_closure(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=False):
+    def check_cluster_f():
+        return check_cluster(cluster_name, mgmt_ip, mgmt_port, state, check_quorum)
+    return check_cluster_f
 
 def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=False):
     log('')
@@ -988,6 +1011,62 @@ def migration(cluster, src_pg_id, dst_pg_id, range_from, range_to, tps, num_part
     return True
 
 
+def migrate_mgmt_cluster(cluster_name, src_cm_ip, src_cm_port, src_zk_addr, dest_cm_ip, dest_cm_port, dest_zk_addr):
+    arcci_log = 'bin/log/arcci_log64'
+
+    # src <- load generation
+    src_arcci = ARC_API(src_zk_addr, cluster_name, logFilePrefix = arcci_log, so_path = c.ARCCI_SO_PATH)
+    slg = load_generator.LoadGenerator_ARCCI(0, src_arcci)
+    slg.start()
+
+    # src_cm <- cluster_off
+    if cluster_off(src_cm_ip, src_cm_port, cluster_name) == False:
+        log("cluster_off fail")
+        return False
+
+    # src_cm -- cluster_dump --> dest_cm
+    ret, cdump = cluster_dump(src_cm_ip, src_cm_port, cluster_name)
+    if ret == False:
+        log("cluster_dump fail")
+        return False
+
+    ret = cluster_load(dest_cm_ip, dest_cm_port, cdump)
+    if ret == False:
+        log("cluster_load fail")
+        return False
+
+    # dest_cm <- cluster_on
+    if cluster_on(dest_cm_ip, dest_cm_port, cluster_name) == False:
+        log("cluster_on fail")
+        return False
+
+    # dest <- load generation
+    dest_arcci = ARC_API(dest_zk_addr, cluster_name, logFilePrefix = arcci_log, so_path = c.ARCCI_SO_PATH)
+    dlg = load_generator.LoadGenerator_ARCCI(1, dest_arcci)
+    dlg.start()
+
+    # src <- stop load generation
+    slg.quit()
+    slg.join()
+    if await(5, False)(lambda c: c, lambda : slg.consistency) == False:
+        log("consistency error on load_generator with src_zk")
+        return False
+
+    # src_cm <- cluster_purge
+    if cluster_purge(src_cm_ip, src_cm_port, cluster_name) == False:
+        log("cluster_on fail")
+        return False
+
+    # dest <- stop load generation
+    dlg.quit()
+    dlg.join()
+    if await(5, False)(lambda c: c, lambda : dlg.consistency) == False:
+        log("consistency error on load_generator with dest_zk")
+        return False
+
+    return True
+
+
 def get_smr_state( server, leader_cm ):
     return _get_smr_state( server['id'], server['cluster_name'], leader_cm['ip'], leader_cm['cm_port'] )
 
@@ -1440,7 +1519,7 @@ def bgsave(server, max_try=120):
         return False
 
 
-def failover(server, leader_cm):
+def shutdown_pgs(server, leader_cm, check=True):
     # shutdown
     ret = testbase.request_to_shutdown_smr( server )
     if ret != 0:
@@ -1452,17 +1531,21 @@ def failover(server, leader_cm):
         return False
 
     # check state F
-    max_try = 20
-    expected = 'F'
-    for i in range( 0, max_try):
-        state = get_smr_state( server, leader_cm )
-        if expected == state:
-            break;
-        time.sleep( 1 )
-    if expected != state:
-        log('server%d - state:%s, expected:%s' % (server['id'], state, expected) )
-        return False
+    if check:
+        max_try = 20
+        expected = 'F'
+        for i in range( 0, max_try):
+            state = get_smr_state( server, leader_cm )
+            if expected == state:
+                break;
+            time.sleep( 1 )
+        if expected != state:
+            log('server%d - state:%s, expected:%s' % (server['id'], state, expected) )
+            return False
 
+    return True
+
+def recover_pgs(server, leader_cm, check=True):
     # recovery
     ret = testbase.request_to_start_smr( server )
     if ret != 0:
@@ -1486,18 +1569,26 @@ def failover(server, leader_cm):
         return False
 
     # check state N
-    max_try = 20
-    expected = 'N'
-    for i in range( 0, max_try):
-        state = get_smr_state( server, leader_cm )
-        if expected == state:
-            break;
-        time.sleep( 1 )
-    role = get_role_of_server( server )
-    if expected != state:
-        log('server%d - state:%s, expected:%s, role:%s' % (server['id'], state, expected, role))
-        return False
+    if check:
+        max_try = 20
+        expected = 'N'
+        for i in range( 0, max_try):
+            state = get_smr_state( server, leader_cm )
+            if expected == state:
+                break;
+            time.sleep( 1 )
+        role = get_role_of_server( server )
+        if expected != state:
+            log('server%d - state:%s, expected:%s, role:%s' % (server['id'], state, expected, role))
+            return False
 
+    return True
+
+def failover(server, leader_cm):
+    if shutdown_pgs(server, leader_cm) == False:
+        return False
+    if recover_pgs(server, leader_cm) == False:
+        return False
     return True
 
 
@@ -2096,7 +2187,7 @@ def copy_capi32_test_server( id ):
     src = '../tools/local_proxy/.obj32/%s' % (c.CAPI_TEST_SERVER)
     shutil.copy(src, '%s/%s' % (capi_dir( id ), c.CAPI32_TEST_SERVER))
 
-def copy_cm( id ):
+def copy_cm( id, zk_addr="127.0.0.1:2181" ):
     if not os.path.exists( cc_dir( id ) ):
         os.mkdir( cc_dir( id ) )
 
@@ -2104,7 +2195,10 @@ def copy_cm( id ):
     shutil.copy(src, '%s/%s' % (cc_dir( id ), c.CC))
 
     src = '../confmaster/target/%s' % (c.CM_PROPERTY_FILE_NAME)
-    shutil.copy(src, '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME))
+    property_file = '%s/%s' % (cc_dir( id ), c.CM_PROPERTY_FILE_NAME)
+    shutil.copy(src, property_file)
+    os.system( 'sed -i "s/confmaster.zookeeper.address=.*/confmaster.zookeeper.address=%s/g" %s' % 
+            (zk_addr, property_file) )
 
     src = '../confmaster/script/%s' % (c.CM_EXEC_SCRIPT)
     dst = '%s/%s' % (cc_dir( id ), c.CM_EXEC_SCRIPT)
@@ -2172,6 +2266,30 @@ def start_cm(ip, port):
         log('wait for connection established to confmaster, port=%d' % port)
 
     return False
+
+def cluster_on(ip, port, cluster_name):
+    return cm_success(cm_command(ip, port, 'cluster_on %s' % cluster_name))[0]
+
+def cluster_off(ip, port, cluster_name):
+    return cm_success(cm_command(ip, port, 'cluster_off %s' % cluster_name))[0]
+
+def cluster_dump(ip, port, cluster_name):
+    return cm_success(cm_command(ip, port, 'cluster_dump %s' % cluster_name))
+
+def cluster_load(ip, port, dump):
+    return cm_success(
+            cm_command(
+                ip, port, 'cluster_load %s' % json.dumps(dump).replace(' ', ''))
+           )[0]
+
+def cluster_purge(ip, port, cluster_name):
+    return cm_success(cm_command(ip, port, 'cluster_purge %s' % cluster_name))[0]
+
+def pgs_leave(ip, port, cluster_name, pgs_id):
+    return cm_success(cm_command(ip, port, 'pgs_leave %s %d' % (cluster_name, pgs_id)))[0]
+
+def pgs_join(ip, port, cluster_name, pgs_id):
+    return cm_success(cm_command(ip, port, 'pgs_join %s %d' % (cluster_name, pgs_id)))[0]
 
 def do_logutil_cmd (id, subcmd):
     parent_dir, log_dir = smr_log_dir( id )
@@ -2516,6 +2634,64 @@ def stop_zookeeper( zk_dir ):
     return None, None
 
 
+"""
+con_static: 
+    {
+    server_id : {
+        "redis" : N,
+        "smr" : N,
+        "gw" : N
+    }, ...
+}
+
+op:
+    A function implemented in C corresponding to the intrinsic operators of Python in the operator module. 
+    Such as operator.lt, operator.eq, operator.gt, ...
+
+exclude: 
+    ["gw", "redis", "smr"]
+"""
+def con_compare(con_static, op, exclude=[]):
+    def con_compare_f(con_varying):
+        print "compare: ", con_static, " ", str(op), " ", con_varying
+        all_keys = ["gw", "redis", "smr"]
+        ret = True
+        for key in set(all_keys) - set(exclude):
+            if not op(con_varying[key], con_static[key]):
+                ret = False
+        return ret
+    return con_compare_f
+
+
+def await(timeout_sec, expect=True):
+    def await_f(condition, generator):
+        end = time.time() + timeout_sec
+        while time.time() < end:
+            d = generator()
+            if condition(d) == expect: return expect
+            time.sleep(1)
+        print('last generated data: ', d)
+        return not expect
+    return await_f 
+
+
+def connection_count(server):
+    redis = get_clients_count_of_redis(server['ip'], server['redis_port'])
+    smr = get_clients_count_of_smr(server['smr_mgmt_port'])
+    gw = get_clients_count_of_gw(server['ip'], server['gateway_port'])
+    return {
+            "redis" : redis,
+            "smr" : smr,
+            "gw" : gw
+            }
+
+
+def connection_count_closure(server):
+    def connection_count_f():
+        return connection_count(server)
+    return connection_count_f
+
+
 def ls( dir ):
     try:
         return os.listdir( dir )
@@ -2595,3 +2771,12 @@ def remove_all_memory_logs():
             if file == "master-log":
                 cmd = '../smr/smr/%s deletelog %s' % (c.LOG_UTIL, dirpath)
                 os.system(cmd)
+
+def rmr(path):
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+    os.rmdir(path)
+

@@ -29,9 +29,10 @@ import time
 import sys
 import load_generator
 import functools
+import zookeeper
 from arcci.arcci import *
 from ctypes import *
-import pdb
+from operator import *
 
 cluster_2_name = 'test_lock'
 cluster_2_pg_count = 4
@@ -1825,4 +1826,263 @@ class TestConfMaster(unittest.TestCase):
             # shutdown cluster
             ret = default_cluster.finalize( self.cluster )
             self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+
+    def cluster_on_off_connection_count(self):
+        # initial heartbeat connections
+        con_cnt = {}
+        """
+            con_cnt = {
+                server_id : {
+                    "redis" : N,
+                    "smr" : N,
+                    "gw" : N
+                }, ...
+            }
+        """
+        init_cons = dict((s['id'], util.connection_count(s)) for s in self.cluster['servers'])
+
+        # cluster off
+        ret = util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+        self.assertTrue(ret, 'Failed to cluster_off')
+
+        # check workflows
+        ret = util.await(5, False)(
+                lambda cinfo: cinfo['wf'] == 0,
+                lambda : util.cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name']))
+        self.assertTrue(ret, 'Failed to trigger workflows')
+
+        # check whether heartbeat connections are closed
+        for s in self.cluster['servers']:
+            ret = util.await(10)(
+                    util.con_compare(init_cons[s['id']], lt), 
+                    util.connection_count_closure(s))
+            self.assertTrue(ret, 'Heartbeat connections are not disconnected, after cluster_off.')
+
+        # cluster on
+        ret = util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+        self.assertTrue(ret, 'Failed to cluster_on')
+
+        # check whether heartbeat connections are established
+        for s in self.cluster['servers']:
+            ret = util.await(10)(
+                    util.con_compare(init_cons[s['id']], ge), 
+                    util.connection_count_closure(s))
+            self.assertTrue(ret, 'Heartbeat connections are not established, after cluster_on.')
+
+    def cluster_on_off_connection_count_with_left_pgs(self, role_left):
+        # initial heartbeat connections
+        init_cons = dict((s['id'], util.connection_count(s)) for s in self.cluster['servers'])
+
+        # pgs_leave
+        left_pgs_list = []
+        for s in self.cluster['servers']:
+            pinfo = util.get_pgs_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'], s['id'])
+            self.assertNotEquals(pinfo, None, 'pgs_info fail')
+            if pinfo['smr_Role'] == role_left:
+                left_pgs_list.append(s)
+
+        for s in left_pgs_list:
+            ret = util.pgs_leave(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'], s['id'])
+            self.assertTrue(ret, 'pgs_leave fail.')
+
+        # cluster off
+        ret = util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+        self.assertTrue(ret, 'Failed to cluster_off')
+
+        # check whether heartbeat connections are closed
+        for s in self.cluster['servers']:
+            ret = util.await(10)(
+                    util.con_compare(init_cons[s['id']], lt), 
+                    util.connection_count_closure(s))
+            self.assertTrue(ret, 'Heartbeat connections are not disconnected, after cluster_off.')
+
+        # cluster on
+        ret = util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+        self.assertTrue(ret, 'Failed to cluster_on')
+
+        for s in self.cluster['servers']:
+            # check whether heartbeat connections are still closed
+            if s in left_pgs_list:
+                ret = util.await(10)(
+                        util.con_compare(init_cons[s['id']], lt, ['gw']), 
+                        util.connection_count_closure(s))
+                self.assertTrue(ret, 'Heartbeat connections are not disconnected, after pgs_leave and cluster_on.')
+            else:
+                ret = util.await(10)(
+                        util.con_compare(init_cons[s['id']], ge), 
+                        util.connection_count_closure(s))
+                self.assertTrue(ret, 'Heartbeat connections are not established, after cluster_on.')
+
+        # pgs_join
+        for s in left_pgs_list:
+            ret = util.pgs_join(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'], s['id'])
+            self.assertTrue(ret, 'pgs_leave fail.')
+
+        # wait for normal state of cluster
+        ret = util.await(30)(
+            lambda x: x,
+            util.check_cluster_closure(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], None, True))
+
+        # check whether heartbeat connections are established
+        for s in self.cluster['servers']:
+            ret = util.await(10)(
+                    util.con_compare(init_cons[s['id']], ge), 
+                    util.connection_count_closure(s))
+            self.assertTrue(ret, 'Heartbeat connections are not established, after cluster_on.')
+
+    def cluster_on_off_failover(self):
+        for s in self.cluster['servers']:
+            ret = util.failover(s, self.leader_cm)
+            self.assertTrue(ret, 'Failover error, incorrect state of PGS')
+
+            ret = util.await(10)(
+                lambda x: x,
+                util.check_cluster_closure(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], None, True))
+            self.assertTrue(ret, 'cluster_on_off_failover, incorrect state of Cluster')
+
+    def cluster_on_off_interleaved_fail(self):
+        for s in self.cluster['servers']:
+            # cluster off
+            ret = util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+            self.assertTrue(ret, 'Failed to cluster_off')
+
+            # shutdown pgs
+            ret = util.shutdown_pgs(s, self.leader_cm, False)
+            self.assertTrue(ret, 'Failed to shutdown pgs')
+
+            # check workflows
+            ret = util.await(5, False)(
+                    lambda cinfo: cinfo['wf'] == 0,
+                    lambda : util.cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name']))
+            self.assertTrue(ret, 'Failed to trigger workflows')
+
+            # state of pgs must not be changed
+            ret = util.await(10, False)(
+                    lambda pgs: pgs['state'] == 'N' and pgs['color'] == 'GREEN',
+                    util.get_pgs_info_closure(
+                        self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'], s['id']))
+            self.assertTrue(ret, 'state of pgs must not be changed')
+
+            # cluster on
+            ret = util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+            self.assertTrue(ret, 'Failed to cluster_on')
+
+            # state of pgs must be changed
+            ret = util.await(10, True)(
+                    lambda pgs: pgs['state'] == 'F' and pgs['color'] == 'RED',
+                    util.get_pgs_info_closure(
+                        self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'], s['id']))
+            self.assertTrue(ret, 'state of pgs must be changed')
+
+            # recover pgs
+            ret = util.recover_pgs(s, self.leader_cm)
+            self.assertTrue(ret, 'Failed to recover pgs')
+
+            # check_cluster state
+            ret = util.await(10)(
+                lambda x: x,
+                util.check_cluster_closure(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], None, True))
+            self.assertTrue(ret, 'cluster_on_off_interleaved_fail, incorrect state of Cluster')
+
+    def test_cluster_on_off(self):
+        util.print_frame()
+        load_gen_list = {}
+        try:
+            ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+            
+            # start load generator
+            for i in range(len(self.cluster['servers'])):
+                server = self.cluster['servers'][i]
+                load_gen = load_generator.LoadGenerator(server['id'], server['ip'], server['gateway_port'], timeout=10)
+                load_gen.start()
+                load_gen_list[i] = load_gen
+
+            print '\n\n### cluster_on_off_connection_count ###\n'
+            self.cluster_on_off_connection_count()
+            print '\n\n### cluster_on_off_connection_count_with_left_pgs(master) ###\n'
+            self.cluster_on_off_connection_count_with_left_pgs('M')
+            print '\n\n### cluster_on_off_connection_count_with_left_pgs(slave) ###\n'
+            self.cluster_on_off_connection_count_with_left_pgs('S')
+            print '\n\n### cluster_on_off_failover ###\n'
+            self.cluster_on_off_failover()
+            print '\n\n### cluster_on_off_interleaved_fail ###\n'
+            self.cluster_on_off_interleaved_fail()
+
+        finally:
+            print '\n\n### release resources ###\n'
+
+            # shutdown load generators
+            for i in range(len(load_gen_list)):
+                load_gen_list[i].quit()
+                load_gen_list[i].join()
+                load_gen_list.pop(i, None)
+
+            # cluster_on in order to enable confmaster commands on test cluster
+            cinfo = util.cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+            if cinfo != None and cinfo['cluster_info']['Mode'] == 2:
+                util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+
+            # shutdown cluster
+            ret = default_cluster.finalize( self.cluster )
+            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+
+    def test_migrate_mgmt_cluster(self):
+        util.print_frame()
+
+        dest_cm_ip = '127.0.0.1'
+        dest_cm_port = 10010
+        dest_zk_port = 10000
+        zk = zookeeper.ZooKeeper(dest_zk_port)
+
+        try:
+            # install cluster
+            ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+
+            # install destination zookeeper 
+            self.assertTrue(zk.start(), 'Failed to start ZooKeeper')
+
+            # install destination confmaster
+            util.copy_cm(dest_cm_port, '127.0.0.1:%d' % dest_zk_port)
+            self.assertEquals(0, util.start_confmaster(dest_cm_port, dest_cm_port, ''),
+                'Failed to start confmaster')
+
+            # migrate mgmt cluster
+            ret = util.migrate_mgmt_cluster(self.cluster['cluster_name'], 
+                    '127.0.0.1', 1122, '127.0.0.1:2181', dest_cm_ip, dest_cm_port, '127.0.0.1:%d' % dest_zk_port)
+            self.assertTrue(ret, 'Failed to migrate mgmt cluster')
+
+            ret = util.await(8, False)(
+                lambda x: x,
+                util.check_cluster_closure(self.cluster['cluster_name'], dest_cm_ip, dest_cm_port, None, True))
+            self.assertTrue(ret, 'after mgmt cluster migration, incorrect state of Cluster')
+
+            # failover
+            for s in self.cluster['servers']:
+                dest_cm = {'ip': dest_cm_ip, 'cm_port': dest_cm_port}
+                ret = util.failover(s, dest_cm)
+                self.assertTrue(ret, 'Failover error, incorrect state of PGS')
+
+                ret = util.await(10)(
+                    lambda x: x,
+                    util.check_cluster_closure(self.cluster['cluster_name'], dest_cm_ip, dest_cm_port, None, True))
+                self.assertTrue(ret, 'after mgmt cluster migration, incorrect state of Cluster')
+
+        finally:
+            # cluster_on in order to enable confmaster commands on test cluster
+            cinfo = util.cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+            if cinfo != None and cinfo['cluster_info']['Mode'] == 2:
+                util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+
+            # shutdown cluster
+            ret = default_cluster.finalize( self.cluster )
+            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+
+            # uninstall destination confmaster
+            util.shutdown_cm(dest_cm_port)
+
+            # uninstall destination zookeeper
+            zk.stop()
+            zk.cleanup()
 
