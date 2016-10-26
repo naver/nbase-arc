@@ -33,6 +33,7 @@ import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
 import com.navercorp.nbasearc.confmaster.heartbeat.HeartbeatChecker;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
 import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandler;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerPgs;
@@ -57,29 +58,29 @@ public class PartitionGroupServerImo {
         container.clear();
     }
     
-    public PartitionGroupServer load(String name, String clusterName)
+    public PartitionGroupServer load(String name, Cluster cluster)
             throws NoNodeException, MgmtZooKeeperException {
-        final String path = PathUtil.pgsPath(name, clusterName);
+        final String path = PathUtil.pgsPath(name, cluster.getName());
         PartitionGroupServer pgs = getByPath(path);
         if (pgs == null) {
-            pgs = build(path, name, clusterName);
+            pgs = build(path, name, cluster);
             container.put(path, pgs);
         } else {
             Stat stat = new Stat();
-            byte[] data =  pgsDao.loadPgs(name, clusterName, stat, pgs.getWatch());
+            byte[] data =  pgsDao.loadPgs(name, cluster.getName(), stat, pgs.getWatch());
             pgs.setData(data);
         }
         return pgs;
     }
     
     public PartitionGroupServer build(String path, String name,
-            String clusterName) throws NoNodeException, MgmtZooKeeperException {
+            Cluster cluster) throws NoNodeException, MgmtZooKeeperException {
         Stat stat = new Stat();
         WatchEventHandler watch = new WatchEventHandlerPgs(context);
-        byte[] data =  pgsDao.loadPgs(name, clusterName, stat, watch);
+        byte[] data =  pgsDao.loadPgs(name, cluster.getName(), stat, watch);
         
         PartitionGroupServer pgs = 
-                new PartitionGroupServer(context, path, name, clusterName, data);
+                new PartitionGroupServer(context, path, name, cluster, data);
         pgs.setWatch(watch);
         pgs.getWatch().registerBoth(path);
         
@@ -87,7 +88,7 @@ public class PartitionGroupServerImo {
             new HBSession(
                 context, heartbeatChecker.getEventSelector(), pgs, 
                 pgs.getData().getPmIp(), pgs.getData().getSmrMgmtPort(), 
-                pgs.getData().getHb()));
+                cluster.getData().getMode(), pgs.getData().getHb()));
 
         return pgs;
     }

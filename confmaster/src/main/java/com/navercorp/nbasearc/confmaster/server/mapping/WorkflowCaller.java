@@ -23,13 +23,20 @@ import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState.Elect
 
 public class WorkflowCaller extends Caller {
 
+    private WorkflowMapping workflow;
+    
     public WorkflowCaller(Object service, Method method, ArityType arityType) {
         super(service, method, arityType);
+        workflow = getMethod().getAnnotation(WorkflowMapping.class);
+        checkRequiredMode(workflow.requiredMode());
     }
 
     public ElectionState getPrivilege() {
-        WorkflowMapping workflow = getMethod().getAnnotation(WorkflowMapping.class);
         return workflow.privilege();
+    }
+    
+    public int getRequiredMode() {
+        return workflow.requiredMode();
     }
 
     @Override

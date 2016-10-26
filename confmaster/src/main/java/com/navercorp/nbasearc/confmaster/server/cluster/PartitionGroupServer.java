@@ -54,7 +54,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         implements HeartbeatTarget {
     
     private BlockingSocket serverConnection;
-    private String clusterName;
+    private Cluster cluster;
     
     private HBSession hbc;
     private HBRefData hbcRefData;
@@ -66,7 +66,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     private final Config config;
 
     public PartitionGroupServer(ApplicationContext context, String path,
-            String name, String cluster, byte[] data) {
+            String name, Cluster cluster, byte[] data) {
         super(context);
         this.zookeeper = context.getBean(ZooKeeperHolder.class);
         this.pgDao = context.getBean(PartitionGroupDao.class);
@@ -77,7 +77,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         
         setPath(path);
         setName(name);
-        setClusterName(cluster);
+        this.cluster = cluster;
         setNodeType(NodeType.PGS);
         setData(data);
         
@@ -161,12 +161,12 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     public void updateHBRef() {
         hbcRefData.setZkData(
                 getData().getRole(), getData().getStateTimestamp(), stat.getVersion());
-        getHbc().updateState(getData().getHb());
+        getHbc().updateHbState(cluster.getData().getMode(), getData().getHb());
     }
 
     public void release() {
         try {
-            getHbc().updateState(HB_MONITOR_NO);
+            getHbc().updateHbState(cluster.getData().getMode(), HB_MONITOR_NO);
             getServerConnection().close();
         } catch (Exception e) {
             Logger.error("stop heartbeat fail. PGS:" + getName(), e);
@@ -237,12 +237,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
 
     @Override
     public String getClusterName() {
-        return clusterName;
-    }
-
-    @Override
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
+        return cluster.getName();
     }
 
     @Override

@@ -42,7 +42,7 @@ import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerGw;
 public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     
     private BlockingSocketImpl serverConnection;
-    private String clusterName;
+    private Cluster cluster;
     
     private HBSession hbc;
     private HBRefData hbcRefData;
@@ -52,7 +52,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     private final Config config;
     
     public Gateway(ApplicationContext context, String path, String name,
-            String cluster, byte[] data) {
+            Cluster cluster, byte[] data) {
         super(context);
         
         this.config = context.getBean(Config.class);
@@ -60,7 +60,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
         setTypeRef(new TypeReference<GatewayData>(){});
         setPath(path);
         setName(name);
-        setClusterName(cluster);
+        this.cluster = cluster;
         setNodeType(NodeType.GW);
         setData(data);
         
@@ -102,7 +102,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
             ClusterImo clusterImo, PhysicalMachineClusterImo pmClusterImo,
             PartitionGroupServerImo pgsImo) {
         final Cluster cluster = clusterImo.get(clusterName);
-        final List<Integer> pnPgMap = cluster.getData().getPbPgMap();
+        final List<Integer> pnPgMap = cluster.getData().getPnPgMap();
         final PhysicalMachineCluster machineInfo = 
                 pmClusterImo.get(clusterName, pmName);
         final List<Integer> localPgsIdList;
@@ -152,12 +152,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
 
     @Override
     public String getClusterName() {
-        return clusterName;
-    }
-
-    @Override
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
+        return cluster.getName();
     }
 
     @Override

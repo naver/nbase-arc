@@ -33,6 +33,7 @@ import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
 import com.navercorp.nbasearc.confmaster.heartbeat.HeartbeatChecker;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
 import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandler;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerRs;
@@ -56,12 +57,12 @@ public class RedisServerImo {
         container.clear();
     }
     
-    public RedisServer load(String name, String clusterName)
+    public RedisServer load(String name, Cluster cluster)
             throws NoNodeException, MgmtZooKeeperException {
-        final String path = getPath(name, clusterName);
+        final String path = getPath(name, cluster.getName());
         RedisServer rs = getByPath(path);
         if (rs == null) {
-            rs = build(path, name, clusterName);
+            rs = build(path, name, cluster);
             container.put(path, rs);
         } else {
             Stat stat = new Stat();
@@ -71,20 +72,20 @@ public class RedisServerImo {
         return rs;
     }
     
-    public RedisServer build(String path, String name, String clusterName)
+    public RedisServer build(String path, String name, Cluster cluster)
             throws NoNodeException, MgmtZooKeeperException {
         Stat stat = new Stat();
         WatchEventHandler watch = new WatchEventHandlerRs(context);
         byte[] data =  zookeeper.getData(path, stat, watch);
         
-        RedisServer rs = new RedisServer(context, path, name, clusterName, data);
+        RedisServer rs = new RedisServer(context, path, name, cluster, data);
         rs.setWatch(watch);
         rs.getWatch().registerBoth(path);
         rs.setHbc(
             new HBSession(
                 context, heartbeatChecker.getEventSelector(), rs, 
                 rs.getData().getPmIp(), rs.getData().getRedisPort(), 
-                rs.getData().getHB()));
+                cluster.getData().getMode(), rs.getData().getHB()));
 
         return rs;
     }

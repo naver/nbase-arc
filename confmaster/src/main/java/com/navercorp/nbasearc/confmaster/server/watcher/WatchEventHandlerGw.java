@@ -27,6 +27,7 @@ import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
 import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
@@ -34,10 +35,12 @@ import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 public class WatchEventHandlerGw extends WatchEventHandler {
 
     private final GatewayImo gwImo;
+    private final Cluster cluster;
     
-    public WatchEventHandlerGw(ApplicationContext context) {
+    public WatchEventHandlerGw(ApplicationContext context, Cluster cluster) {
         super(context);
         this.gwImo = context.getBean(GatewayImo.class);
+        this.cluster = cluster;
     }
     
     @Override
@@ -72,7 +75,7 @@ public class WatchEventHandlerGw extends WatchEventHandler {
                     gw.getData().getState(),
                     gw.getData().getStateTimestamp(),
                     gw.getStat().getVersion());
-            gw.getHbc().updateState(gw.getData().getHB());
+            gw.getHbc().updateHbState(cluster.getData().getMode(), gw.getData().getHB());
             if (gw.getData().getHB().equals(Constant.HB_MONITOR_YES)) {
                 gw.getHbc().urgent();
             }

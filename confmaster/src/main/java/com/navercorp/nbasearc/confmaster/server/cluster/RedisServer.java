@@ -35,7 +35,7 @@ import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
 public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarget {
     
     private BlockingSocketImpl serverConnection;    
-    private String clusterName;
+    private Cluster cluster;
     
     private HBSession hbc;
     private HBRefData hbcRefData;
@@ -43,7 +43,7 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
     private final Config config;
     
     public RedisServer(ApplicationContext context, String path, String name,
-            String cluster, byte[] data) {
+            Cluster cluster, byte[] data) {
         super(context);
         this.config = context.getBean(Config.class);
         
@@ -51,9 +51,9 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
 
         setPath(path);
         setName(name);
-        setClusterName(cluster);
         setNodeType(NodeType.RS);
         setData(data);
+        this.cluster = cluster;
         
         setServerConnection(
             new BlockingSocketImpl(
@@ -71,12 +71,12 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
     public void updateHBRef() {
         hbcRefData.setZkData(getData().getState(), 
                 getData().getStateTimestamp(), stat.getVersion());
-        getHbc().updateState(getData().getHB());
+        getHbc().updateHbState(cluster.getData().getMode(), getData().getHB());
     }
 
     public void release() {
         try {
-            getHbc().updateState(Constant.HB_MONITOR_NO);
+            getHbc().updateHbState(cluster.getData().getMode(), Constant.HB_MONITOR_NO);
             getServerConnection().close();
         } catch (Exception e) {
             Logger.error("stop heartbeat fail. RS:" + getName(), e);
@@ -105,12 +105,7 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
 
     @Override
     public String getClusterName() {
-        return clusterName;
-    }
-
-    @Override
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
+        return cluster.getName();
     }
 
     @Override

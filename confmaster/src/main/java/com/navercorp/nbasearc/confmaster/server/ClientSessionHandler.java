@@ -21,12 +21,10 @@ import static com.navercorp.nbasearc.confmaster.Constant.*;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
-import java.nio.CharBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,10 +57,10 @@ public class ClientSessionHandler implements SessionHandler {
 
     private final Integer MAX_BUFFER_SIZE;
     private final ByteBuffer recvBuffer;
-    private final CharBuffer sendBuffer;
+    private ByteBuffer sendBuffer;
     private final CommandExecutor commandExecutor;
     private final LineReader lineReader;
-    private final CharsetEncoder encoder;
+    private final Charset charset;
     private final LeaderElectionHandler leaderElectionHandler;
     private final EventSelector eventSelector;
     private final ReplyFormatter formatter;
@@ -73,10 +71,9 @@ public class ClientSessionHandler implements SessionHandler {
             EventSelector eventSelector) {
         this.MAX_BUFFER_SIZE = config.getServerClientBufferSize();
         this.recvBuffer = ByteBuffer.allocate(102400);
-        this.sendBuffer = CharBuffer.allocate(102400);
         this.commandExecutor = commandTemplate;
         this.lineReader = new LineReader(Charset.forName(config.getCharset()).newDecoder());
-        this.encoder = Charset.forName(config.getCharset()).newEncoder();
+        this.charset = Charset.forName(config.getCharset());
         this.leaderElectionHandler = leaderElectionHandler;
         this.eventSelector = eventSelector;
         this.formatter = new ReplyFormatter();
@@ -139,9 +136,8 @@ public class ClientSessionHandler implements SessionHandler {
         
         SocketChannel clntChan = (SocketChannel) key.channel();
         try {
-            ByteBuffer buff = encoder.encode(sendBuffer);
-            while (buff.hasRemaining()) {
-                clntChan.write(buff);
+            while (sendBuffer.hasRemaining()) {
+                clntChan.write(sendBuffer);
             }
         } catch (CharacterCodingException e) {
             session.close();
@@ -149,13 +145,10 @@ public class ClientSessionHandler implements SessionHandler {
             session.close();
         }
         
-        if (!sendBuffer.hasRemaining()) { 
-            sendBuffer.clear();
-            if (!handleRequest(key)) {
-                recvBuffer.clear();
-                assert key.interestOps() == SelectionKey.OP_WRITE;
-                key.interestOps(SelectionKey.OP_READ);
-            }
+        if (!handleRequest(key)) {
+            recvBuffer.clear();
+            assert key.interestOps() == SelectionKey.OP_WRITE;
+            key.interestOps(SelectionKey.OP_READ);
         }
     }
 
@@ -214,37 +207,31 @@ public class ClientSessionHandler implements SessionHandler {
         key.interestOps(key.interestOps()
                 & (~(SelectionKey.OP_READ | SelectionKey.OP_WRITE)));
 
-        commandExecutor.perform(request, new JobResultHandler(sendBuffer));
+        commandExecutor.perform(request, new JobResultHandler(this));
 
         return true;
     }
     
     public class JobResultHandler implements CommandCallback {
         
-        private CharBuffer sendBuffer;
+        private ClientSessionHandler clnt;
         
-        public JobResultHandler(CharBuffer sendBuffer) {
-            this.sendBuffer = sendBuffer;
+        public JobResultHandler(ClientSessionHandler clnt) {
+            this.clnt = clnt;
         }
         
         @Override
         public void callback(JobResult result) {
             try {
-                sendBuffer.put(formatter.get(result,
-                        leaderElectionHandler.getCurrentLeaderHost()));
-                if (sendBuffer.remaining() == 0) {
-                    Logger.error("Close client {}, due to send-buffer size limit. length: {}",
-                            session, sendBuffer.length());
-                    session.close();
-                }
+                clnt.setSendBuffer(charset.encode(formatter.get(result,
+                        leaderElectionHandler.getCurrentLeaderHost())));
             } catch (Exception e) {
                 Logger.error("Reply job result to client fail. {}", session, e);
-                sendBuffer.put(formatter.convert(e.toString()));
+                clnt.setSendBuffer(charset.encode(formatter.convert(e.toString())));
             } finally {
                 slowLog(result);
 
                 try {
-                    sendBuffer.flip();
                     session.getSelectionKey().interestOps(SelectionKey.OP_WRITE);
                 } catch (Exception e) {
                     Logger.error("Register OP_WRITE to nio selector fail. {}", session, e);
@@ -387,6 +374,10 @@ public class ClientSessionHandler implements SessionHandler {
     @Override
     public long getLastUpdatedTime() {
         return lastUpdatedTime;
+    }
+    
+    public void setSendBuffer(ByteBuffer buffer) {
+        this.sendBuffer = buffer;
     }
     
 }

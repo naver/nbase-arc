@@ -27,16 +27,18 @@ import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 
 public class WatchEventHandlerGwRoot extends WatchEventHandler {
 
-    private String clusterName;
+    private final Cluster cluster;
     private final GatewayImo gwImo;
 
-    public WatchEventHandlerGwRoot(ApplicationContext context) {
+    public WatchEventHandlerGwRoot(ApplicationContext context, Cluster cluster) {
         super(context);
+        this.cluster = cluster;
         this.gwImo = context.getBean(GatewayImo.class);
     }
 
@@ -59,7 +61,7 @@ public class WatchEventHandlerGwRoot extends WatchEventHandler {
             List<String> created = getCreatedChild(event.getPath(),
                     gwImo.getList(getClusterName()));
             for (String gwName : created) {
-                gwImo.load(gwName, getClusterName());
+                gwImo.load(gwName, cluster);
             }
         }
     }
@@ -75,11 +77,7 @@ public class WatchEventHandlerGwRoot extends WatchEventHandler {
     }
 
     public String getClusterName() {
-        return clusterName;
-    }
-
-    public void setClusterName(String clusterName) {
-        this.clusterName = clusterName;
+        return cluster.getName();
     }
 
 }

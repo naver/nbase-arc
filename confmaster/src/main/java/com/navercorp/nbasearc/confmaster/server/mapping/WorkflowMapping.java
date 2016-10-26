@@ -31,4 +31,6 @@ public @interface WorkflowMapping {
     public ArityType arityType() default ArityType.EQUAL;
 
     public ElectionState privilege();
+    
+    public int requiredMode() default 0;
 }

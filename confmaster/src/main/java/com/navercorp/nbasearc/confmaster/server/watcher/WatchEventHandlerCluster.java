@@ -56,6 +56,8 @@ public class WatchEventHandlerCluster extends WatchEventHandler {
             }
     
             zookeeper.reflectZkIntoMemory(cluster);
+            
+            cluster.updateMode();
         }
     }
     

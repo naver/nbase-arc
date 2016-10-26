@@ -34,6 +34,7 @@ import com.navercorp.nbasearc.confmaster.heartbeat.HeartbeatChecker;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
 import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.repository.dao.GatewayDao;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
 import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerGw;
 
@@ -66,36 +67,36 @@ public class GatewayImo {
         container.clear();
     }
 
-    public Gateway load(String name, String clusterName)
+    public Gateway load(String name, Cluster cluster)
             throws NoNodeException, MgmtZooKeeperException {
-        final String path = PathUtil.gwPath(name, clusterName);
+        final String path = PathUtil.gwPath(name, cluster.getName());
         Gateway gw = getByPath(path);
         if (gw == null) {
-            gw = build(path, name, clusterName);
+            gw = build(path, name, cluster);
             container.put(path, gw);
         } else {
             Stat stat = new Stat();
-            byte[] data = gwDao.loadGw(name, clusterName, stat, gw.getWatch());
+            byte[] data = gwDao.loadGw(name, cluster.getName(), stat, gw.getWatch());
             gw.setData(data);
         }
         return gw;
     }
     
-    public Gateway build(String path, String name, String clusterName)
+    public Gateway build(String path, String name, Cluster cluster)
             throws NoNodeException, MgmtZooKeeperException {
         Stat stat = new Stat();
-        WatchEventHandlerGw watch = new WatchEventHandlerGw(context);
-        byte[] data = gwDao.loadGw(name, clusterName, stat, watch);
+        WatchEventHandlerGw watch = new WatchEventHandlerGw(context, cluster);
+        byte[] data = gwDao.loadGw(name, cluster.getName(), stat, watch);
         
-        Gateway gw = new Gateway(context, path, name, clusterName, data);
+        Gateway gw = new Gateway(context, path, name, cluster, data);
         gw.setWatch(watch);
         gw.getWatch().registerBoth(path);
 
         gw.setHbc(
             new HBSession(
                 context, heartbeatChecker.getEventSelector(), gw, 
-                gw.getData().getPmIp(), gw.getData().getPort(), 
-                gw.getData().getHB()));
+                gw.getData().getPmIp(), gw.getData().getPort(),
+                cluster.getData().getMode(), gw.getData().getHB()));
         
         return gw;
     }

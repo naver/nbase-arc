@@ -17,13 +17,13 @@
 package com.navercorp.nbasearc.confmaster.heartbeat;
 
 import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
 
 import org.springframework.context.ApplicationContext;
 
-import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.ClientSession;
 import com.navercorp.nbasearc.confmaster.io.EventSelector;
@@ -37,13 +37,15 @@ public class HBSession {
     private ClientSession session;
     private HBSessionHandler handler;
     private String hbState = "";
+    private int clusterMode;
     
     private final ApplicationContext context;
     private final EventSelector hbProcessor;
     private final WorkflowExecutor workflowExecutor;
 
     public HBSession(ApplicationContext context, EventSelector hbProcessor,
-            HeartbeatTarget target, String ip, int port, String hbState) {
+            HeartbeatTarget target, String ip, int port, int mode,
+            String hbState) {
         this.context = context;
         this.workflowExecutor = context.getBean(WorkflowExecutor.class);
         this.hbProcessor = hbProcessor;
@@ -53,7 +55,7 @@ public class HBSession {
         
         getHandler().setPingMsg(target.getPingMsg());
         
-        updateState(hbState);
+        updateHbState(mode, hbState);
     }
     
     private ClientSession createHbcSession(HeartbeatTarget target, String ip, int port) {
@@ -90,20 +92,25 @@ public class HBSession {
     }
     
     public synchronized void callbackDelete() {
-        if (getHbState().equals(Constant.HB_MONITOR_YES)) {
+        if (getHbState().equals(HB_MONITOR_YES)) {
             stop();
         }
     }
     
-    public synchronized void updateState(String value)  {
-        if (getHbState().equals(value)) {
+    public synchronized void updateHbState(int mode, String value)  {
+        if (getHbState().equals(value) && clusterMode == mode) {
             return;
         }
         
+        clusterMode = mode;
         setHbState(value);
-        if (getHbState().equals(Constant.HB_MONITOR_YES)) {
-            start();
-        } else if (getHbState().equals(Constant.HB_MONITOR_NO)) {
+        if (clusterMode == CLUSTER_ON) {
+            if (getHbState().equals(HB_MONITOR_YES)) {
+                start();
+            } else if (getHbState().equals(HB_MONITOR_NO)) {
+                stop();
+            }
+        } else if (clusterMode == CLUSTER_OFF) {
             stop();
         }
     }
@@ -124,7 +131,7 @@ public class HBSession {
 
         workflowExecutor.perform(OPINION_DISCARD, handler.getTarget());
     }
-
+    
     public String getHbState() {
         return hbState;
     }

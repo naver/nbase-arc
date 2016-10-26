@@ -16,6 +16,8 @@
 
 package com.navercorp.nbasearc.confmaster.repository.znode;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,7 +36,7 @@ import org.codehaus.jackson.map.ObjectMapper;
 @JsonIgnoreProperties(
         ignoreUnknown=true)
 @JsonPropertyOrder(
-        { "key_Space_Size", "quorum_Policy", "pn_PG_Map", "phase" })
+        { "key_Space_Size", "quorum_Policy", "pn_PG_Map", "phase", "mode" })
 public class ClusterData {
     
     @JsonProperty("key_Space_Size")
@@ -44,10 +46,16 @@ public class ClusterData {
     @JsonProperty("pn_PG_Map")
     private List<Integer> PN_PG_Map = new ArrayList<Integer>();
     @JsonProperty("phase")
-    private String Phase;
+    private String Phase = CLUSTER_PHASE_INIT;
+    @JsonProperty("mode")
+    private int mode = CLUSTER_ON;
     
     @JsonIgnore
     private final ObjectMapper mapper = new ObjectMapper();
+    
+    public static ClusterDataBuilder builder() {
+        return new ClusterDataBuilder();
+    }
 
     public int getKeySpaceSize() {
         return Key_Space_Size;
@@ -65,7 +73,7 @@ public class ClusterData {
         Quorum_Policy = quorum_Policy;
     }
 
-    public List<Integer> getPbPgMap() {
+    public List<Integer> getPnPgMap() {
         return PN_PG_Map;
     }
 
@@ -75,7 +83,7 @@ public class ClusterData {
 
         /* slot pg mapping(Run Length Encoding) */
         for (int i = 1; i < this.PN_PG_Map.size(); i++) {
-            if (!this.getPbPgMap().get(slotStart).equals(this.PN_PG_Map.get(i))) {
+            if (!this.getPnPgMap().get(slotStart).equals(this.PN_PG_Map.get(i))) {
                 sb.append(String.format("%d %d ", this.PN_PG_Map.get(slotStart), i - slotStart));
                 slotStart = i;
             }
@@ -95,6 +103,14 @@ public class ClusterData {
 
     public void setPhase(String phase) {
         Phase = phase;
+    }
+
+    public int getMode() {
+        return mode;
+    }
+
+    public void setMode(int mode) {
+        this.mode = mode;
     }
     
     @Override
@@ -120,6 +136,9 @@ public class ClusterData {
             return false;
         }
         if (!Phase.equals(rhs.Phase)) {
+            return false;
+        }
+        if (mode != rhs.mode) {
             return false;
         }
         return true;

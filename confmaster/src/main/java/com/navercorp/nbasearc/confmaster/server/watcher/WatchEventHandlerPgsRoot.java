@@ -27,19 +27,20 @@ import org.springframework.context.ApplicationContext;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 
 public class WatchEventHandlerPgsRoot extends WatchEventHandler  {
     
-    private final String clusterName;
+    private final Cluster cluster;
     private final PartitionGroupServerImo pgsImo;
     private final RedisServerImo rsImo;
     
-    public WatchEventHandlerPgsRoot(ApplicationContext context, String clusterName) {
+    public WatchEventHandlerPgsRoot(ApplicationContext context, Cluster cluster) {
         super(context);
-        this.clusterName = clusterName;
+        this.cluster= cluster;
         this.pgsImo = context.getBean(PartitionGroupServerImo.class);
         this.rsImo = context.getBean(RedisServerImo.class);
     }
@@ -64,13 +65,13 @@ public class WatchEventHandlerPgsRoot extends WatchEventHandler  {
                     event.getPath(), pgsImo.getList(getClusterName()));
             for (String pgsName : created) {
                 try {
-                    pgsImo.load(pgsName, getClusterName());
+                    pgsImo.load(pgsName, cluster);
                 } catch (Exception e) {
                     Logger.error("Load pgs fail. cluster:{}/pgs:{}", getClusterName(), pgsName, e);
                 }
                 
                 try {
-                    rsImo.load(pgsName, getClusterName());
+                    rsImo.load(pgsName, cluster);
                 } catch (Exception e) {
                     Logger.error("Load rs fail. cluster:{}/rs:{}", getClusterName(), pgsName, e);
                 }
@@ -90,7 +91,7 @@ public class WatchEventHandlerPgsRoot extends WatchEventHandler  {
     }
 
     public String getClusterName() {
-        return clusterName;
+        return cluster.getName();
     }
 
 }

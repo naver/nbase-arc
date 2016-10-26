@@ -35,6 +35,8 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumExcept
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtWorkflowWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.WorkflowCaller;
@@ -50,6 +52,7 @@ public class WorkflowTemplate implements Callable<Object> {
     private final Map<String, LockCaller> lockMethods;
     
     private final DefaultConversionService cs = new DefaultConversionService();
+    private final ClusterImo clusterImo;
     
     public WorkflowTemplate(String workflow, Object[] args, 
             ApplicationContext context, Map<String, WorkflowCaller> workflowMethods, 
@@ -59,6 +62,7 @@ public class WorkflowTemplate implements Callable<Object> {
         this.context = context;
         this.workflowMethods = workflowMethods;
         this.lockMethods = lockMethods;
+        this.clusterImo = context.getBean(ClusterImo.class); 
     }
     
     @Override
@@ -70,6 +74,9 @@ public class WorkflowTemplate implements Callable<Object> {
             checkPrivilege();
             validRequest();
             lock(lockHelper);
+            if (checkMode(args) == false) {
+                return null;
+            }
             execute(); 
         } catch (Exception e) {
             boolean perror = false;
@@ -168,6 +175,21 @@ public class WorkflowTemplate implements Callable<Object> {
         }
         
         lock.invoke(params);
+    }
+
+    private boolean checkMode(Object[] args) {
+        final WorkflowCaller caller = workflowMethods.get(workflow);
+        final int requiredMode = caller.getRequiredMode();
+        if (requiredMode == 0) {
+            return true;
+        }
+
+        Cluster cluster = clusterImo.get(caller.getClusterName(args, 0));
+        if ((requiredMode & cluster.getData().getMode()) != 0) {
+            return true;
+        }
+
+        return false;
     }
     
     private String execute() throws IllegalArgumentException,

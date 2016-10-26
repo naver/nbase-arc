@@ -70,11 +70,7 @@ public class PhysicalMachineService {
         PhysicalMachineData data = new PhysicalMachineData();
         data.setIp(pmIp);
 
-        // DB
-        pmDao.createPm(pmName, data);
-
-        // In Memory
-        PhysicalMachine pm = pmImo.load(pmName);
+        PhysicalMachine pm = createPmObject(pmName, data);
         
         // Log
         workflowLogDao.log(0, Constant.SEVERITY_MODERATE, 
@@ -83,6 +79,16 @@ public class PhysicalMachineService {
                 String.format("{\"pm_name\":\"%s\",\"pm_ip\":\"%s\"}", pmName, pmIp));
         
         return S2C_OK;
+    }
+    
+    protected PhysicalMachine createPmObject(String pmName,
+            PhysicalMachineData data) throws NodeExistsException,
+            MgmtZooKeeperException, NoNodeException {
+        // DB
+        pmDao.createPm(pmName, data);
+
+        // In Memory
+        return pmImo.load(pmName);
     }
 
     @LockMapping(name="pm_add")

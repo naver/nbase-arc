@@ -88,21 +88,20 @@ public class ClusterImo {
         
         // Load PartitionGroupServers in this Cluster
         WatchEventHandlerPgsRoot watchPgsRoot = 
-                new WatchEventHandlerPgsRoot(context, name);
+                new WatchEventHandlerPgsRoot(context, cluster);
         List<String> pgsList = zookeeper.getChildren(PathUtil.pgsRootPath(name), watchPgsRoot);
         for (String pgsName : pgsList ) {
-            pgsImo.load(pgsName, name);
-            rsImo.load(pgsName, name);
+            pgsImo.load(pgsName, cluster);
+            rsImo.load(pgsName, cluster);
         }
         
         // Load Gateways in this Cluster
         WatchEventHandlerGwRoot watchGwRoot = 
-                new WatchEventHandlerGwRoot(context);
-        watchGwRoot.setClusterName(name);
+                new WatchEventHandlerGwRoot(context, cluster);
         List<String> gwInThisCluster = 
                 zookeeper.getChildren(PathUtil.gwRootPath(name), watchGwRoot);
         for (String gwName : gwInThisCluster) {
-            gwImo.load(gwName, name);
+            gwImo.load(gwName, cluster);
         }
         
         return cluster;

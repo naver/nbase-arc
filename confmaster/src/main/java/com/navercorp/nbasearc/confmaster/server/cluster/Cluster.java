@@ -35,12 +35,16 @@ import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
 import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
+import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
 public class Cluster extends ZNode<ClusterData> {
     
     private final ReentrantReadWriteLock pgRWLock = new ReentrantReadWriteLock();
     private final ReentrantReadWriteLock gwRWLock = new ReentrantReadWriteLock();
     private final ReentrantReadWriteLock pgsListRWLock = new ReentrantReadWriteLock();
+    private final PartitionGroupServerImo pgsImo;
+    private final RedisServerImo rsImo;
+    private final GatewayImo gwImo;
     
     public Cluster(ApplicationContext context, String path, String name,
             byte[] data) {
@@ -52,6 +56,10 @@ public class Cluster extends ZNode<ClusterData> {
         setName(name);
         setNodeType(NodeType.CLUSTER);
         setData(data);
+        
+        pgsImo = context.getBean(PartitionGroupServerImo.class);
+        rsImo = context.getBean(RedisServerImo.class);
+        gwImo = context.getBean(GatewayImo.class);
     }
     
     public Integer getQuorum(Integer closePgsCount) {
@@ -146,4 +154,18 @@ public class Cluster extends ZNode<ClusterData> {
         return clusterName;
     }
 
+    public void updateMode() {
+        List<PartitionGroupServer> pgsList = pgsImo.getList(getName());
+        for (PartitionGroupServer pgs : pgsList) {
+            pgs.updateHBRef();
+        }
+        List<RedisServer> rsList = rsImo.getList(getName());
+        for (RedisServer rs : rsList) {
+            rs.updateHBRef();
+        }
+        List<Gateway> gwList = gwImo.getList(getName());
+        for (Gateway gw : gwList) {
+            gw.getHbc().updateHbState(getData().getMode(), gw.getHB());
+        }
+    }
 }

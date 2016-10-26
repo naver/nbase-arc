@@ -38,8 +38,6 @@ public interface HeartbeatTarget {
 
     String getClusterName();
 
-    void setClusterName(String clusterName);
-
     String getView();
 
     void setState(String state, long state_timestamp);

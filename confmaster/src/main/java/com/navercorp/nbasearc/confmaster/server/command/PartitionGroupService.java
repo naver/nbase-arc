@@ -57,6 +57,7 @@ import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
+import com.navercorp.nbasearc.confmaster.server.mapping.ParamClusterHint;
 import com.navercorp.nbasearc.confmaster.server.workflow.BlueJoinWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.DecreaseQuorumWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.IncreaseQuorumWorkflow;
@@ -102,8 +103,9 @@ public class PartitionGroupService {
     @CommandMapping(name="pg_add",
             usage="pg_add <cluster_name> <pgid>\r\n" +
                     "add a single partition group",
-            requiredState=ConfMaster.RUNNING)
-    public String pgAdd(String clusterName, String pgId)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgAdd(@ParamClusterHint String clusterName, String pgId)
             throws MgmtCommandWrongArgumentException, NodeExistsException,
             MgmtZooKeeperException, NoNodeException {
         // Check
@@ -113,6 +115,10 @@ public class PartitionGroupService {
         
         // In Memory
         Cluster cluster = clusterImo.get(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
         List<Gateway> gwList = gwImo.getList(clusterName);
 
         // Prepare        
@@ -131,12 +137,7 @@ public class PartitionGroupService {
 
         PartitionGroupData data = 
             PartitionGroupData.builder().from(new PartitionGroupData()).build();
-        
-        // DB
-        pgDao.createPg(pgId, clusterName, data);
-        
-        // In Memory
-        PartitionGroup pg = pgImo.load(pgId, clusterName);
+        PartitionGroup pg = createPgObject(clusterName, pgId, data);
 
         String cmd = String.format("pg_add %s", pgId);
         reply = broadcast.request(clusterName, gwList, cmd, GW_RESPONSE_OK, executor);
@@ -154,6 +155,25 @@ public class PartitionGroupService {
         
         return S2C_OK;
     }
+    
+    protected PartitionGroup createPgObject(String clusterName, String pgId,
+            PartitionGroupData data) throws NodeExistsException,
+            MgmtZooKeeperException, NoNodeException {
+        // DB
+        pgDao.createPg(pgId, clusterName, data);
+
+        // In Memory
+        return pgImo.load(pgId, clusterName);
+    }
+    
+    protected void deletePgObject(String clusterName, String pgId)
+            throws MgmtZooKeeperException {
+        // DB
+        pgDao.deletePg(pgId, clusterName);
+
+        // In Memory
+        pgImo.delete(PathUtil.pgPath(pgId, clusterName));
+    }
 
     @LockMapping(name="pg_add")
     public void pgAddLock(HierarchicalLockHelper lockHelper, String clusterName) {
@@ -164,10 +184,16 @@ public class PartitionGroupService {
     @CommandMapping(name="pg_del",
             usage="pg_del <cluster_name> <pgid>\r\n" +
                     "delete a single partition group",
-            requiredState=ConfMaster.RUNNING)
-    public String pgDel(String clusterName, String pgId)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgDel(@ParamClusterHint String clusterName, String pgId)
             throws MgmtZooKeeperException {
         // Check
+        Cluster cluster = clusterImo.get(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
         PartitionGroup pg = pgImo.get(pgId, clusterName); 
         if (null == pg) {
             throw new IllegalArgumentException(
@@ -179,11 +205,10 @@ public class PartitionGroupService {
             throw new IllegalArgumentException(EXCEPTIONMSG_PG_NOT_EMPTY
                     + PartitionGroup.fullName(clusterName, pgId));
         }
-
-        // In Memory
-        Cluster cluster = clusterImo.get(clusterName);
+        
         List<Gateway> gwList = gwImo.getList(clusterName);
         
+        // In Memory
         String reply = cluster.isGatewaysAlive(gwImo);
         if (null != reply) {
             Logger.error(reply);
@@ -198,12 +223,8 @@ public class PartitionGroupService {
             return reply;
         }
         
-        // DB
-        pgDao.deletePg(pgId, clusterName);
+        deletePgObject(clusterName, pgId);
         
-        // In Memory
-        pgImo.delete(PathUtil.pgPath(pgId, clusterName));
-
         String cmd = String.format("pg_del %s", pgId);
         reply = broadcast.request(clusterName, gwList, cmd, GW_RESPONSE_OK, executor);
         if (null != reply) {
@@ -230,8 +251,9 @@ public class PartitionGroupService {
     @CommandMapping(name="pg_info",
             usage="pg_info <cluster_name> <pg_id>\r\n" +
                     "get information of a Partition Group",
-            requiredState=ConfMaster.READY)
-    public String pgInfo(String clusterName, String pgid) {
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String pgInfo(@ParamClusterHint String clusterName, String pgid) {
         // Check
         if (null == clusterImo.get(clusterName)) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
@@ -245,7 +267,7 @@ public class PartitionGroupService {
 
         // Do
         try {
-            return pg.getData().toString();
+            return pg.info();
         } catch (RuntimeException e) {
             return "-ERR internal data of pgs is not correct.";
         }
@@ -258,8 +280,9 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_ls",
             usage="pg_ls <cluster_name>",
-            requiredState=ConfMaster.READY)
-    public String pgLs(String clusterName) throws KeeperException,
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String pgLs(@ParamClusterHint String clusterName) throws KeeperException,
             InterruptedException {
         // In Memory
         List<PartitionGroup> pgList = pgImo.getList(clusterName);
@@ -290,8 +313,9 @@ public class PartitionGroupService {
 
     @CommandMapping(name="role_change",
             usage="role_change <cluster_name> <pgs_id>",
-            requiredState=ConfMaster.RUNNING)
-    public String roleChange(String clusterName, String pgsid)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String roleChange(@ParamClusterHint String clusterName, String pgsid)
             throws KeeperException, InterruptedException {
         Cluster cluster = clusterImo.get(clusterName);
         if (cluster == null) {
@@ -398,9 +422,15 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_iq",
             usage="pg_iq <cluster_name> <pg_id>",
-            requiredState=ConfMaster.RUNNING)
-    public String pgIq(String clusterName, String pgId) throws Exception {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgIq(@ParamClusterHint String clusterName, String pgId) throws Exception {
         // In Memory
+        Cluster cluster = clusterImo.get(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
         PartitionGroup pg = pgImo.get(pgId, clusterName);
         if (null == pg) {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
@@ -424,9 +454,15 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_dq",
             usage="pg_dq <cluster_name> <pg_id>",
-            requiredState=ConfMaster.RUNNING)
-    public String pgDq(String clusterName, String pgId) throws Exception {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgDq(@ParamClusterHint String clusterName, String pgId) throws Exception {
         // In Memory
+        Cluster cluster = clusterImo.get(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
         PartitionGroup pg = pgImo.get(pgId, clusterName);
         if (null == pg) {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
@@ -454,8 +490,9 @@ public class PartitionGroupService {
     @CommandMapping(name = "op_wf", 
             usage = "op_wf <cluster_name> <pg_id> <wf> <cascading> forced\r\n" 
                     + "wf: RA, QA, ME, YJ, BJ, MG",
-            requiredState=ConfMaster.RUNNING)
-    public String opWf(String clusterName, String pgId, String wf, boolean cascading, String mode) throws Exception {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String opWf(@ParamClusterHint String clusterName, String pgId, String wf, boolean cascading, String mode) throws Exception {
         if (!mode.equals(FORCED)) {
             return EXCEPTIONMSG_NOT_FORCED_MODE;
         }
@@ -464,7 +501,7 @@ public class PartitionGroupService {
         if (cluster == null) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
         }
-        
+
         PartitionGroup pg = pgImo.get(pgId, clusterName);
         if (pg == null) {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;

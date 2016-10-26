@@ -21,7 +21,8 @@ public class Constant {
     public static final byte[] ZERO_BYTE = new byte[0];
 
     public static final String CLUSTER_PHASE_INIT = "I";
-    public static final String CLUSTER_PHASE_RUNNING = "R";
+    public static final int CLUSTER_ON = 1;
+    public static final int CLUSTER_OFF = 2;
 
     public static final String PGS_ROLE_NONE = "N";
     public static final String PGS_ROLE_LCONN = "L";
@@ -48,6 +49,7 @@ public class Constant {
     public static final String EXCEPTIONMSG_COMMAND_NOT_FOUND = "-ERR command not found";
     public static final String EXCEPTIONMSG_CM_NOT_READY = "-ERR not ready to start";
     public static final String EXCEPTIONMSG_CM_ALREADY_RUNNING = "-ERR already running";
+    public static final String EXCEPTIONMSG_CLUSTER_STATE_OFF = "-ERR cluster is off";
 
     public static final String EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST = "-ERR pm does not exist. ";
     public static final String EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST = "-ERR cluster does not exist. ";
@@ -69,6 +71,8 @@ public class Constant {
     
     public static final String EXCEPTIONMSG_NOT_SUPPORTED_WF = "-ERR not supported workflow.";
     public static final String EXCEPTIONMSG_NOT_FORCED_MODE = "-ERR not in forced mode.";
+
+    public static final String EXCEPTIONMSG_LOAD_FAIL = "-ERR failed to load object from JSON. ";
     
     public static final String NEED_TO_RECOVER_CONSISTENCE = "-ERR have to recover the zookeeper and consistence. If you want more detail information, show log messages.";
 
@@ -79,6 +83,7 @@ public class Constant {
     public static final String ERROR = "-ERR";
     public static final String S2C_OK = "+OK";
     public static final String S2C_ALREADY_LCONN = "-ERR bad state curr_role:1";
+    public static final String REQUIRED_MODE_NOT_SATISFIED = "-ERR required mode does not satisfied.";
 
     public static final String PGS_RESPONSE_OK = S2C_OK;
 

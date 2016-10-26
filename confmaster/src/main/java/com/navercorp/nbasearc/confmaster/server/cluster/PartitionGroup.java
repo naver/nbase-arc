@@ -39,6 +39,7 @@ public class PartitionGroup extends ZNode<PartitionGroupData> {
     
     private String clusterName;
     private AtomicLong wfEpoch;
+    private AtomicLong wfCnt;
     
     public PartitionGroup(ApplicationContext context, String path, String name,
             String clusterName, byte[] data) {
@@ -53,6 +54,7 @@ public class PartitionGroup extends ZNode<PartitionGroupData> {
         setData(data);
         
         wfEpoch = new AtomicLong();
+        wfCnt = new AtomicLong();
     }
 
     public String getClusterName() {
@@ -246,6 +248,13 @@ public class PartitionGroup extends ZNode<PartitionGroupData> {
         return fullName(getClusterName(), getName());
     }
     
+    public String info() {
+        StringBuilder sb = new StringBuilder(getData().toString());
+        sb.insert(sb.length() - 1, ",\"wf\":");
+        sb.insert(sb.length() - 1, getWfCnt());
+        return sb.toString();
+    }
+    
     public static String fullName(String clusterName, String pgId) {
         return clusterName + "/pg:" + pgId;
     }
@@ -256,6 +265,18 @@ public class PartitionGroup extends ZNode<PartitionGroupData> {
     
     public long getLastWfEpoch() {
         return wfEpoch.get();
+    }
+    
+    public void incWfCnt() {
+        wfCnt.incrementAndGet();
+    }
+    
+    public void decWfCnt() {
+        wfCnt.decrementAndGet();
+    }
+    
+    public long getWfCnt() {
+        return wfCnt.get();
     }
     
 }

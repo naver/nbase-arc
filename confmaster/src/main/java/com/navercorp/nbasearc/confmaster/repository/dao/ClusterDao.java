@@ -24,7 +24,6 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeAlreayExis
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.repository.znode.ClusterData;
-import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 
 public interface ClusterDao {
 
@@ -37,6 +36,7 @@ public interface ClusterDao {
     byte[] loadCluster(String name, Stat stat, Watcher watch)
             throws MgmtZooKeeperException, NoNodeException;
 
-    void updateCluster(Cluster cluster) throws MgmtZooKeeperException;
+    void updateCluster(String path, ClusterData data)
+            throws MgmtZooKeeperException;
 
 }

@@ -39,7 +39,6 @@ import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.repository.dao.ClusterDao;
 import com.navercorp.nbasearc.confmaster.repository.dao.NotificationDao;
 import com.navercorp.nbasearc.confmaster.repository.znode.ClusterData;
-import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 
 @Repository
 public class ZkClusterDao implements ClusterDao {
@@ -106,8 +105,8 @@ public class ZkClusterDao implements ClusterDao {
     }
     
     @Override
-    public void updateCluster(Cluster cluster) throws MgmtZooKeeperException {
-        zookeeper.reflectMemoryIntoZk(cluster);
+    public void updateCluster(String path, ClusterData data) throws MgmtZooKeeperException {
+        zookeeper.reflectMemoryIntoZk(path, data);
     }
     
 }

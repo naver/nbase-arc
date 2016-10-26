@@ -16,6 +16,7 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.server.JobResult.CommonKey.END_TIME;
 import static com.navercorp.nbasearc.confmaster.server.JobResult.CommonKey.REQUEST;
 import static com.navercorp.nbasearc.confmaster.server.JobResult.CommonKey.START_TIME;
@@ -42,6 +43,8 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtStateNotSatisfi
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
@@ -57,6 +60,7 @@ public class CommandTemplate implements Callable<JobResult> {
     
     private final DefaultConversionService cs = new DefaultConversionService();
     private final ConfMaster confMaster;
+    private final ClusterImo clusterImo;
     
     public CommandTemplate(String request, CommandCallback callback, 
             ApplicationContext context, Map<String, CommandCaller> commandMethods, 
@@ -67,6 +71,7 @@ public class CommandTemplate implements Callable<JobResult> {
         this.commandMethods = commandMethods;
         this.lockMethods = lockMethods;
         this.confMaster = confMaster;
+        this.clusterImo = context.getBean(ClusterImo.class);
     }
     
     @Override
@@ -78,15 +83,14 @@ public class CommandTemplate implements Callable<JobResult> {
         
         try {
             String[] args = request.split(" ");
-
-            // Convert command name to lower-case word.
             args[0] = args[0].toLowerCase();
             
             validRequest(args);
-            
             lock(args, lockHelper);
-            
-            // Execute
+            if (checkMode(args) == false) {
+                result.addMessage(REQUIRED_MODE_NOT_SATISFIED);
+                return result;
+            }
             reply = execute(args);
         } catch (InvocationTargetException e) {
             String smaple = request.substring(0, Math.min(1024, request.length()));
@@ -207,6 +211,28 @@ public class CommandTemplate implements Callable<JobResult> {
         }
         
         lock.invoke(params);
+    }
+    
+    private boolean checkMode(String[] args) {
+        final CommandCaller command = commandMethods.get(args[0]);
+        final Integer requiredMode = command.getRequiredMode();
+        if (requiredMode == 0) {
+            return true;
+        }
+
+        final String clusterName = command.getClusterName(args, 1);
+        Cluster cluster = clusterImo.get(clusterName);
+        if (cluster == null) {
+            throw new IllegalArgumentException(
+                    EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
+                            + Cluster.fullName(clusterName));
+        }
+        
+        if ((requiredMode & cluster.getData().getMode()) != 0) {
+            return true;
+        }
+
+        return false;
     }
     
     private String execute(String[] args) throws IllegalArgumentException,
