@@ -35,7 +35,6 @@ public class SortedLogSeqSetTest {
     @Autowired
     ApplicationContext context;
 
-    final String clusterName = "test_cluster";
     final ObjectMapper mapper = new ObjectMapper();
     final PartitionGroupServerData data = PartitionGroupServerData.builder()
             .build();
@@ -47,7 +46,7 @@ public class SortedLogSeqSetTest {
         PartitionGroupServer []objs = new PartitionGroupServer[MAX];
         for (int i = 0; i < MAX; i++) {
             objs[i] = new PartitionGroupServer(context, String.valueOf(i),
-                    String.valueOf(i), clusterName, raw);
+                    String.valueOf(i), null, raw);
         }
         
         // Sort descending order
@@ -137,7 +136,7 @@ public class SortedLogSeqSetTest {
         PartitionGroupServer []objs = new PartitionGroupServer[MAX];
         for (int i = 0; i < MAX; i++) {
             objs[i] = new PartitionGroupServer(context, String.valueOf(i),
-                    String.valueOf(i), clusterName, raw);
+                    String.valueOf(i), null, raw);
         }
         
         _rankLogSequence(10, objs, 

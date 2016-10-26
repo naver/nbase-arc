@@ -16,8 +16,9 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_WRONG_NUMBER_ARGUMENTS;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static org.junit.Assert.*;
+import static org.hamcrest.Matchers.*;
 
 import java.lang.reflect.Field;
 
@@ -187,4 +188,96 @@ public class CommandExecuterTest extends BasicSetting {
         }
     }
 
+    @Test
+    public void requiedMode() throws Exception {
+        // Initialize
+        confMaster.setState(ConfMaster.RUNNING);
+        createCluster();
+        createPm();
+        createPg();
+        pgAdd("1", clusterName);
+        createPgs(0);
+        createPgs(1);
+        createGw();
+
+        JobResult result = doCommand("appdata_set " + clusterName
+                + " backup 0 1 0 2 * * * * 02:00:00 3 70 base32hex \"\"");
+        assertEquals(S2C_OK, result.getMessages().get(0));
+        
+        // Off cluster
+        result = doCommand("cluster_off " + clusterName);
+        assertEquals(1, result.getMessages().size());
+        assertEquals(S2C_OK, result.getMessages().get(0));
+        
+        assertNotEquals(S2C_OK, doCommand("cluster_off " + clusterName).getMessages().get(0));
+
+        // Failure cases
+        String []fail = {
+            "appdata_del " + clusterName + " backup all",
+            "appdata_set " + clusterName + " backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex \"\"",
+            "cluster_del " + clusterName,
+            "mig2pc " + clusterName + " " + pgName + " 1 0 8191",
+            "slot_set_pg " + clusterName + " 0:8191 1",
+            "gw_add " + clusterName + " 10 " + pmName + " 127.0.0.100 6100",
+            "gw_affinity_sync " + clusterName,
+            "gw_del " + clusterName + " " + gwName,
+            "op_wf " + clusterName + " " + pgName + " RA true forced",
+            "pg_add " + clusterName + " 10",
+            "pg_del " + clusterName + " " + pgName,
+            "pg_dq " + clusterName + " " + pgName,
+            "pg_iq " + clusterName + " " + pgName,
+            "role_change " + clusterName + " " + gwName,
+            "pgs_add " + clusterName + " 10 " + pgName + " " + pmName + " 127.0.0.100 7100 7109",
+            "pgs_del " + clusterName + " " + pgsNames[0],
+            "pgs_join " + clusterName + " " + pgsNames[0],
+            "pgs_lconn " + clusterName + " " + pgsNames[0],
+            "pgs_leave " + clusterName + " " + pgsNames[0],
+            "pgs_sync " + clusterName + " " + pgsNames[0] + " forced",
+        };
+        for (String cmd : fail) {
+            result = doCommand(cmd);
+            assertEquals("exception with \"" + cmd + "\", " + result.getExceptions(), 
+                    0, result.getExceptions().size());
+            assertEquals("assert fail with \"" + cmd + "\"",
+                    REQUIRED_MODE_NOT_SATISFIED, result.getMessages().get(0));
+        }
+        
+        // Success cases
+        String []success = {
+            "cm_info",
+            "ping",
+            "pm_add test02.arc 127.0.0.101",
+            "pm_info test02.arc",
+            "pm_del test02.arc",
+            "appdata_get " + clusterName + " backup 0",
+            "cluster_add test_cluster_2 0:1",
+            "cluster_dump " + clusterName,
+            "cluster_info " + clusterName,
+            "get_cluster_info " + clusterName,
+            "cluster_ls",
+            "gw_info " + clusterName + " " + gwName,
+            "gw_ls " + clusterName,
+            "pg_info " + clusterName + " " + pgName,
+            "pg_ls " + clusterName,
+            "pgs_info " + clusterName + " " + pgsNames[0],
+            "pgs_info_all " + clusterName + " " + pgsNames[0],
+            "pgs_ls " + clusterName,
+            "pm_ls",
+            "worklog_del 1",
+            "worklog_get 0 1",
+            "worklog_head 1",
+            "worklog_info",
+            "cluster_purge " + clusterName
+        };
+        for (String cmd : success) {
+            result = doCommand(cmd);
+            assertEquals("exception with \"" + cmd + "\", " + result.getExceptions(), 
+                    0, result.getExceptions().size());
+            assertThat("assert fail with \"" + cmd + "\"",
+                    result.getMessages().get(0),
+                    anyOf(is(S2C_OK), is("+PONG"), startsWith("{"),
+                            startsWith("8192"), containsString("start log no:")));
+        }
+    }
+    
 }

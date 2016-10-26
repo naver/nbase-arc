@@ -47,7 +47,6 @@ import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
@@ -582,10 +581,8 @@ public class CommandTest extends BasicSetting {
 
         result = doCommand("pg_info " + clusterName + " 10");
         
-        PartitionGroupData pgInfo = 
-            PartitionGroupData.builder().from(new PartitionGroupData()).build();
-        
-        assertEquals("check result of pg_info", pgInfo.toString(), result.getMessages().get(0));
+        assertEquals("check result of pg_info", pgImo.get("10", clusterName)
+                .info(), result.getMessages().get(0));
         
         // Usage
         result = doCommand("pg_info");
@@ -863,6 +860,42 @@ public class CommandTest extends BasicSetting {
         result = doCommand("op_wf " + clusterName + " " + pgName + " AA false not-forced");
         assertEquals(
                 "{\"state\":\"error\",\"msg\":\"-ERR not in forced mode.\"}\r\n",
+                formatReply(result, null));
+    }
+    
+    @Test
+    public void clusterDump() throws Exception {
+    }
+
+    @Test
+    public void clusterDumpAndLoad() throws Exception {
+        final String cname = "test_cluster_1";
+        
+        JobResult result = doCommand("cluster_dump " + clusterName);
+        String dump = result.getMessages().get(0)
+                .replace(clusterName, cname)
+                .replace(pmName, "test02.arc");
+        System.out.println(dump);
+
+        // Usage
+        result = doCommand("cluster_dump");
+        assertEquals("cluster_dump <cluster_name>\r\n",
+                formatReply(result, null));
+        
+        result = doCommand("cluster_load " + dump);
+        assertEquals(ok, result.getMessages().get(0));
+        
+        // Check
+        assertNotNull(clusterImo.get(cname));
+        assertNotNull(pgImo.get("0", cname));
+        assertNotNull(pgsImo.get("0", cname));
+        assertNotNull(pgsImo.get("1", cname));
+        assertNotNull(pgsImo.get("2", cname));
+        assertNotNull(pmImo.get("test02.arc"));        
+
+        // Usage
+        result = doCommand("cluster_load");
+        assertEquals("cluster_load <dump>\r\n",
                 formatReply(result, null));
     }
     

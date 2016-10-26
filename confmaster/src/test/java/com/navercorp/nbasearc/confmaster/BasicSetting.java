@@ -16,8 +16,10 @@
 
 package com.navercorp.nbasearc.confmaster;
 
+import static com.jayway.awaitility.Awaitility.await;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.*;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -153,7 +155,7 @@ public class BasicSetting {
 
     // Physical machine
     protected static String pmName = "test01.arc";
-    protected static PhysicalMachineData pmData = new PhysicalMachineData("127.0.0.100");
+    protected static PhysicalMachineData pmData = new PhysicalMachineData("127.0.0.1");
     
     // Cluster
     protected static String clusterName = "test_cluster";
@@ -170,7 +172,7 @@ public class BasicSetting {
         }
         
         clusterData = new ClusterData();
-        clusterData.setPhase(Constant.CLUSTER_PHASE_INIT);
+        clusterData.setMode(Constant.CLUSTER_ON);
         clusterData.setPnPgMap(slot);
         clusterData.setQuorumPolicy(quorumPolicy);
         clusterData.setKeySpaceSize(keyspaceSize);
@@ -390,7 +392,7 @@ public class BasicSetting {
         for (int i = 0; i < 8192; i++) {
             slot.add(0);
         }
-        assertEquals("check slot of pg after slot_set_pg", slot, cluster.getData().getPbPgMap());
+        assertEquals("check slot of pg after slot_set_pg", slot, cluster.getData().getPnPgMap());
     }
     
     public void createPm() throws Exception {
@@ -538,6 +540,73 @@ public class BasicSetting {
         assertEquals(HB_MONITOR_YES, pgs.getData().getHb());
         assertEquals(mgen + 1, pgs.getData().getMasterGen());
         assertEquals(mgen, pg.getData().currentGen());
+    }
+    
+    /*
+     * Make cluster with 1 PG and 3 PGS
+     */
+    protected MimicSMR[] setupCluster() throws Exception {
+        MimicSMR[] mimics = new MimicSMR[MAX_PGS];
+        
+        // Initialize
+        createCluster();
+        createPm();
+        createPg();
+        PartitionGroup pg = getPg();
+        
+        // Create master
+        createPgs(0);
+        mockPgs(0);
+        joinPgs(0);
+        PartitionGroupServer p1 = getPgs(0);
+        mimics[0] = mimic(p1);
+        mimics[0].init();
+        mockHeartbeatResult(p1, PGS_ROLE_LCONN, mimics[0].execute(PGS_PING));
+
+        MasterFinder masterCond = new MasterFinder(getPgsList());
+        await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
+        assertEquals(p1, masterCond.getMaster());
+        assertEquals(GREEN, p1.getData().getColor());
+        assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
+        assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
+        assertEquals(HB_MONITOR_YES, p1.getData().getHb());
+        assertEquals(1, p1.getData().getMasterGen());
+        assertEquals(0, pg.getData().currentGen());
+        QuorumValidator quorumValidator = new QuorumValidator(mimics[0], 0); 
+        await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
+        
+        // Create slaves
+        for (int pgsIdx = 1; pgsIdx < 3; pgsIdx++) {
+            createPgs(pgsIdx);
+            mockPgs(pgsIdx);
+            joinPgs(pgsIdx);
+            PartitionGroupServer p2 = getPgs(pgsIdx);
+            mimics[pgsIdx] = mimic(p2);
+            mimics[pgsIdx].init();
+            mockHeartbeatResult(p2, PGS_ROLE_LCONN, mimics[pgsIdx].execute(PGS_PING));
+    
+            RoleColorValidator slaveCond = new RoleColorValidator(p2, PGS_ROLE_SLAVE, GREEN);
+            await("test for role slave.").atMost(assertionTimeout, SECONDS).until(slaveCond);
+            assertEquals(GREEN, p2.getData().getColor());
+            assertEquals(PGS_ROLE_SLAVE, p2.getData().getRole());
+            assertEquals(SERVER_STATE_NORMAL, p2.getData().getState());
+            assertEquals(HB_MONITOR_YES, p2.getData().getHb());
+            assertEquals(1, p2.getData().getMasterGen());
+            assertEquals(0, pg.getData().currentGen());
+            quorumValidator = new QuorumValidator(mimics[0], pgsIdx); 
+            await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
+            
+            // Master must not be changed
+            assertEquals(p1, masterCond.getMaster());
+            assertEquals(GREEN, p1.getData().getColor());
+            assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
+            assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
+            assertEquals(HB_MONITOR_YES, p1.getData().getHb());
+            assertEquals(1, p1.getData().getMasterGen());
+            assertEquals(0, pg.getData().currentGen());
+        }
+        
+        return mimics;
     }
     
     public static class RoleColorValidator implements Callable<Boolean> {
