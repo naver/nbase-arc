@@ -20,9 +20,9 @@ static int init_cron (struct aeEventLoop *eventLoop, long long id,
 static void init_smr_connect (void);
 static void init_smr_disconnect (void);
 static void init_check_smr_catchup (void);
-static void init_arc (void);
+static void init_config (void);
 static void init_server_post (void);
-static void init_redis_server (void);
+static void init_arc (void);
 static void init_server_pre (void);
 static void ascii_art (void);
 
@@ -37,7 +37,14 @@ static int smrcb_noti_rckpt (void *arg, char *be_host, int be_port);
 static int smrcb_noti_ready (void *arg);
 
 /* main */
-static void redis_arc_main ();
+static void redis_arc_main (int arc, char **argv);
+static void try_cronsave (void);
+static void try_seqsave (void);
+static void check_memory_hard_limit (unsigned long used_kb);
+static void check_memory_limiting (unsigned long total_kb,
+				   unsigned long used_kb, size_t rss_byte);
+static void try_memory_limit (void);
+
 
 /* ---------------- */
 /* Local definition */
@@ -148,7 +155,7 @@ init_check_smr_catchup (void)
 }
 
 static void
-init_arc (void)
+init_config (void)
 {
   int i;
 
@@ -326,7 +333,7 @@ init_server_post (void)
 
 /* nbase-arc specific */
 static void
-init_redis_server (void)
+init_arc (void)
 {
   int j;
 
@@ -426,7 +433,7 @@ init_server_pre (void)
   server.repl_good_slaves_count = 0;
   updateCachedTime ();
 
-  init_redis_server ();
+  init_arc ();
 
   /* 32 bit instances are limited to 4GB of address space, so if there is
    * no explicit limit in the user provided configuration we set a limit
@@ -666,10 +673,12 @@ smrcb_noti_ready (void *arg)
 }
 
 static void
-redis_arc_main ()
+redis_arc_main (int argc, char **argv)
 {
   int background;
   long long teid;
+  UNUSED (argc);
+  UNUSED (argv);
 
   init_server_pre ();
   background = server.daemonize && !server.supervised;
@@ -760,48 +769,6 @@ redis_arc_main ()
   exit (0);
 }
 
-/* -------- */
-/* Exported */
-/* -------- */
-
-void
-arc_tool_hook (int argc, char **argv)
-{
-  UNUSED (argc);
-
-  if (strstr (argv[0], "cluster-util") != NULL)
-    {
-      serverPanic ("Not implemented yet(TODO)");
-    }
-  else if (strstr (argv[0], "dump-util") != NULL)
-    {
-      serverPanic ("Not implemented yet(TODO)");
-    }
-}
-
-void
-arc_init_arc (void)
-{
-  init_arc ();
-}
-
-void
-arc_init_redis_server (void)
-{
-  init_redis_server ();
-}
-
-void
-arc_main_hook (int argc, char **argv)
-{
-  if (strstr (argv[0], "redis-arc") == NULL)
-    {
-      return;
-    }
-
-  redis_arc_main (argc, argv);
-}
-
 static void
 try_cronsave (void)
 {
@@ -856,6 +823,152 @@ try_seqsave (void)
     }
 }
 
+static void
+check_memory_hard_limit (unsigned long used_kb)
+{
+  if (!arc.mem_hard_limit_exceeded && used_kb >= arc.mem_hard_limit_kb)
+    {
+      arc.mem_hard_limit_exceeded = 1;
+      serverLog (LL_NOTICE,
+		 "Used memory is above hard limit. Machine used memory:%ldMB",
+		 used_kb / 1024);
+    }
+  else if (arc.mem_hard_limit_exceeded && used_kb < arc.mem_hard_limit_kb)
+    {
+      serverLog (LL_NOTICE,
+		 "Used memory is below hard limit. Machine used memory:%ldMB",
+		 used_kb / 1024);
+      arc.mem_hard_limit_exceeded = 0;
+    }
+}
+
+static void
+check_memory_limiting (unsigned long total_kb, unsigned long used_kb,
+		       size_t rss_byte)
+{
+  if (!arc.mem_limit_activated && used_kb >= arc.mem_limit_active_kb)
+    {
+      /* Activate memory limiting */
+      arc.mem_max_allowed_byte
+	= total_kb * arc.mem_max_allowed_perc / 100 * rss_byte / used_kb;
+      arc.mem_limit_activated = 1;
+
+      serverLog (LL_NOTICE,
+		 "Memory limiting activated. Current used memory(rss):%ldMB, Set max memory allowed:%ldMB",
+		 rss_byte / 1024 / 1024,
+		 arc.mem_max_allowed_byte / 1024 / 1024);
+    }
+  else if (arc.mem_limit_activated && used_kb < arc.mem_limit_active_kb)
+    {
+      /* Deactivate memory limiting */
+      serverLog (LL_NOTICE, "Memory limiting deactivated.");
+      arc.mem_limit_activated = 0;
+      arc.mem_max_allowed_exceeded = 0;
+    }
+}
+
+static void
+try_memory_limit (void)
+{
+  if (arc.mem_limit_active_perc != 100 || arc.mem_hard_limit_perc != 100)
+    {
+      unsigned long total_kb, free_kb, cached_kb, used_kb;
+      size_t rss_byte = zmalloc_get_rss ();
+
+#ifdef COVERAGE_TEST
+      if (arc.debug_mem_usage_fixed)
+	{
+	  rss_byte = arc.debug_redis_mem_rss_kb * 1024;
+	}
+#endif
+      if (arcx_get_memory_usage (&total_kb, &free_kb, &cached_kb) == C_OK)
+	{
+	  free_kb += cached_kb;
+	  used_kb = total_kb - free_kb;
+
+	  if (arc.mem_hard_limit_perc != 100)
+	    {
+	      check_memory_hard_limit (used_kb);
+	    }
+	  if (arc.mem_limit_active_perc != 100)
+	    {
+	      check_memory_limiting (total_kb, used_kb, rss_byte);
+	    }
+	}
+
+      /* Check maximum allowed memory for this redis */
+      if (arc.mem_limit_activated && rss_byte >= arc.mem_max_allowed_byte)
+	{
+	  arc.mem_max_allowed_exceeded = 1;
+	}
+      else
+	{
+	  arc.mem_max_allowed_exceeded = 0;
+	}
+
+      /* Memory limiting 
+       * If used memory exceeds hard limit or allowed limit, propagate oom message to all replicas */
+      if ((arc.mem_limit_activated && arc.mem_max_allowed_exceeded)
+	  || arc.mem_hard_limit_exceeded)
+	{
+	  char smr_cmd = ARC_SMR_CMD_DELIVER_OOM;
+	  smr_session_data (arc.smr_conn, 0, SMR_SESSION_DATA_HASH_NONE,
+			    &smr_cmd, 1);
+	}
+    }
+}
+
+/* ---------------------- */
+/* Exported arcx function */
+/* ---------------------- */
+void
+arcx_init_server_pre (void)
+{
+  init_server_pre ();
+}
+
+/* --------------------- */
+/* Exported arc function */
+/* --------------------- */
+
+void
+arc_tool_hook (int argc, char **argv)
+{
+  UNUSED (argc);
+
+  if (strstr (argv[0], "cluster-util") != NULL)
+    {
+      arcx_cluster_util_main (argc, argv);
+    }
+  else if (strstr (argv[0], "dump-util") != NULL)
+    {
+      arcx_dump_util_main (argc, argv);
+    }
+}
+
+void
+arc_init_config (void)
+{
+  init_config ();
+}
+
+void
+arc_init_arc (void)
+{
+  init_arc ();
+}
+
+void
+arc_main_hook (int argc, char **argv)
+{
+  if (strstr (argv[0], "redis-arc") == NULL)
+    {
+      return;
+    }
+
+  arc.cluster_mode = 1;
+  redis_arc_main (argc, argv);
+}
 
 int
 arc_server_cron (void)
@@ -885,6 +998,11 @@ arc_server_cron (void)
       }
   }
 
+  run_with_period (10000)
+  {
+    try_memory_limit ();
+  }
+
   // more to come... memory limit etc.
   return 0;
 }
@@ -904,7 +1022,13 @@ arc_expire_haveto_skip (sds key)
   return 0;
 }
 
-#else
-// make compiler happy
-int arc_server_is_not_used = 1;
+mstime_t
+arc_mstime (void)
+{
+  if (arc.cluster_mode)
+    {
+      return arc.smr_ts;
+    }
+  return mstime ();
+}
 #endif

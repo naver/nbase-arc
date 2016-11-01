@@ -776,7 +776,7 @@ int rdbSaveRio(rio *rdb, int *error) {
     dictEntry *de;
     char magic[10];
     int j;
-    long long now = mstime();
+    long long now = arc_mstime();
     uint64_t cksum;
 
     if (server.rdb_checksum)
@@ -1394,7 +1394,7 @@ int rdbLoad(char *filename) {
             if ((auxval = rdbLoadStringObject(&rdb)) == NULL) goto eoferr;
 
 #ifdef NBASE_ARC
-	    if(rdbver > 6 && arc_rdb_load_aux_fields_hook(auxkey, auxval)) continue;
+	    if(rdbver > 6 && arc_rdb_load_aux_fields_hook(auxkey, auxval, &now)) continue;
 #endif
             if (((char*)auxkey->ptr)[0] == '%') {
                 /* All the fields with a name staring with '%' are considered
@@ -1423,7 +1423,7 @@ int rdbLoad(char *filename) {
 #endif
         if ((val = rdbLoadObject(type,&rdb)) == NULL) goto eoferr;
 #ifdef NBASE_ARC
-	if (rdbver == 6 && arc_rdb_load_aux_fields_hook(key, val) == 1) continue;
+	if (rdbver == 6 && arc_rdb_load_aux_fields_hook(key, val, &now) == 1) continue;
 #endif
         /* Check if the key already expired. This function is used when loading
          * an RDB file from disk, either at startup, or when an RDB was

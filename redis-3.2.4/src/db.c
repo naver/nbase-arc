@@ -910,7 +910,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
      * only the first time it is accessed and not in the middle of the
      * script execution, making propagation to slaves / AOF consistent.
      * See issue #1525 on Github for more information. */
-    now = server.lua_caller ? server.lua_time_start : mstime();
+    now = server.lua_caller ? server.lua_time_start : arc_mstime();
 
     /* If we are running in the context of a slave, return ASAP:
      * the slave key expiration is controlled by the master that will
@@ -965,7 +965,7 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
      *
      * Instead we take the other branch of the IF statement setting an expire
      * (possibly in the past) and wait for an explicit DEL from the master. */
-    if (when <= mstime() && !server.loading && !server.masterhost) {
+    if (when <= arc_mstime() && !server.loading && !server.masterhost) {
         robj *aux;
 
         serverAssertWithInfo(c,key,dbDelete(c->db,key));
@@ -990,7 +990,7 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
 }
 
 void expireCommand(client *c) {
-    expireGenericCommand(c,mstime(),UNIT_SECONDS);
+    expireGenericCommand(c,arc_mstime(),UNIT_SECONDS);
 }
 
 void expireatCommand(client *c) {
@@ -998,7 +998,7 @@ void expireatCommand(client *c) {
 }
 
 void pexpireCommand(client *c) {
-    expireGenericCommand(c,mstime(),UNIT_MILLISECONDS);
+    expireGenericCommand(c,arc_mstime(),UNIT_MILLISECONDS);
 }
 
 void pexpireatCommand(client *c) {
@@ -1017,7 +1017,7 @@ void ttlGenericCommand(client *c, int output_ms) {
      * TTL value otherwise. */
     expire = getExpire(c->db,c->argv[1]);
     if (expire != -1) {
-        ttl = expire-mstime();
+        ttl = expire-arc_mstime();
         if (ttl < 0) ttl = 0;
     }
     if (ttl == -1) {

@@ -1680,5 +1680,7 @@ int memtest_preserving_test(unsigned long *m, size_t bytes, int passes);
 
 #ifdef NBASE_ARC
 #include "arc_server.h"
+#else
+#define arc_mstime mstime
 #endif
 #endif

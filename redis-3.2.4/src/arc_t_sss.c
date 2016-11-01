@@ -880,7 +880,7 @@ s3_get (client * c, robj * s3obj)
   robj *ks, *svc, *key;
   sssIterCategories ctg;
   sssTypeIterator *iter;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   ks = c->argv[1];
   //uuid = c->argv[2];
@@ -915,7 +915,7 @@ s3_mget (client * c, robj * s3obj)
   int key_count;
   int i;
   int tot_count = 0;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   sssTypeIterator *iter;
 
   ks = c->argv[1];
@@ -1023,7 +1023,7 @@ s3_keys (client * c, robj * s3obj)
   robj *ks, *svc = NULL;
   sssIterCategories ctg;
   sssTypeIterator *iter;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   struct s3_keys_cb_arg arg;
 
   ks = c->argv[1];
@@ -1074,7 +1074,7 @@ s3_vals (client * c, robj * s3obj)
   robj *ks, *svc;
   sssIterCategories ctg;
   sssTypeIterator *iter;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   ks = c->argv[1];
   //uuid = c->argv[2];
@@ -1232,7 +1232,7 @@ s3_rem (client * c, robj * s3obj)
   robj *ks, *uuid, *svc = NULL, *key = NULL;
   sssIterCategories ctg;
   int ndelete;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   ks = c->argv[1];
   uuid = c->argv[2];
@@ -1285,7 +1285,7 @@ s3_mrem (client * c, robj * s3obj)
   robj *ks, *uuid, *svc = NULL;
   int i, tot_deleted = 0;
   sssIterCategories ctg;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   ks = c->argv[1];
   uuid = c->argv[2];
@@ -1323,7 +1323,7 @@ s3_set (client * c, robj * s3obj, int narg, struct add_arg *args)
   int added = 0, nexpired, ndeleted;
   sssIterCategories ctg;
   robj *ks, *uuid, *svc, *key;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   sss *s3 = (sss *) s3obj->ptr;
 
   ks = c->argv[1];
@@ -1447,7 +1447,7 @@ static void
 s3_count (client * c, robj * s3obj)
 {
   robj *ks, *svc = NULL, *key = NULL, *val = NULL;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   sssIterCategories ctg;
   struct s3_count_cb_arg arg;
 
@@ -1506,7 +1506,7 @@ static void
 s3_exists (client * c, robj * s3obj)
 {
   robj *ks, *svc, *key, *val = NULL;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   sssIterCategories ctg;
   struct s3_exists_cb_arg arg;
 
@@ -1573,7 +1573,7 @@ static void
 s3_expire (client * c, robj * s3obj, long long expire)
 {
   robj *ks, *uuid, *svc = NULL, *key = NULL, *val = NULL;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   sssIterCategories ctg;
   int count;
   struct s3_expire_cb_arg arg;
@@ -1613,7 +1613,7 @@ static void
 s3_mexpire (client * c, robj * s3obj, long long expire)
 {
   robj *ks, *uuid, *svc, *key;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   int key_count, nreplaced = 0;
   int i;
   sssIterCategories ctg;
@@ -1680,7 +1680,7 @@ s3_ttl (client * c, robj * s3obj)
 {
   robj *ks, *svc, *key = NULL, *val = NULL;
   sssIterCategories ctg;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   struct s3_ttl_cb_arg arg;
 
   ks = c->argv[1];
@@ -1816,7 +1816,7 @@ s3add_generic (client * c)
   robj *s3obj, *uuid;
   struct add_arg *args;
   int narg, i, ret;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   if ((c->argc - 7) % 2 != 0)
     {
@@ -1918,7 +1918,7 @@ s3madd_generic (client * c)
   robj *s3obj, *uuid;
   struct madd_arg *args;
   int narg, i, ret;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   if ((c->argc - 7) % 3 != 0)
     {
@@ -2016,7 +2016,7 @@ s3set_generic (client * c)
   robj *s3obj, *uuid;
   struct add_arg *args;
   int narg, i, ret;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
 
   if ((c->argc - 7) % 2 != 0)
     {
@@ -2066,7 +2066,7 @@ s3replace_generic (client * c)
 {
   robj *s3obj, *uuid, *ttl;
   long long expire;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   int ret;
 
   ttl = c->argv[7];
@@ -2163,7 +2163,7 @@ s3expire_generic (client * c)
 {
   robj *s3obj, *uuid, *ttl;
   long long expire;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   int ret;
 
   if (c->argc < 4 || c->argc > 7)
@@ -2207,7 +2207,7 @@ s3mexpire_generic (client * c)
 {
   robj *s3obj, *uuid, *ttl;
   long long expire;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   int ret;
 
   ttl = c->argv[4];
@@ -2549,7 +2549,7 @@ arcx_sss_garbage_collect (long long timeout)
   long long curr_msec;
   long long tot_dead = 0;
 
-  curr_msec = smr_mstime ();
+  curr_msec = arc_mstime ();
   curr_usec = ustime ();
   if (timeout > 0)
     {
@@ -2629,7 +2629,7 @@ arcx_sss_gc_cron (void)
       return 0;
     }
   arc.gc_eager_loops++;
-  curr_msec = smr_mstime ();
+  curr_msec = arc_mstime ();
   until_usec = ustime () + 600;	// 0.6 msec
   num_dead =
     purge_objects (&arc.gc_eager, (sssObc *) arc.gc_obc, curr_msec,
@@ -2934,7 +2934,7 @@ s3remCommand (client * c)
 {
   robj *s3obj, *ks;
   int uuid_count, tot_deleted = 0;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   robj **s3objs = NULL;
   int i;
 
@@ -2981,7 +2981,7 @@ s3mremCommand (client * c)
 {
   robj *s3obj, *ks, *uuid;
   int svc_count, tot_deleted = 0;
-  long long curr_time = smr_mstime ();
+  long long curr_time = arc_mstime ();
   int i;
 
   ks = c->argv[1];
@@ -3025,8 +3025,4 @@ s3gcCommand (client * c)
   addReplyLongLong (c, tot_dead);
   return;
 }
-
-#else
-//make compiler happy
-int arc_t_sss_is_not_used = 1;
 #endif /* NBASE_ARC */

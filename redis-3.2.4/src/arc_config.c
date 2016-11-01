@@ -291,8 +291,4 @@ arcx_set_memory_limit_values (void)
 {
   set_memory_limit_values ();
 }
-
-#else
-// make compiler happy
-int arc_config_is_not_used = 1;
 #endif

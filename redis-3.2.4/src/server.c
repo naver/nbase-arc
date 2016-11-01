@@ -833,7 +833,7 @@ void activeExpireCycle(int type) {
                 break;
             }
             slots = dictSlots(db->expires);
-            now = mstime();
+            now = arc_mstime();
 
             /* When there are less than 1% filled slots getting random
              * keys is expensive, so stop here waiting for better times...
@@ -1881,6 +1881,9 @@ void initServer(void) {
             server.syslog_facility);
     }
 
+#ifdef NBASE_ARC
+    arc_init_arc();
+#endif
     server.pid = getpid();
     server.current_client = NULL;
     server.clients = listCreate();
@@ -4014,8 +4017,8 @@ int main(int argc, char **argv) {
     if (strstr(argv[0],"redis-check-rdb") != NULL)
         redis_check_rdb_main(argc,argv);
 #ifdef NBASE_ARC
+    arc_init_config ();
     arc_tool_hook (argc, argv);
-    arc_init_arc ();
 #endif
 
     if (argc >= 2) {
@@ -4092,7 +4095,6 @@ int main(int argc, char **argv) {
 
 #ifdef NBASE_ARC
     arc_main_hook(argc, argv);
-    arc_init_redis_server ();
 #endif
     initServer();
     if (background || server.pidfile) createPidFile();

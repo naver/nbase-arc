@@ -495,7 +495,7 @@ sds catAppendOnlyExpireAtCommand(sds buf, struct redisCommand *cmd, robj *key, r
     if (cmd->proc == expireCommand || cmd->proc == pexpireCommand ||
         cmd->proc == setexCommand || cmd->proc == psetexCommand)
     {
-        when += mstime();
+        when += arc_mstime();
     }
     decrRefCount(seconds);
 
@@ -1019,7 +1019,7 @@ int rewriteAppendOnlyFile(char *filename) {
     FILE *fp;
     char tmpfile[256];
     int j;
-    long long now = mstime();
+    long long now = arc_mstime();
     char byte;
     size_t processed = 0;
 

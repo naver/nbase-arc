@@ -311,13 +311,14 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     {"bping",bpingCommand,1,"r",0,NULL,0,0,0,0,0},                    \
     {"quit",quitCommand,1,"r",0,NULL,0,0,0,0,0}                       \
 
+extern void arc_init_config (void);
 extern void arc_tool_hook (int argc, char **argv);
 extern void arc_init_arc (void);
-extern void arc_init_redis_server (void);
 extern void arc_main_hook (int argc, char **argv);
 // return 0 to continue, hz otherwise
 extern int arc_server_cron (void);
 extern int arc_expire_haveto_skip (sds key);
+extern mstime_t arc_mstime (void);
 
 /* arc_networking.c */
 extern void arc_smrc_create (client * c);
@@ -343,8 +344,8 @@ extern int arc_rdb_save_rio_with_file (rio * rdb, FILE * fp, int *error);
 extern int arc_rdb_save_onwrite (rio * rdb, int *error);
 extern int arc_rdb_save_skip (sds keystr);
 extern int arc_rdb_save_aux_fields (rio * rdb);
-extern int arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval);
-
+extern int arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval,
+					 long long *now);
 
 /* ------------------------- */
 /* Redis commands extensions */

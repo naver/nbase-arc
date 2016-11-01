@@ -723,8 +723,4 @@ quitCommand (client * c)
 {
   c->smr->flags |= ARC_SMR_CLIENT_CLOSING;
 }
-
-#else
-// make compiler happy
-int arc_networking_is_not_used = 1;
 #endif

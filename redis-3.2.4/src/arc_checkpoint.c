@@ -7,20 +7,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-// embedded in rio_ structure
-struct arcRio
-{
-  int fd;
-  long long w_count;
-  off_t last_off;
-};
-#define init_arc_rio(r) do  {  \
-  (r)->fd = -1;                \
-  (r)->w_count = 0LL;          \
-  (r)->last_off = 0;           \
-} while(0)
-
-
 /* ---------------- */
 /* Local declations */
 /* ---------------- */
@@ -217,6 +203,28 @@ mig_end (client * c)
   return;
 }
 
+/* ---------------------- */
+/* Exported arcx function */
+/* ---------------------- */
+int
+arcx_is_auxkey (robj * key)
+{
+
+  char *p = key->ptr;
+
+  // fast check
+  if (*p++ != '\001' || *p++ != '\002' || *p++ != '\003')
+    {
+      return 0;
+    }
+  return !compareStringObjects (key, shared.db_version) ||
+    !compareStringObjects (key, shared.db_smr_mstime) ||
+    !compareStringObjects (key,
+			   shared.db_migrate_slot)
+    || !compareStringObjects (key, shared.db_migclear_slot);
+}
+
+
 /* --------------------- */
 /* Exported arc function */
 /* --------------------- */
@@ -412,14 +420,12 @@ arc_rdb_save_aux_fields (rio * rdb)
   return 0;
 }
 
-
 // returns 1 if hooked, 0 otherwise.
 // if hooked, reference counts for key and value are decreased
 int
-arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval)
+arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval, long long *now)
 {
   char *p = auxkey->ptr;
-
   // fast check
   if (*p++ != '\001' || *p++ != '\002' || *p++ != '\003')
     {
@@ -433,6 +439,10 @@ arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval)
   else if (!compareStringObjects (auxkey, shared.db_smr_mstime))
     {
       getLongLongFromObject (auxval, &arc.smr_ts);
+      if (now)
+	{
+	  *now = arc.smr_ts;
+	}
     }
   else if (!compareStringObjects (auxkey, shared.db_migrate_slot))
     {
@@ -467,9 +477,7 @@ void
 checkpointCommand (client * c)
 {
   sds bitarray;
-
   serverLog (LL_NOTICE, "Client ask for checkpoint");
-
   /* Here we need to check if there is a background saving operation in progress */
   if (server.rdb_child_pid != -1 || server.aof_child_pid != -1)
     {
@@ -498,8 +506,8 @@ checkpointCommand (client * c)
       return;
     }
   arc.checkpoint_seqnum = arc.smr_seqnum;	//TODO 이건 여기가 아님.
-  serverLog (LL_NOTICE, "Partial Checkpoint sequence num:%lld",
-	     arc.smr_seqnum);
+  serverLog (LL_NOTICE,
+	     "Partial Checkpoint sequence num:%lld", arc.smr_seqnum);
   c->replstate = SLAVE_STATE_WAIT_BGSAVE_END;
   c->repldbfd = -1;
   arc.checkpoint_client = c;
@@ -615,10 +623,8 @@ migpexpireatCommand (client * c)
   dictEntry *de;
   robj *key = c->argv[1], *param = c->argv[2];
   long long when;
-
   if (getLongLongFromObjectOrReply (c, param, &when, NULL) != C_OK)
     return;
-
   de = dictFind (c->db->dict, key->ptr);
   if (de == NULL)
     {
@@ -630,8 +636,4 @@ migpexpireatCommand (client * c)
   signalModifiedKey (c->db, key);
   server.dirty++;
 }
-
-#else
-//make compiler happy
-int arc_checkpoint_is_not_used = 1;
 #endif

@@ -223,8 +223,4 @@ arc_rio_peek_key (rio * rdb, int rdbtype, robj * key)
     }
   return 0;
 }
-
-#else
-//make compiler happy
-int arc_sss_is_not_used = 1;
 #endif

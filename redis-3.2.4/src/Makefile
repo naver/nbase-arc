@@ -12,6 +12,7 @@
 # Dependencies are stored in the Makefile.dep file. To rebuild this file
 # Just use 'make dep', but this is only needed by developers.
 
+NBASE_ARC=y
 release_hdr := $(shell sh -c './mkreleasehdr.sh')
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 OPTIMIZATION?=-O2
@@ -54,7 +55,9 @@ endif
 -include .make-settings
 
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS) -I../deps/geohash-int
-FINAL_CFLAGS+=-DNBASE_ARC
+ifeq ($(NBASE_ARC),y)
+	FINAL_CFLAGS+=-DNBASE_ARC
+endif
 FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
 FINAL_LIBS=-lm -lrt
 DEBUG=-g -ggdb
@@ -118,7 +121,9 @@ endif
 
 REDIS_SERVER_NAME=redis-server
 REDIS_SENTINEL_NAME=redis-sentinel
-NBASE_ARC_OBJ= arc_config.o arc_server.o arc_util.o arc_networking.o arc_checkpoint.o arc_sss.o arc_t_sss.o
+ifeq ($(NBASE_ARC),y)
+NBASE_ARC_OBJ=arc_config.o arc_server.o arc_util.o arc_networking.o arc_checkpoint.o arc_sss.o arc_t_sss.o arc_cluster_util.o arc_dump_util.o
+endif
 REDIS_SERVER_OBJ=adlist.o quicklist.o ae.o anet.o dict.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o crc16.o endianconv.o slowlog.o scripting.o bio.o rio.o rand.o memtest.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o redis-check-rdb.o geo.o $(NBASE_ARC_OBJ)
 REDIS_GEOHASH_OBJ=../deps/geohash-int/geohash.o ../deps/geohash-int/geohash_helper.o
 REDIS_CLI_NAME=redis-cli
@@ -128,9 +133,15 @@ REDIS_BENCHMARK_OBJ=ae.o anet.o redis-benchmark.o adlist.o zmalloc.o redis-bench
 REDIS_CHECK_RDB_NAME=redis-check-rdb
 REDIS_CHECK_AOF_NAME=redis-check-aof
 REDIS_CHECK_AOF_OBJ=redis-check-aof.o
+ifeq ($(NBASE_ARC),y)
 REDIS_ARC_NAME=redis-arc
+CLUSTER_UTIL_NAME=cluster-util
+DUMP_UTIL_NAME=dump-util
+PLUGIN_BASE32HEX=dump2json_base32hex.so
+PLUGIN_TEXT=dump2json_text.so
+endif
 
-all: $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME) $(REDIS_ARC_NAME)
+all: $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME) $(REDIS_ARC_NAME) $(CLUSTER_UTIL_NAME) $(DUMP_UTIL_NAME) $(PLUGIN_BASE32HEX) $(PLUGIN_TEXT)
 	@echo ""
 	@echo "Hint: It's a good idea to run 'make test' ;)"
 	@echo ""
@@ -197,9 +208,29 @@ $(REDIS_BENCHMARK_NAME): $(REDIS_BENCHMARK_OBJ)
 $(REDIS_CHECK_AOF_NAME): $(REDIS_CHECK_AOF_OBJ)
 	$(REDIS_LD) -o $@ $^ $(FINAL_LIBS)
 
-# redis-arc 
+ifeq ($(NBASE_ARC),y)
+# nbase-arc redis-arc 
 $(REDIS_ARC_NAME): $(REDIS_SERVER_NAME)
 	$(REDIS_INSTALL) $(REDIS_SERVER_NAME) $(REDIS_ARC_NAME)
+
+# nbase-arc cluster-util
+$(CLUSTER_UTIL_NAME): $(REDIS_SERVER_NAME)
+	$(REDIS_INSTALL) $(REDIS_SERVER_NAME) $(CLUSTER_UTIL_NAME)
+
+# nbase-arc dump-util
+$(DUMP_UTIL_NAME): $(REDIS_SERVER_NAME)
+	$(REDIS_INSTALL) $(REDIS_SERVER_NAME) $(DUMP_UTIL_NAME)
+
+# nbase-arc dump2json_base32hex.so
+$(PLUGIN_BASE32HEX):
+	$(QUIET_CC)$(CC) -DNBASE_ARC -Wall -fPIC -c arc_dump2json_base32hex.c
+	$(QUIET_LINK)$(CC) -shared -Wl,-soname,$(PLUGIN_BASE32HEX) -o $(PLUGIN_BASE32HEX) arc_dump2json_base32hex.o
+
+# nbase-arc dump2json_text.so
+$(PLUGIN_TEXT):
+	$(QUIET_CC)$(CC) -DNBASE_ARC -Wall -fPIC -c arc_dump2json_text.c
+	$(QUIET_LINK)$(CC) -shared -Wl,-soname,$(PLUGIN_TEXT) -o $(PLUGIN_TEXT) arc_dump2json_text.o
+endif
 
 # Because the jemalloc.h header is generated as a part of the jemalloc build,
 # building it should complete before building any other object. Instead of
@@ -208,7 +239,7 @@ $(REDIS_ARC_NAME): $(REDIS_SERVER_NAME)
 	$(REDIS_CC) -c $<
 
 clean:
-	rm -rf $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME) $(REDIS_ARC_NAME) *.o *.gcda *.gcno *.gcov redis.info lcov-html
+	rm -rf $(REDIS_SERVER_NAME) $(REDIS_SENTINEL_NAME) $(REDIS_CLI_NAME) $(REDIS_BENCHMARK_NAME) $(REDIS_CHECK_RDB_NAME) $(REDIS_CHECK_AOF_NAME) $(REDIS_ARC_NAME) $(CLUSTER_UTIL_NAME) $(DUMP_UTIL_NAME) *.o *.gcda *.gcno *.gcov redis.info lcov-html *.so
 
 .PHONY: clean
 

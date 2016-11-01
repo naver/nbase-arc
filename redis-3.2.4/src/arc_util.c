@@ -379,7 +379,201 @@ error:
   return C_ERR;
 }
 
-#else
-// make compiler happy
-int arc_util_is_not_used = 1;
+
+// Note: arcx_dumpscan_xxx functions are basically from rdbLoad in rdb.c
+
+int
+arcx_dumpscan_start (dumpScan * ds, char *file)
+{
+  FILE *fp = NULL;
+  char buf[1024];
+  int rdbver;
+
+  if ((fp = fopen (file, "r")) == NULL)
+    {
+      return -1;
+    }
+  fseeko (fp, 0L, SEEK_END);
+  ds->filesz = ftello (fp);
+  fseeko (fp, 0L, SEEK_SET);
+  rioInitWithFile (&ds->rdb, fp);
+
+  // check header
+  if (rioRead (&ds->rdb, buf, 9) == 0)
+    {
+      goto error;
+    }
+  buf[9] = '\0';
+
+  if (memcmp (buf, "REDIS", 5) != 0)
+    {
+      serverLog (LL_WARNING, "Wrong signature trying to load DB from file");
+      goto error;
+    }
+  rdbver = atoi (buf + 5);
+  if (rdbver < 1 || rdbver > RDB_VERSION)
+    {
+      serverLog (LL_WARNING, "Can't handle RDB format version %d", rdbver);
+      goto error;
+    }
+
+  ds->fp = fp;
+  ds->rdbver = rdbver;
+  return 0;
+
+error:
+  if (fp != NULL)
+    {
+      fclose (fp);
+    }
+  return -1;
+}
+
+
+/* returns 1 if ds has iteritem, 0 if no more, -1 error */
+int
+arcx_dumpscan_iterate (dumpScan * ds)
+{
+  int type;
+
+  while (1)
+    {
+      robj *key = NULL, *val = NULL;
+      long long expiretime = -1;
+
+      if ((type = rdbLoadType (&ds->rdb)) == -1)
+	{
+	  return -1;
+	}
+
+      if (type == RDB_OPCODE_EXPIRETIME)
+	{
+	  if ((expiretime = rdbLoadTime (&ds->rdb)) == -1)
+	    {
+	      goto error;
+	    }
+	  if ((type = rdbLoadType (&ds->rdb)) == -1)
+	    {
+	      goto error;
+	    }
+	  expiretime *= 1000;
+	}
+      else if (type == RDB_OPCODE_EXPIRETIME_MS)
+	{
+	  if ((expiretime = rdbLoadMillisecondTime (&ds->rdb)) == -1)
+	    {
+	      goto error;
+	    }
+	  if ((type = rdbLoadType (&ds->rdb)) == -1)
+	    {
+	      goto error;
+	    }
+	}
+      else if (type == RDB_OPCODE_EOF)
+	{
+	  return 0;
+	}
+      else if (type == RDB_OPCODE_SELECTDB)
+	{
+	  uint32_t dbid;
+
+	  if ((dbid = rdbLoadLen (&ds->rdb, NULL)) == RDB_LENERR)
+	    {
+	      goto error;
+	    }
+	  if (dbid >= (unsigned) server.dbnum)
+	    {
+	      serverLog (LL_WARNING,
+			 "FATAL: Data file was created with a Redis "
+			 "server configured to handle more than %d "
+			 "databases. Exiting\n", server.dbnum);
+	      exit (1);
+	    }
+	  ds->dt = ARCX_DUMP_DT_SELECTDB;
+	  ds->d.selectdb.dbid = (int) dbid;
+	  return 1;
+	}
+      else if (type == RDB_OPCODE_RESIZEDB)
+	{
+	  uint32_t db_size, expires_size;
+	  if ((db_size = rdbLoadLen (&ds->rdb, NULL)) == RDB_LENERR)
+	    {
+	      goto error;
+	    }
+	  if ((expires_size = rdbLoadLen (&ds->rdb, NULL)) == RDB_LENERR)
+	    {
+	      goto error;
+	    }
+	  continue;
+	}
+      else if (type == RDB_OPCODE_AUX)
+	{
+	  robj *auxkey, *auxval;
+	  if ((auxkey = rdbLoadStringObject (&ds->rdb)) == NULL)
+	    {
+	      goto error;
+	    }
+	  if ((auxval = rdbLoadStringObject (&ds->rdb)) == NULL)
+	    {
+	      goto error;
+	    }
+	  ds->dt = ARCX_DUMP_DT_AUX;
+	  ds->d.aux.key = auxkey;
+	  ds->d.aux.val = auxval;
+	  return 1;
+	}
+
+      /* Read key */
+      if ((key = rdbLoadStringObject (&ds->rdb)) == NULL)
+	{
+	  goto error;
+	}
+
+      /* Read value */
+      (void) arc_rio_peek_key (&ds->rdb, type, key);
+      if ((val = rdbLoadObject (type, &ds->rdb)) == NULL)
+	{
+	  goto error;
+	}
+
+      if (ds->rdbver == 6 && arcx_is_auxkey (key))
+	{
+	  ds->dt = ARCX_DUMP_DT_AUX;
+	  ds->d.aux.key = key;
+	  ds->d.aux.val = val;
+	  return 1;
+	}
+      else
+	{
+	  ds->dt = ARCX_DUMP_DT_KV;
+	  ds->d.kv.type = type;
+	  ds->d.kv.expiretime = expiretime;
+	  ds->d.kv.key = key;
+	  ds->d.kv.val = val;
+	  return 1;
+	}
+    }
+error:
+  return -1;
+}
+
+int
+arcx_dumpscan_finish (dumpScan * ds, int will_need)
+{
+  if (ds->fp != NULL)
+    {
+      if (!will_need)
+	{
+	  int fd = fileno (ds->fp);
+	  if (fdatasync (fd) == 0)
+	    {
+	      (void) posix_fadvise (fd, 0, 0, POSIX_FADV_DONTNEED);
+	    }
+	}
+      fclose (ds->fp);
+      ds->fp = NULL;
+    }
+
+  return 0;
+}
 #endif

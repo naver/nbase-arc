@@ -4522,7 +4522,7 @@ void restoreCommand(client *c) {
 
     /* Create the key and set the TTL if any */
     dbAdd(c->db,c->argv[1],obj);
-    if (ttl) setExpire(c->db,c->argv[1],mstime()+ttl);
+    if (ttl) setExpire(c->db,c->argv[1],arc_mstime()+ttl);
     signalModifiedKey(c->db,c->argv[1]);
     addReply(c,shared.ok);
     server.dirty++;
@@ -4748,7 +4748,7 @@ try_again:
     for (j = 0; j < num_keys; j++) {
         expireat = getExpire(c->db,kv[j]);
         if (expireat != -1) {
-            ttl = expireat-mstime();
+            ttl = expireat-arc_mstime();
             if (ttl < 1) ttl = 1;
         }
         serverAssertWithInfo(c,NULL,rioWriteBulkCount(&cmd,'*',replace ? 5 : 4));
