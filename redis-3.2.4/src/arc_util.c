@@ -576,4 +576,5 @@ arcx_dumpscan_finish (dumpScan * ds, int will_need)
 
   return 0;
 }
+
 #endif

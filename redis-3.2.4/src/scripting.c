@@ -1610,6 +1610,9 @@ int ldbStartSession(client *c) {
              * socket to make sure if the parent crashes a reset is sent
              * to the clients. */
             serverLog(LL_WARNING,"Redis forked for debugging eval");
+#ifdef NBASE_ARC
+            arc_disable_bgdel();
+#endif
             closeListeningSockets(0);
         } else {
             /* Parent */

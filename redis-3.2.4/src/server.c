@@ -1595,6 +1595,9 @@ void initServerConfig(void) {
     server.commands = dictCreate(&commandTableDictType,NULL);
     server.orig_commands = dictCreate(&commandTableDictType,NULL);
     populateCommandTable();
+#ifdef NBASE_ARC
+    arc_amend_command_table();
+#endif
     server.delCommand = lookupCommandByCString("del");
     server.multiCommand = lookupCommandByCString("multi");
     server.lpushCommand = lookupCommandByCString("lpush");
@@ -2353,6 +2356,9 @@ void call(client *c, int flags) {
         redisOpArrayFree(&server.also_propagate);
     }
     server.stat_numcommands++;
+#ifdef NBASE_ARC
+    arc_at_call_done(c);
+#endif
 }
 
 /* If this function gets called we already read a whole
@@ -2373,6 +2379,9 @@ int processCommand(client *c) {
         c->flags |= CLIENT_CLOSE_AFTER_REPLY;
         return C_ERR;
     }
+#ifdef NBASE_ARC
+    if (arc_handle_command_rewrite(c) == 1) return C_OK;
+#endif
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth. */
@@ -3104,6 +3113,9 @@ sds genRedisInfoString(char *section) {
             "total_connections_received:%lld\r\n"
             "total_commands_processed:%lld\r\n"
             "instantaneous_ops_per_sec:%lld\r\n"
+#ifdef NBASE_ARC
+            ARC_INFO_STATS_FMT
+#endif
             "total_net_input_bytes:%lld\r\n"
             "total_net_output_bytes:%lld\r\n"
             "instantaneous_input_kbps:%.2f\r\n"
@@ -3123,6 +3135,9 @@ sds genRedisInfoString(char *section) {
             server.stat_numconnections,
             server.stat_numcommands,
             getInstantaneousMetric(STATS_METRIC_COMMAND),
+#ifdef NBASE_ARC
+            ARC_INFO_STATS_ARG      
+#endif
             server.stat_net_input_bytes,
             server.stat_net_output_bytes,
             (float)getInstantaneousMetric(STATS_METRIC_NET_INPUT)/1024,
@@ -3956,6 +3971,10 @@ int redisIsSupervised(int mode) {
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
+
+#ifdef NBASE_ARC
+    arc_init_bgdel ();
+#endif
 
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {

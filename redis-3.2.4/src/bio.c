@@ -123,6 +123,21 @@ void bioInit(void) {
     }
 }
 
+#ifdef NBASE_ARC
+// this function is here due to its implementation relies on local definitions
+void arc_create_bgdel_job(int type, void *arg1, long deltype) {
+    struct bio_job *job = zmalloc(sizeof(*job));
+
+    job->arg1 = arg1;
+    job->arg2 = (void *)deltype;
+    pthread_mutex_lock(&bio_mutex[type]);
+    listAddNodeTail(bio_jobs[type],job);
+    bio_pending[type]++;
+    pthread_cond_signal(&bio_condvar[type]);
+    pthread_mutex_unlock(&bio_mutex[type]);
+}
+#endif
+
 void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     struct bio_job *job = zmalloc(sizeof(*job));
 
@@ -148,6 +163,9 @@ void *bioProcessBackgroundJobs(void *arg) {
             "Warning: bio thread started with wrong type %lu",type);
         return NULL;
     }
+#ifdef NBASE_ARC
+    if (type == BIO_BGDEL) arc_enable_bgdel();
+#endif
 
     /* Make the thread killable at any time, so that bioKillThreads()
      * can work reliably. */
@@ -183,6 +201,10 @@ void *bioProcessBackgroundJobs(void *arg) {
             close((long)job->arg1);
         } else if (type == BIO_AOF_FSYNC) {
             aof_fsync((long)job->arg1);
+#ifdef NBASE_ARC
+        } else if (type == BIO_BGDEL) {
+            arc_bgdel(job->arg1, job->arg2);
+#endif
         } else {
             serverPanic("Wrong job type in bioProcessBackgroundJobs().");
         }

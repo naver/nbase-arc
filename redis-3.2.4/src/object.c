@@ -294,6 +294,15 @@ void freeHashObject(robj *o) {
     }
 }
 
+#ifdef NBASE_ARC
+void incrRefCount(robj *o) {
+    arc_incr_ref_count(o);
+}
+
+void decrRefCount(robj *o) {
+    arc_decr_ref_count(o);
+}
+#else
 void incrRefCount(robj *o) {
     o->refcount++;
 }
@@ -307,9 +316,6 @@ void decrRefCount(robj *o) {
         case OBJ_SET: freeSetObject(o); break;
         case OBJ_ZSET: freeZsetObject(o); break;
         case OBJ_HASH: freeHashObject(o); break;
-#ifdef NBASE_ARC
-        case OBJ_SSS: arc_free_sss_object(o); break;
-#endif
         default: serverPanic("Unknown object type"); break;
         }
         zfree(o);
@@ -317,6 +323,7 @@ void decrRefCount(robj *o) {
         o->refcount--;
     }
 }
+#endif
 
 /* This variant of decrRefCount() gets its argument as void, and is useful
  * as free method in data structures that expect a 'void free_object(void*)'

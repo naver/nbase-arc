@@ -951,6 +951,9 @@ int rdbSaveBackground(char *filename) {
         int retval;
 
         /* Child */
+#ifdef NBASE_ARC
+        arc_disable_bgdel();
+#endif
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-bgsave");
         retval = rdbSave(filename);
@@ -1668,6 +1671,9 @@ int rdbSaveToSlavesSockets(void) {
         int retval;
         rio slave_sockets;
 
+#ifdef NBASE_ARC
+        arc_disable_bgdel();
+#endif
         rioInitWithFdset(&slave_sockets,fds,numfds);
         zfree(fds);
 

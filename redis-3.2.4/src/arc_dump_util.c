@@ -755,7 +755,7 @@ bulk_object_peek (robj * o, char *buf, int bufsz, char **rp, int *rsz)
   else if (sdsEncodedObject (o))
     {
       p = o->ptr;
-      sz = sdslen(o->ptr);
+      sz = sdslen (o->ptr);
     }
   else
     {

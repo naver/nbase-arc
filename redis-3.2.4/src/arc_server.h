@@ -7,6 +7,7 @@
 /* Redis header extension */
 /* ---------------------- */
 /* server.h */
+//      CMD_FAST                    8192
 #define CMD_NOCLUSTER               16384
 //      OBJ_HASH                    4
 #define OBJ_SSS                     5
@@ -108,6 +109,8 @@ struct arcServer
   long long stat_numcommands_replied;	/* Number of processed commands with reply */
   long long stat_numcommands_lcon;	/* Number of processed commands from local connection */
   long long stat_bgdel_keys;	/* Number of keys deleted by background thread */
+  int ops_sec_idx;
+  long long ops_sec_last_sample_time;	/* last sample time */
   long long replied_ops_sec_last_sample_ops;	/* numcommands in last sample */
   long long replied_ops_sec_samples[STATS_METRIC_SAMPLES];
   long long lcon_ops_sec_last_sample_ops;	/* numcommands in last sample */
@@ -311,6 +314,21 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     {"bping",bpingCommand,1,"r",0,NULL,0,0,0,0,0},                    \
     {"quit",quitCommand,1,"r",0,NULL,0,0,0,0,0}                       \
 
+#define ARC_INFO_STATS_FMT                                            \
+    "total_commands_replied:%lld\r\n"                                 \
+    "instantaneous_replied_ops_per_sec:%lld\r\n"                      \
+    "total_commands_lcon:%lld\r\n"                                    \
+    "instantaneous_lcon_ops_per_sec:%lld\r\n"                         \
+    "background_deleted_keys:%lld\r\n"
+
+#define ARC_INFO_STATS_ARG                                            \
+    arc.stat_numcommands_replied,                                     \
+    arc_get_instantaneous_metric(arc.replied_ops_sec_samples),        \
+    arc.stat_numcommands_lcon,                                        \
+    arc_get_instantaneous_metric(arc.lcon_ops_sec_samples),           \
+    arc.stat_bgdel_keys,
+
+extern void arc_amend_command_table (void);
 extern void arc_init_config (void);
 extern void arc_tool_hook (int argc, char **argv);
 extern void arc_init_arc (void);
@@ -319,6 +337,9 @@ extern void arc_main_hook (int argc, char **argv);
 extern int arc_server_cron (void);
 extern int arc_expire_haveto_skip (sds key);
 extern mstime_t arc_mstime (void);
+extern long long arc_get_instantaneous_metric (long long *samples);
+// return 1 if handled, 0 otherwise
+extern int arc_handle_command_rewrite (client * c);
 
 /* arc_networking.c */
 extern void arc_smrc_create (client * c);
@@ -326,6 +347,7 @@ extern void arc_smrc_free (client * c);
 extern void arc_smrc_accept_bh (client * c);
 extern void arc_smrc_set_protocol_error (client * c);
 extern void arc_smrc_try_process (client * c);
+extern void arc_at_call_done (client * c);
 
 /* arc_sss.c */
 extern int arc_rewrite_sss_object (rio * r, robj * key, robj * o);
@@ -346,6 +368,19 @@ extern int arc_rdb_save_skip (sds keystr);
 extern int arc_rdb_save_aux_fields (rio * rdb);
 extern int arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval,
 					 long long *now);
+
+/* bio.c */
+#define BIO_BGDEL_ROBJ      0
+#define BIO_BGDEL_S3ENTRY   1
+void arc_create_bgdel_job (int type, void *arg1, long deltype);
+
+/* arc_bio.c */
+extern void arc_disable_bgdel (void);
+extern void arc_enable_bgdel (void);
+extern void arc_init_bgdel (void);
+extern void arc_incr_ref_count (robj * o);
+extern void arc_decr_ref_count (robj * o);
+extern void arc_bgdel (void *arg1, void *arg2);
 
 /* ------------------------- */
 /* Redis commands extensions */
@@ -399,10 +434,10 @@ extern void s3mremCommand (client * c);
 extern void s3gcCommand (client * c);
 
 /* arc_checkpoint.c */
-void checkpointCommand (client * c);
-void migstartCommand (client * c);
-void migendCommand (client * c);
-void migconfCommand (client * c);
-void migpexpireatCommand (client * c);
+extern void checkpointCommand (client * c);
+extern void migstartCommand (client * c);
+extern void migendCommand (client * c);
+extern void migconfCommand (client * c);
+extern void migpexpireatCommand (client * c);
 
 #endif

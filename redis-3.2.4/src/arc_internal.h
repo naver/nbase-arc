@@ -163,4 +163,7 @@ extern int arcx_dump_util_main (int argc, char **argv);
 /* arc_server.c */
 extern void arcx_init_server_pre (void);
 
+/* arc_bio.c */
+extern int arcx_can_bgdel (void);
+
 #endif

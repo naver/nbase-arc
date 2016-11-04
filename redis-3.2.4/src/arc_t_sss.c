@@ -59,7 +59,7 @@ struct rbContext_
 struct sss
 {
   dlisth head;			/* must be the first member (gc link header) */
-  robj *key;			/* key of s3 object in redis DB */
+  sds key;			/* key of s3 object in redis DB */
   rb_tree_t tree;		/* red-black tree that contains sssEntry */
   int val_count;		/* value count */
   long long index;		/* index for list semantic key/value mapping */
@@ -349,8 +349,7 @@ sss_new (robj * key)
   idx = dictGenHashFunction (key->ptr, sdslen (key->ptr)) % arc.gc_num_line;
   dlisth_init (&s3->head);
   dlisth_insert_after (&s3->head, &arc.gc_line[idx]);
-  incrRefCount (key);
-  s3->key = key;
+  s3->key = sdsdup (key->ptr);
   rb_tree_init (&s3->tree, &s_Ops);
   s3->val_count = 0;
   s3->index = 0LL;
@@ -541,21 +540,15 @@ link_entry (sssEntry * e, sssEntry ** h, int *count)
 static void
 del_link_wrt_count (sssEntry * h, int count)
 {
-#if 0				/* P3 */
   int th = arc.object_bio_delete_min_elems;
-  if (canBackgroundDelete () && (th > 0 && count >= th))
+  if (arcx_can_bgdel () && (th > 0 && count >= th))
     {
-      bioCreateBackgroundDeleteJob (REDIS_BIO_OBJ_DESTRUCT, h,
-				    REDIS_BIO_BGDEL_S3ENTRY);
+      arc_create_bgdel_job (BIO_BGDEL, h, BIO_BGDEL_S3ENTRY);
     }
   else
     {
       del_link (h);
     }
-#else
-  UNUSED (count);
-  del_link (h);
-#endif
 }
 
 static void
@@ -2384,8 +2377,7 @@ purge_objects (dlisth * head, sssObc * obc, long long timeout,
       if (arc.migrate_slot)
 	{
 	  int hashsize = ARC_KS_SIZE;
-	  int keyhash =
-	    crc16 (s3->key->ptr, sdslen (s3->key->ptr)) % hashsize;
+	  int keyhash = crc16 (s3->key, sdslen (s3->key)) % hashsize;
 	  if (bitmapTestBit ((unsigned char *) arc.migrate_slot, keyhash))
 	    {
 	      /* Skipping keys on migration */
@@ -2424,7 +2416,7 @@ purge_objects (dlisth * head, sssObc * obc, long long timeout,
 	{
 	  robj key;
 	  h = h->prev;
-	  initStaticStringObject (key, s3->key->ptr);
+	  initStaticStringObject (key, s3->key);
 	  dbDelete (&server.db[ARC_CLUSTER_DB], &key);
 	}
 
@@ -2468,7 +2460,7 @@ arcx_sss_release (sss * s)
   sssEntry *e;
 
   dlisth_delete (&s->head);
-  decrRefCount (s->key);
+  sdsfree (s->key);
 
   /* For each (left -> right) */
   e = rb_tree_iterate (&s->tree, NULL, RB_DIR_LEFT);
@@ -2648,8 +2640,8 @@ arcx_sss_gc_cron (void)
       s3 = (sss *) tmp;
       dlisth_delete (tmp);
       idx =
-	dictGenHashFunction ((sds) s3->key->ptr,
-			     sdslen ((sds) s3->key->ptr)) % arc.gc_num_line;
+	dictGenHashFunction ((sds) s3->key,
+			     sdslen ((sds) s3->key)) % arc.gc_num_line;
       dlisth_insert_after (&s3->head, &arc.gc_line[idx]);
     }
 

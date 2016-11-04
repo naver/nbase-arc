@@ -38,6 +38,7 @@ static int smrcb_noti_ready (void *arg);
 
 /* main */
 static void redis_arc_main (int arc, char **argv);
+static void trac_ops (void);
 static void try_cronsave (void);
 static void try_seqsave (void);
 static void check_memory_hard_limit (unsigned long used_kb);
@@ -163,6 +164,8 @@ init_config (void)
   arc.stat_numcommands_replied = 0LL;
   arc.stat_numcommands_lcon = 0LL;
   arc.stat_bgdel_keys = 0LL;
+  arc.ops_sec_idx = 0;
+  arc.ops_sec_last_sample_time = 0LL;
   arc.replied_ops_sec_last_sample_ops = 0LL;
   for (i = 0; i < STATS_METRIC_SAMPLES; i++)
     {
@@ -770,6 +773,27 @@ redis_arc_main (int argc, char **argv)
 }
 
 static void
+trac_ops (void)
+{
+  long long t = mstime () - arc.ops_sec_last_sample_time;
+  long long ops, ops_sec;
+
+  /* Stat of operations of actual client except commands from replicated log */
+  ops = arc.stat_numcommands_replied - arc.replied_ops_sec_last_sample_ops;
+  ops_sec = t > 0 ? (ops * 1000 / t) : 0;
+  arc.replied_ops_sec_samples[arc.ops_sec_idx] = ops_sec;
+  arc.replied_ops_sec_last_sample_ops = arc.stat_numcommands_replied;
+
+  /* Stat of operations from local connection */
+  ops = arc.stat_numcommands_lcon - arc.lcon_ops_sec_last_sample_ops;
+  ops_sec = t > 0 ? (ops * 1000 / t) : 0;
+  arc.lcon_ops_sec_samples[arc.ops_sec_idx] = ops_sec;
+  arc.lcon_ops_sec_last_sample_ops = arc.stat_numcommands_lcon;
+
+  arc.ops_sec_idx = (arc.ops_sec_idx + 1) % STATS_METRIC_SAMPLES;
+}
+
+static void
 try_cronsave (void)
 {
   struct tm cur, last;
@@ -931,6 +955,23 @@ arcx_init_server_pre (void)
 /* Exported arc function */
 /* --------------------- */
 
+// following commands are not permitted when arc.cluster_mode = 1
+static const char *non_cluster_commands[] =
+  { "brpop", "brpoplpush", "blpop", "debug", "eval", "evalsha", NULL };
+
+void
+arc_amend_command_table (void)
+{
+  int i = 0;
+  char *name;
+
+  while ((name = (char *) non_cluster_commands[i++]) != NULL)
+    {
+      struct redisCommand *cmd = lookupCommandByCString (name);
+      cmd->flags |= CMD_NOCLUSTER;
+    }
+}
+
 void
 arc_tool_hook (int argc, char **argv)
 {
@@ -986,6 +1027,11 @@ arc_server_cron (void)
     arcx_sss_garbage_collect (0);
   }
 
+  run_with_period (100)
+  {
+    trac_ops ();
+  }
+
   run_with_period (1000)
   {
     if (arc.cluster_mode && server.rdb_child_pid != -1)
@@ -1031,4 +1077,34 @@ arc_mstime (void)
     }
   return mstime ();
 }
+
+long long
+arc_get_instantaneous_metric (long long *samples)
+{
+  int j;
+  long long sum = 0;
+
+  for (j = 0; j < STATS_METRIC_SAMPLES; j++)
+    {
+      sum += samples[j];
+    }
+  return sum / STATS_METRIC_SAMPLES;
+}
+
+int
+arc_handle_command_rewrite (client * c)
+{
+  // When a request must be rejected by some reason such as oom handling or not-supported,
+  // we rewrite the request with fake command (addreply_through_smr) and the error reason.
+  // This modification is required to make the response in order w.r.t. replication stream
+  // which contains the pipelined request.
+  if (c->argv[0] == shared.addreply_through_smr)
+    {
+      serverAssert (c->argc == 2);
+      addReply (c, c->argv[1]);
+      return 1;
+    }
+  return 0;
+}
+
 #endif

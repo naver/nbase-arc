@@ -706,6 +706,19 @@ arc_smrc_try_process (client * c)
     }
 }
 
+void
+arc_at_call_done (client * c)
+{
+  if (c->fd != -1)
+    {
+      arc.stat_numcommands_replied++;
+    }
+  if (c->flags & CLIENT_LOCAL_CONN)
+    {
+      arc.stat_numcommands_lcon++;
+    }
+}
+
 /* ----------------------- */
 /* Exported Redis commands */
 /* ----------------------- */

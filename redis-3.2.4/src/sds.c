@@ -535,6 +535,23 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
     return t;
 }
 
+#ifdef NBASE_ARC
+sds sdscatvprintf2 (sds s, const char *fmt, va_list ap)
+{
+  va_list cpy;
+  int len;
+
+  va_copy (cpy, ap);
+  len = vsnprintf (NULL, 0, fmt, cpy);
+  s = sdsMakeRoomFor (s, sdslen (s) + len);
+  if (s == NULL) return NULL;
+  va_copy (cpy, ap);
+  vsnprintf (s + sdslen (s), len + 1, fmt, cpy);
+  sdsIncrLen (s, len);
+  return s;
+}
+#endif
+
 /* Append to the sds string 's' a string obtained using printf-alike format
  * specifier.
  *
@@ -555,7 +572,11 @@ sds sdscatprintf(sds s, const char *fmt, ...) {
     va_list ap;
     char *t;
     va_start(ap, fmt);
+#ifdef NBASE_ARC
+    t = sdscatvprintf2(s,fmt,ap);
+#else
     t = sdscatvprintf(s,fmt,ap);
+#endif
     va_end(ap);
     return t;
 }
