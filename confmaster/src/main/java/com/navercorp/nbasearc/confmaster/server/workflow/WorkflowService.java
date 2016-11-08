@@ -16,9 +16,9 @@
 
 package com.navercorp.nbasearc.confmaster.server.workflow;
 
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
 import static com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState.ElectionState.*;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.READ;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.WRITE;
 import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 
@@ -41,19 +41,17 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperExcept
 import com.navercorp.nbasearc.confmaster.heartbeat.HBResult;
 import com.navercorp.nbasearc.confmaster.logger.EpochMsgDecorator;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockCluster;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockPGSList;
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.NodeType;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.mapping.ParamClusterHint;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockCluster;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockPGSList;
+import com.navercorp.nbasearc.confmaster.server.mapping.ClusterHint;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.WorkflowMapping;
 
@@ -66,14 +64,9 @@ public class WorkflowService {
     @Autowired
     private ThreadPool executor;
     
-    @Autowired
-    private PartitionGroupServerImo pgsImo;
-    @Autowired
-    private ClusterImo clusterImo;
-    
     @WorkflowMapping(name=COMMON_STATE_DECISION, privilege=LEADER,
             requiredMode=CLUSTER_ON)
-    public JobResult failoverCommon(@ParamClusterHint HeartbeatTarget target)
+    public JobResult failoverCommon(@ClusterHint HeartbeatTarget target)
             throws NoNodeException, MgmtZooKeeperException,
             MgmtZNodeDoesNotExistException, MgmtZNodeAlreayExistsException {
         CommonStateDecisionWorkflow failoverCommandWorkflow = 
@@ -112,7 +105,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name=PGS_STATE_DECISION, privilege=LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> failoverPgs(@ParamClusterHint PartitionGroupServer target)
+    public Future<JobResult> failoverPgs(@ClusterHint PartitionGroupServer target)
             throws NoNodeException, MgmtZooKeeperException,
             IOException, BeansException, MgmtDuplicatedReservedCallException {
         PGSStateDecisionWorkflow failoverPGSWorkflow = 
@@ -135,7 +128,7 @@ public class WorkflowService {
         case PGS:
             HierarchicalLockPGSList pgListLock = 
                 lockHelper.root(READ).cluster(READ, clusterName).pgList(READ).pgsList(READ);
-            pgListLock.pg(WRITE, String.valueOf(target.getData().getPgId()))
+            pgListLock.pg(WRITE, String.valueOf(target.getPgId()))
                     .pgs(WRITE, Constant.ALL_IN_PG).gwList(READ);
             break;
             
@@ -147,7 +140,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name = BLUE_JOIN, privilege = LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> blueJoin(@ParamClusterHint PartitionGroup pg,
+    public Future<JobResult> blueJoin(@ClusterHint PartitionGroup pg,
             long epoch, ApplicationContext context) throws Exception {
         BlueJoinWorkflow wf = new BlueJoinWorkflow(pg, true, context);
         checkEpochAndExecute(wf, epoch, pg.getLastWfEpoch());
@@ -168,7 +161,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name = MASTER_ELECTION, privilege = LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> masterElection(@ParamClusterHint PartitionGroup pg,
+    public Future<JobResult> masterElection(@ClusterHint PartitionGroup pg,
             List<PartitionGroupServer> masterHints, long epoch,
             ApplicationContext context) throws Exception {
         MasterElectionWorkflow wf = new MasterElectionWorkflow(pg, masterHints,
@@ -191,7 +184,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name = MEMBERSHIP_GRANT, privilege = LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> membershipGrant(@ParamClusterHint PartitionGroup pg,
+    public Future<JobResult> membershipGrant(@ClusterHint PartitionGroup pg,
             long epoch, ApplicationContext context) throws Exception {
         MembershipGrantWorkflow wf = new MembershipGrantWorkflow(pg, true,
                 context);
@@ -211,7 +204,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name = ROLE_ADJUSTMENT, privilege = LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> roleAdjustment(@ParamClusterHint PartitionGroup pg,
+    public Future<JobResult> roleAdjustment(@ClusterHint PartitionGroup pg,
             long epoch, ApplicationContext context) throws Exception {
         RoleAdjustmentWorkflow wf = new RoleAdjustmentWorkflow(pg, true, context);
         checkEpochAndExecute(wf, epoch, pg.getLastWfEpoch());
@@ -233,7 +226,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name = QUORUM_ADJUSTMENT, privilege = LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> quorumAdjustment(@ParamClusterHint PartitionGroup pg,
+    public Future<JobResult> quorumAdjustment(@ClusterHint PartitionGroup pg,
             long epoch, ApplicationContext context) throws Exception {
         QuorumAdjustmentWorkflow wf = new QuorumAdjustmentWorkflow(pg, true,
                 context);
@@ -254,7 +247,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name = YELLOW_JOIN, privilege = LEADER,
             requiredMode=CLUSTER_ON)
-    public Future<JobResult> yellowJoin(@ParamClusterHint PartitionGroup pg, long epoch,
+    public Future<JobResult> yellowJoin(@ClusterHint PartitionGroup pg, long epoch,
             ApplicationContext context) throws Exception {
         YellowJoinWorkflow wf = new YellowJoinWorkflow(pg, true, context);
         checkEpochAndExecute(wf, epoch, pg.getLastWfEpoch());
@@ -275,7 +268,7 @@ public class WorkflowService {
     
     @WorkflowMapping(name=OPINION_DISCARD, privilege=FOLLOWER,
             requiredMode=CLUSTER_ON|CLUSTER_OFF)
-    public JobResult discardOpinion(@ParamClusterHint HeartbeatTarget target)
+    public JobResult discardOpinion(@ClusterHint HeartbeatTarget target)
             throws MgmtZooKeeperException {
         OpinionDiscardWorkflow opinionDiscardWorkflow = 
                 new OpinionDiscardWorkflow(target, context);
@@ -321,7 +314,7 @@ public class WorkflowService {
 
     @WorkflowMapping(name=OPINION_PUBLISH, privilege=FOLLOWER,
             requiredMode=CLUSTER_ON)
-    public JobResult publishOpinion(@ParamClusterHint HBResult result)
+    public JobResult publishOpinion(@ClusterHint HBResult result)
             throws NodeExistsException, MgmtZooKeeperException {
         OpinionPublishWorkflow opinionPublishWorkflow = 
                 new OpinionPublishWorkflow(result, context);

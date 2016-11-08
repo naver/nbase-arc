@@ -33,28 +33,17 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumExcept
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
 public class MembershipGrantWorkflow extends CascadingWorkflow {
     final ApplicationContext context;
     final Config config;
     final WorkflowExecutor wfExecutor;
-    final ZooKeeperHolder zookeeper;
-    final PartitionGroupServerDao pgsDao;
-    final PartitionGroupServerImo pgsImo;
-    final PartitionGroupDao pgDao;
-    final PartitionGroupImo pgImo;
-    final RedisServerImo rsImo;
+    final ZooKeeperHolder zk;
     
     final MGSetquorum setquorum;
 
@@ -62,17 +51,12 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
 
     public MembershipGrantWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg, context.getBean(PartitionGroupImo.class));
+        super(cascading, pg, context.getBean(ClusterComponentContainer.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
-        this.zookeeper = context.getBean(ZooKeeperHolder.class);
-        this.pgsDao = context.getBean(PartitionGroupServerDao.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
-        this.pgDao = context.getBean(PartitionGroupDao.class);
-        this.pgImo = context.getBean(PartitionGroupImo.class);
-        this.rsImo = context.getBean(RedisServerImo.class);
+        this.zk = context.getBean(ZooKeeperHolder.class);
         
         this.setquorum = context.getBean(MGSetquorum.class);
     }
@@ -81,18 +65,17 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
     protected void _execute() throws MgmtSmrCommandException,
             MgmtZooKeeperException, MgmtSetquorumException {
         joinedPgsList = pg
-                .getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
-                        Integer.valueOf(pg.getName())));
+                .getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
         
         final Map<String, RedisServer> rsMap = new HashMap<String, RedisServer>();
-        for (RedisServer rs : rsImo.getList(pg.getClusterName())) {
+        for (RedisServer rs : container.getRsList(pg.getClusterName())) {
             rsMap.put(rs.getName(), rs);
         }
         final PartitionGroupServer master = pg.getMaster(joinedPgsList);
 
         for (PartitionGroupServer pgs : joinedPgsList) {
-            final String role = pgs.getData().getRole();
-            final Color color = pgs.getData().getColor();
+            final String role = pgs.getRole();
+            final Color color = pgs.getColor();
 
             if (role != PGS_ROLE_SLAVE || color != YELLOW) {
                 continue;
@@ -108,7 +91,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
                 continue;
             }
 
-            final int q = pg.getData().getQuorum();
+            final int q = pg.getQuorum();
             final int d = pg.getD(joinedPgsList);
 
             final int curQ = q - d;
@@ -129,12 +112,12 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
             }
 
             Logger.info("{} {}->{} {}->{} {}->{}", new Object[] { pgs,
-                    pgs.getData().getRole(), pgs.getData().getRole(),
-                    pgs.getData().getColor(), GREEN, curQ, newQ });
-            PartitionGroupServerData pgsM = PartitionGroupServerData.builder()
-                    .from(pgs.getData()).withColor(GREEN).build();
-            pgsDao.updatePgs(pgs.getPath(), pgsM);
-            pgs.setData(pgsM);
+                    pgs.getRole(), pgs.getRole(),
+                    pgs.getColor(), GREEN, curQ, newQ });
+            PartitionGroupServer.PartitionGroupServerData pgsM = pgs.clonePersistentData();
+            pgsM.color = GREEN;
+            zk.setData(pgs.getPath(), pgsM.toBytes(), -1);
+            pgs.setPersistentData(pgsM);
         }
     }
 
@@ -142,7 +125,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
     protected void onSuccess() throws Exception {
         int numGreen = 0;
         for (PartitionGroupServer pgs : joinedPgsList) {
-            if (pgs.getData().getColor() == GREEN) {
+            if (pgs.getColor() == GREEN) {
                 numGreen++;
             }
         }
@@ -151,7 +134,7 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
             Logger.info(
                     "retry to reconfig {}, copy: {}, joined: {}, green: {}",
                     new Object[] { pg, joinedPgsList.size(),
-                            pg.getData().getCopy(), numGreen });
+                            pg.getCopy(), numGreen });
             
             final long nextEpoch = pg.nextWfEpoch();
             Logger.info("next {}", nextEpoch);
@@ -177,10 +160,10 @@ public class MembershipGrantWorkflow extends CascadingWorkflow {
      */ 
     private void cleanMGen() throws MgmtZooKeeperException {
         try {
-            PartitionGroupData pgM = PartitionGroupData.builder().from(pg.getData())
-                    .cleanMGen(config.getClusterPgMgenHistorySize()).build();
-            pgDao.updatePg(pg.getPath(), pgM);
-            pg.setData(pgM);
+        	PartitionGroup.PartitionGroupData pgM = pg.clonePersistentData();
+            pgM.cleanMGen(config.getClusterPgMgenHistorySize());
+            zk.setData(pg.getPath(), pgM.toBytes(), -1);
+            pg.setPersistentData(pgM);
         } catch (Exception e) {
             throw new MgmtZooKeeperException(
                     "Clean mgen history of " + pg + " fail, "

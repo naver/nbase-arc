@@ -22,6 +22,7 @@ import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor
 import static org.apache.log4j.Level.INFO;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 
+import java.io.UnsupportedEncodingException;
 import java.util.List;
 
 import org.apache.zookeeper.KeeperException.NoNodeException;
@@ -31,30 +32,24 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 import com.navercorp.nbasearc.confmaster.ConfMaster;
+import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.FailureDetectorDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkNotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.znode.FailureDetectorData;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.FailureDetectorImo;
-import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineImo;
-import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
+import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachineCluster;
+import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param;
-import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerClusterRoot;
-import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerPmRoot;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 @Service
 public class ConfmasterService {
@@ -63,7 +58,7 @@ public class ConfmasterService {
     private ApplicationContext context;
     
     @Autowired
-    private ZooKeeperHolder zookeeper;
+    private ZooKeeperHolder zk;
     
     @Autowired
     private CommandExecutor commandTemplate;
@@ -71,28 +66,12 @@ public class ConfmasterService {
     private WorkflowExecutor wfExecutor;
 
     @Autowired
-    private ClusterImo clusterImo;
-    @Autowired
-    private PhysicalMachineImo pmImo;
-    @Autowired
-    private PartitionGroupImo pgImo;
-    @Autowired
-    private PartitionGroupServerImo pgsImo;
-    @Autowired
-    private RedisServerImo rsImo;
-    @Autowired
-    private GatewayImo gwImo;
-    @Autowired
-    private PhysicalMachineClusterImo clusterInPmImo;
-    @Autowired
-    private FailureDetectorImo fdImo;
+    private ClusterComponentContainer container;
 
     @Autowired
-    private FailureDetectorDao failureDetectorDao;
+    private GatewayLookup gwLookup;
     @Autowired
-    private ZkNotificationDao notificationDao;
-    @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
+    private WorkflowLogger workflowLogger;
     
     @Autowired
     private Config config;
@@ -100,8 +79,7 @@ public class ConfmasterService {
     @Autowired
     private ConfMaster confMaster;
 
-    private WatchEventHandlerClusterRoot watchClusterRoot = null;
-    private WatchEventHandlerPmRoot watchPmRoot = null;
+    private boolean clusterRootWatcherRegistered = false;
 
     @CommandMapping(
             name="help", 
@@ -170,94 +148,117 @@ public class ConfmasterService {
             NodeExistsException, NoNodeException {
         // Create default znode structure for ConfMaster.
         try {
-            zookeeper.createPersistentZNode(PathUtil.rcRootPath());
+            zk.createPersistentZNode(PathUtil.rcRootPath());
         } catch (NodeExistsException e) {
             // Ignore.
         }
         try {
-            zookeeper.createPersistentZNode(PathUtil.pmRootPath());
+            zk.createPersistentZNode(PathUtil.pmRootPath());
         } catch (NodeExistsException e) {
             // Ignore.
         }
         try {
-            zookeeper.createPersistentZNode(PathUtil.clusterRootPath());
+            zk.createPersistentZNode(PathUtil.clusterRootPath());
         } catch (NodeExistsException e) {
             // Ignore.
         }
         try {
-            zookeeper.createPersistentZNode(PathUtil.ccRootPath());
+            zk.createPersistentZNode(PathUtil.ccRootPath());
         } catch (NodeExistsException e) {
             // Ignore.
         }
         try {
-            zookeeper.createPersistentZNode(PathUtil.rootPathOfLE());
+            zk.createPersistentZNode(PathUtil.rootPathOfLE());
         } catch (NodeExistsException e) {
             // Ignore.
         }
 
         // Create failure detector znode in order to decide majority used on failover.
-        FailureDetectorData fdd = new FailureDetectorData();
         try {
-            failureDetectorDao.createFd(fdd);
+            zk.createPersistentZNode(PathUtil.fdRootPath(), Constant.ZERO_BYTE);
         } catch (NodeExistsException e) {
             // Ignore.
         }
 
         String heartbeaterPath = 
             PathUtil.fdRootPath() + "/" + config.getIp() + ":" + config.getPort();
-        zookeeper.createEphemeralZNode(heartbeaterPath);
+        zk.createEphemeralZNode(heartbeaterPath);
 
-        // Initialize dao.
-        notificationDao.initialize();
-        workflowLogDao.initialize();        
+        gwLookup.initialize();
+        workflowLogger.initialize();        
     }
     
     public void release() {
-        clusterImo.relase();
-        pmImo.relase();
-        pgImo.relase();
-        pgsImo.relase();
-        rsImo.relase();
-        gwImo.relase();
-        clusterInPmImo.relase();
+        container.relase();
     }
 
     public void loadAll() throws MgmtZooKeeperException, NoNodeException {
         // Load physical machines.
-        List<String> pmList = zookeeper.getChildren(PathUtil.pmRootPath());
+        List<String> pmList = zk.getChildren(PathUtil.pmRootPath());
         for (String pmName : pmList) {
-            pmImo.load(pmName);
+            final String path = PathUtil.pmPath(pmName);
+            byte []d = zk.getData(path, null);
+            PhysicalMachine pm = (PhysicalMachine) container.get(path); 
+            if (pm != null) {
+                pm.setPersistentData(d);
+            } else {
+                pm = new PhysicalMachine(d, pmName);
+                container.put(pm.getPath(), pm);
+            }
             
-            // Load cluster information in this physical machine.
-            List<String> clusterInThisPM = 
-                    zookeeper.getChildren(PathUtil.pmClusterRootPath(pmName));
-            for (String clusterName : clusterInThisPM) {
-                clusterInPmImo.load(clusterName, pmName);
+            if (LeaderState.isLeader()) {
+                List<String> pmClusterList = zk.getChildren(path, null);
+                for (String pmClusterName : pmClusterList) {
+                    PhysicalMachineCluster pmCluster = new PhysicalMachineCluster(
+                    		zk.getData(PathUtil.pmClusterPath(pmClusterName, pmName), null), 
+                    		pmClusterName, pmName);
+                    container.put(pmCluster.getPath(), pmCluster);
+                }
             }
         }
-
-        // Load failure detector information
-        fdImo.load();
+        
+        // Register failure detector watch
+        String path = PathUtil.fdRootPath();
+        zk.registerChildEventWatcher(path);
         
         // Register watcher to the root of cluster.
-        if (null == watchClusterRoot) {
-            watchClusterRoot = new WatchEventHandlerClusterRoot(context);
-            watchClusterRoot.registerBoth(PathUtil.clusterRootPath());
+        if (clusterRootWatcherRegistered == false) {
+            zk.registerChangedEventWatcher(PathUtil.clusterRootPath());
+            zk.registerChildEventWatcher(PathUtil.clusterRootPath());
+            clusterRootWatcherRegistered = true;
         }
 
-        // Register watcher to the root of physical machine.
-        if (null == watchPmRoot) {
-            watchPmRoot = new WatchEventHandlerPmRoot(context);
-            watchPmRoot.registerBoth(PathUtil.pmRootPath());
-        }
-        
         // Load clusters
-        List<String> children = zookeeper.getChildren(PathUtil.clusterRootPath());
+        List<String> children = zk.getChildren(PathUtil.clusterRootPath());
         for (String clusterName : children) {
-            clusterImo.load(clusterName);
+        	Cluster.loadClusterFromZooKeeper(context, clusterName);
             Logger.info("Load cluster success. {}", clusterName);
             Logger.flush(INFO);
         }
     }
-    
+
+    /*
+     * @date 20140812
+     * @version 1.2 ~ 1.3
+     * @desc Gateway Affinity 적용을 위해 주키퍼의 znode 구조에 변경이 생겼다. 기존 버전에는 이 노드가 없으니까 만들어주자. 
+     */
+    public void updateZNodeDirectoryStructure()
+            throws NodeExistsException, MgmtZooKeeperException {
+        List<Cluster> clusterList = container.getAllCluster();
+        for (Cluster cluster : clusterList) {
+            String affinityPath = PathUtil.pathOfGwAffinity(cluster.getName());
+            if (zk.isExists(affinityPath)) {
+                return;
+            }
+
+            String gatewayAffinity = cluster.getGatewayAffinity(context);
+
+            try {
+                zk.createPersistentZNode(affinityPath,
+                        gatewayAffinity.getBytes(config.getCharset()));
+            } catch (UnsupportedEncodingException e) {
+                throw new AssertionError(config.getCharset() + " is unkown.");
+            }
+        }
+    }
 }

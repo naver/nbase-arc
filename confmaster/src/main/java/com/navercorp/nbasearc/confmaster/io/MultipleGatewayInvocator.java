@@ -117,8 +117,8 @@ public class MultipleGatewayInvocator {
             reply.append(
                 String.format(
                     "[id:%s, state:%s, ip:%s, port:%d], ", 
-                    gw.getName(), gw.getData().getState(), 
-                    gw.getData().getPmIp(), gw.getData().getPort()));
+                    gw.getName(), gw.getState(), 
+                    gw.getPmIp(), gw.getPort()));
         }
         
         reply.delete(reply.length() - 2, reply.length());

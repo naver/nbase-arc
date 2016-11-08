@@ -30,13 +30,13 @@ import org.springframework.context.ApplicationContext;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.EventSelector;
 import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
-import com.navercorp.nbasearc.confmaster.repository.znode.RedisServerData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer.RedisServerData;
 import com.navercorp.nbasearc.confmaster.server.command.CommandExecutor;
 
 public class PGSJoinLeaveSetting {
@@ -56,17 +56,15 @@ public class PGSJoinLeaveSetting {
         MockitoAnnotations.initMocks(this);
     }
 
-    public void pgsJoin(PartitionGroupServer pgs, RedisServer rs, PGSComponentMock mock) throws Exception {
+    public void pgsJoin(PartitionGroupServer pgs, RedisServer rs, ClusterComponentMock mock) throws Exception {
         MultipleGatewayInvocator broadcast = spy(new MultipleGatewayInvocator());
         
         // Prepare expected data
-        PartitionGroupServerData pgsModified = 
-                PartitionGroupServerData.builder().from(pgs.getData())
-                    .withHb(HB_MONITOR_YES).build();
+        PartitionGroupServerData pgsModified = pgs.clonePersistentData();
+        pgsModified.hb = HB_MONITOR_YES;
 
-        RedisServerData rsModified = 
-            RedisServerData.builder().from(rs.getData())
-                .withHb(HB_MONITOR_YES).build();
+        RedisServerData rsModified = rs.clonePersistentData();
+        rsModified.hb = HB_MONITOR_YES;
         
         // Replace methods with mocks
         when(broadcast.request(anyString(), anyListOf(Gateway.class), anyString(), anyString(), (ThreadPool)anyObject())).thenReturn(null);
@@ -76,17 +74,12 @@ public class PGSJoinLeaveSetting {
         JobResult jobResult = future.get();
         assertEquals(S2C_OK, jobResult.getMessages().get(0));
         
-        assertEquals(pgs.getData(), pgsModified);
-        assertEquals(rs.getData(), rsModified);
-        
-        if (mock != null) {
-            verify(mock.getPgsHbcSession(), timeout(atoSec * 1000).times(1)).start();
-            verify(mock.getRsHbcSession(), timeout(atoSec * 1000).times(1)).start();
-        }
+        assertEquals(pgs.clonePersistentData(), pgsModified);
+        assertEquals(rs.clonePersistentData(), rsModified);
     }
     
     public void pgsLeave(PartitionGroupServer pgs, RedisServer rs,
-            PGSComponentMock mock, String mode) throws Exception {        
+            ClusterComponentMock mock, String mode) throws Exception {        
         // Leave PGS
         Future<JobResult> future = commandTemplate.perform(
                 "pgs_leave " + pgs.getClusterName() + " " + pgs.getName() + " "
@@ -94,13 +87,8 @@ public class PGSJoinLeaveSetting {
         JobResult jobResult = future.get();
         
         assertEquals(S2C_OK, jobResult.getMessages().get(0));
-        assertEquals(HB_MONITOR_NO, pgs.getData().getHb());
-        assertEquals(HB_MONITOR_NO, rs.getData().getHB());
-
-        if (mock != null) {
-            verify(mock.getPgsWatcher(), timeout(atoSec * 1000).atLeast(1)).onChangedEvent((WatchedEvent)anyObject());
-            verify(mock.getRsWatcher(), timeout(atoSec * 1000).atLeast(1)).onChangedEvent((WatchedEvent)anyObject());
-        }
+        assertEquals(HB_MONITOR_NO, pgs.getHeartbeat());
+        assertEquals(HB_MONITOR_NO, rs.getHeartbeat());
     }
 }
 

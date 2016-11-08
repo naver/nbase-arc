@@ -34,10 +34,10 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandExcep
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtWorkflowWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.WorkflowCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType;
@@ -52,7 +52,7 @@ public class WorkflowTemplate implements Callable<Object> {
     private final Map<String, LockCaller> lockMethods;
     
     private final DefaultConversionService cs = new DefaultConversionService();
-    private final ClusterImo clusterImo;
+    private final ClusterComponentContainer container;
     
     public WorkflowTemplate(String workflow, Object[] args, 
             ApplicationContext context, Map<String, WorkflowCaller> workflowMethods, 
@@ -62,7 +62,7 @@ public class WorkflowTemplate implements Callable<Object> {
         this.context = context;
         this.workflowMethods = workflowMethods;
         this.lockMethods = lockMethods;
-        this.clusterImo = context.getBean(ClusterImo.class); 
+        this.container = context.getBean(ClusterComponentContainer.class); 
     }
     
     @Override
@@ -184,8 +184,8 @@ public class WorkflowTemplate implements Callable<Object> {
             return true;
         }
 
-        Cluster cluster = clusterImo.get(caller.getClusterName(args, 0));
-        if ((requiredMode & cluster.getData().getMode()) != 0) {
+        Cluster cluster = container.getCluster(caller.getClusterName(args, 0));
+        if ((requiredMode & cluster.getMode()) != 0) {
             return true;
         }
 

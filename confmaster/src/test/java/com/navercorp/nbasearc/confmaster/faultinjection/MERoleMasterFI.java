@@ -21,11 +21,11 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.workflow.MERoleMaster;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 public class MERoleMasterFI extends MERoleMaster {
 
@@ -33,7 +33,7 @@ public class MERoleMasterFI extends MERoleMaster {
     private boolean successFail = false;
 
     @Autowired
-    WorkflowLogDao workflowLogDao;
+    WorkflowLogger workflowLogger;
 
     @Override
     public synchronized void roleMaster(PartitionGroupServer newMaster,
@@ -44,7 +44,7 @@ public class MERoleMasterFI extends MERoleMaster {
             if (successFail) {
                 newMaster.roleMaster(newMaster.smrVersion(), pg, newMasterLog,
                         newQ, pg.getQuorumMembersString(newMaster, joinedPgsList), 
-                        jobID, workflowLogDao);
+                        jobID, workflowLogger);
                 count--;
                 throw new MgmtSmrCommandException(
                         "[FI] ME role master success fail. " + newMaster);

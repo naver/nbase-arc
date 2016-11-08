@@ -21,41 +21,39 @@ import static com.navercorp.nbasearc.confmaster.Constant.*;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class DecreaseQuorumWorkflow {
     final ApplicationContext context;
     final WorkflowExecutor wfExecutor;
-    final PartitionGroupDao pgDao;
-    final PartitionGroupServerImo pgsImo;
+    final ClusterComponentContainer container;
 
     final PartitionGroup pg;
+    final ZooKeeperHolder zk;
 
     public DecreaseQuorumWorkflow(PartitionGroup pg, ApplicationContext context) {
         this.context = context;
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
-        this.pgDao = context.getBean(PartitionGroupDao.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
+        this.container = context.getBean(ClusterComponentContainer.class);
+        this.zk = context.getBean(ZooKeeperHolder.class);
 
         this.pg = pg;
     }
 
     public String execute() throws MgmtZooKeeperException {
-        final int d = pg.getD(pgsImo.getList(pg.getClusterName(),
-                Integer.valueOf(pg.getName())));
+        final int d = pg.getD(container.getPgsList(pg.getClusterName(), pg.getName()));
 
-        if (pg.getData().getQuorum() - d <= 0) {
+        if (pg.getQuorum() - d <= 0) {
             return EXCEPTIONMSG_INVALID_QUORUM;
         }
 
-        PartitionGroupData pgM = PartitionGroupData.builder()
-                .from(pg.getData()).withQuorum(pg.getData().getQuorum() - 1)
-                .build();
-        pgDao.updatePg(pg.getPath(), pgM);
-        pg.setData(pgM);
+        PartitionGroup.PartitionGroupData pgM = pg.clonePersistentData();
+        pgM.quorum = pg.getQuorum() - 1;
+        
+        zk.setData(pg.getPath(), pgM.toBytes(), -1);
+        pg.setPersistentData(pgM);
         
         return S2C_OK;
     }

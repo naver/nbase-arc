@@ -35,7 +35,7 @@ public class YJRoleSlaveFI extends YJRoleSlave {
              {
         if (count > 0) {
             if (successFail) {
-                pgs.roleSlave(pg, logSeq, master, YELLOW, jobID, workflowLogDao);
+                pgs.roleSlave(pg, logSeq, master, YELLOW, jobID, workflowLogger);
                 count--;
                 throw new MgmtSmrCommandException(
                         "[FI] YJ role slave success fail. " + master);

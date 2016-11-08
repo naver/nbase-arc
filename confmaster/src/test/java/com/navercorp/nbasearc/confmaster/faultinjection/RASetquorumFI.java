@@ -32,7 +32,7 @@ public class RASetquorumFI extends RASetquorum {
             MgmtSmrCommandException {
         if (count > 0) {
             if (successFail) {
-                master.setquorum(q, quorumMembers);
+                master.setQuorum(q, quorumMembers);
                 count--;
                 throw new MgmtSetquorumException(
                         "[FI] RA setquorum success fail. " + master);

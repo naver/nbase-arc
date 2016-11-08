@@ -42,7 +42,6 @@ import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
@@ -76,8 +75,8 @@ public class PgReconfigurationTest extends BasicSetting {
     
     @Before
     public void before() throws Exception {
-        zookeeper.initialize();
-        zookeeper.deleteAllZNodeRecursive();
+        zk.initialize();
+        zk.deleteAllZNodeRecursive();
         
         cc = context.getBean(ConfMaster.class);
         
@@ -116,16 +115,16 @@ public class PgReconfigurationTest extends BasicSetting {
     public void after() throws Exception {
         // Clear cluster
         Cluster cluster = getCluster();
-        for (PartitionGroupServer pgs : pgsImo.getList(cluster.getName())) {
+        for (PartitionGroupServer pgs : container.getPgsList(cluster.getName())) {
             deletePgs(Integer.valueOf(pgs.getName()),
-                    pgsImo.getList(cluster.getName()).size() == 1);
+                    container.getPgsList(cluster.getName()).size() == 1);
         }
 
-        if (!pgImo.getList(cluster.getName()).isEmpty()) {
+        if (!container.getPgList(cluster.getName()).isEmpty()) {
             deletePg();
         }
 
-        if (!gwImo.getList(cluster.getName()).isEmpty()) {
+        if (!container.getGwList(cluster.getName()).isEmpty()) {
             deleteGw();
         }
         
@@ -172,8 +171,7 @@ public class PgReconfigurationTest extends BasicSetting {
             Thread.sleep(1000);
         }
         if (success == false) {
-            PartitionGroupServerData d = p1.getData();
-            System.out.println(p1 + " " + d);
+            System.out.println(p1 + " " + p1.persistentDataToString());
         }
         await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
         assertEquals(p1, masterCond.getMaster());
@@ -238,8 +236,7 @@ public class PgReconfigurationTest extends BasicSetting {
     private void printPgsState() {
         for (int i = 0; i < 2; i++) {
             PartitionGroupServer pgs = getPgs(i);
-            PartitionGroupServerData d = pgs.getData();
-            System.out.println(pgs + ", " + d.getRole() + ", " + d.getColor());
+            System.out.println(pgs + ", " + pgs.getRole() + ", " + pgs.getColor());
         }
     }
     
@@ -291,11 +288,11 @@ public class PgReconfigurationTest extends BasicSetting {
         await("quorum must 0").atMost(assertionTimeout, SECONDS).until(
                 new QuorumValidator(mimics[1].mSmr, 0));
 
-        assertEquals(RED, p1.getData().getColor());
-        assertEquals(PGS_ROLE_NONE, p1.getData().getRole());
-        assertEquals(SERVER_STATE_FAILURE, p1.getData().getState());
-        assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(1, p1.getData().getMasterGen());
+        assertEquals(RED, p1.getColor());
+        assertEquals(PGS_ROLE_NONE, p1.getRole());
+        assertEquals(SERVER_STATE_FAILURE, p1.getState());
+        assertEquals(HB_MONITOR_YES, p1.getHeartbeat());
+        assertEquals(1, p1.getMasterGen());
         
         // Recover p1
         // N M -> S M
@@ -337,11 +334,11 @@ public class PgReconfigurationTest extends BasicSetting {
         
         await("failure detection").atMost(assertionTimeout, SECONDS).until(
                 new RoleColorValidator(p2, PGS_ROLE_NONE, RED));
-        assertEquals(RED, p2.getData().getColor());
-        assertEquals(PGS_ROLE_NONE, p2.getData().getRole());
-        assertEquals(SERVER_STATE_FAILURE, p2.getData().getState());
-        assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-        assertEquals(2, p2.getData().getMasterGen());
+        assertEquals(RED, p2.getColor());
+        assertEquals(PGS_ROLE_NONE, p2.getRole());
+        assertEquals(SERVER_STATE_FAILURE, p2.getState());
+        assertEquals(HB_MONITOR_YES, p2.getHeartbeat());
+        assertEquals(2, p2.getMasterGen());
         
         MasterFinder masterFinder = new MasterFinder(getPgsList());
         await("reconfiguration for master.").atMost(assertionTimeout, SECONDS).until(masterFinder);
@@ -437,8 +434,7 @@ public class PgReconfigurationTest extends BasicSetting {
             Thread.sleep(1000);
         }
         if (success == false) {
-            PartitionGroupServerData d = p1.getData();
-            System.out.println(p1 + " " + d);
+            System.out.println(p1 + " " + p1.persistentDataToString());
         }
         await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
         assertEquals(p1, masterCond.getMaster());
@@ -466,10 +462,10 @@ public class PgReconfigurationTest extends BasicSetting {
         // M S -> S M
         JobResult jr = doCommand("role_change " + getPgs(0).getClusterName() + " " + getPgs(1).getName());
         System.out.println(jr.getMessages());
-        assertEquals(PGS_ROLE_MASTER, p2.getData().getRole());
-        assertEquals(GREEN, p2.getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, p1.getData().getRole());
-        assertEquals(GREEN, p1.getData().getColor());
+        assertEquals(PGS_ROLE_MASTER, p2.getRole());
+        assertEquals(GREEN, p2.getColor());
+        assertEquals(PGS_ROLE_SLAVE, p1.getRole());
+        assertEquals(GREEN, p1.getColor());
     }
 
     @Test
@@ -496,8 +492,7 @@ public class PgReconfigurationTest extends BasicSetting {
             Thread.sleep(1000);
         }
         if (success == false) {
-            PartitionGroupServerData d = p1.getData();
-            System.out.println(p1 + " " + d);
+            System.out.println(p1 + " " + p1.persistentDataToString());
         }
         await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
         assertEquals(p1, masterCond.getMaster());
@@ -562,8 +557,7 @@ public class PgReconfigurationTest extends BasicSetting {
             Thread.sleep(1000);
         }
         if (success == false) {
-            PartitionGroupServerData d = p1.getData();
-            System.out.println(p1 + " " + d);
+            System.out.println(p1 + " " + p1.persistentDataToString());
         }
         await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
         assertEquals(p1, masterCond.getMaster());
@@ -613,7 +607,7 @@ public class PgReconfigurationTest extends BasicSetting {
 
         masterCond = new MasterFinder(getPgsList());
         await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
-        assertEquals(GREEN, masterCond.getMaster().getData().getColor());
+        assertEquals(GREEN, masterCond.getMaster().getColor());
         quorumValidator = new QuorumValidator(mimics[Integer.valueOf(masterCond
                 .getMaster().getName())].mSmr, 1);
         await("test for quorum.").atMost(assertionTimeout, SECONDS).until(
@@ -622,7 +616,7 @@ public class PgReconfigurationTest extends BasicSetting {
         slaveFinder = new SlaveFinder(getPgsList());
         await("test for role slave.").atMost(assertionTimeout, SECONDS).until(slaveFinder);
         for (PartitionGroupServer pgs : slaveFinder.getSlaves()) {
-            assertEquals(GREEN, pgs.getData().getColor());
+            assertEquals(GREEN, pgs.getColor());
         }
     }
     
@@ -651,10 +645,10 @@ public class PgReconfigurationTest extends BasicSetting {
         QuorumValidator qv = new QuorumValidator(mimics[0].mSmr, 1);
         await("test for quorum.").atMost(assertionTimeout, SECONDS).until(qv);
         
-        assertEquals(PGS_ROLE_MASTER, getPgs(0).getData().getRole());
-        assertEquals(GREEN, getPgs(0).getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, getPgs(2).getData().getRole());
-        assertEquals(GREEN, getPgs(2).getData().getColor());
+        assertEquals(PGS_ROLE_MASTER, getPgs(0).getRole());
+        assertEquals(GREEN, getPgs(0).getColor());
+        assertEquals(PGS_ROLE_SLAVE, getPgs(2).getRole());
+        assertEquals(GREEN, getPgs(2).getColor());
     }
     
     @Test
@@ -683,12 +677,12 @@ public class PgReconfigurationTest extends BasicSetting {
         QuorumValidator qv = new QuorumValidator(mimics[0].mSmr, 1);
         await("test for quorum.").atMost(assertionTimeout, SECONDS).until(qv);
         
-        assertEquals(PGS_ROLE_MASTER, getPgs(0).getData().getRole());
-        assertEquals(GREEN, getPgs(0).getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, getPgs(1).getData().getRole());
-        assertEquals(GREEN, getPgs(1).getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, getPgs(2).getData().getRole());
-        assertEquals(GREEN, getPgs(2).getData().getColor());
+        assertEquals(PGS_ROLE_MASTER, getPgs(0).getRole());
+        assertEquals(GREEN, getPgs(0).getColor());
+        assertEquals(PGS_ROLE_SLAVE, getPgs(1).getRole());
+        assertEquals(GREEN, getPgs(1).getColor());
+        assertEquals(PGS_ROLE_SLAVE, getPgs(2).getRole());
+        assertEquals(GREEN, getPgs(2).getColor());
 
         mimics[0].mSmr.setInjector(new IInjector<String, String>() {
             @Override
@@ -715,12 +709,12 @@ public class PgReconfigurationTest extends BasicSetting {
         assertEquals(0, el.size());
         assertEquals("2", mimics[0].mSmr.execute("getquorum"));
         
-        assertEquals(PGS_ROLE_MASTER, getPgs(0).getData().getRole());
-        assertEquals(GREEN, getPgs(0).getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, getPgs(1).getData().getRole());
-        assertEquals(GREEN, getPgs(1).getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, getPgs(2).getData().getRole());
-        assertEquals(GREEN, getPgs(2).getData().getColor());
+        assertEquals(PGS_ROLE_MASTER, getPgs(0).getRole());
+        assertEquals(GREEN, getPgs(0).getColor());
+        assertEquals(PGS_ROLE_SLAVE, getPgs(1).getRole());
+        assertEquals(GREEN, getPgs(1).getColor());
+        assertEquals(PGS_ROLE_SLAVE, getPgs(2).getRole());
+        assertEquals(GREEN, getPgs(2).getColor());
     }
 
     public class FaultInjector implements IInjector<String, String> {
@@ -810,9 +804,9 @@ public class PgReconfigurationTest extends BasicSetting {
     
     public void logPgs() {
         for (PartitionGroupServer pgs : getPgsList()) {
-            System.out.println(pgs + " " + pgs.getData().getRole() + " "
-                    + pgs.getData().getColor() + " "
-                    + pgs.getData().getMasterGen());
+            System.out.println(pgs + " " + pgs.getRole() + " "
+                    + pgs.getColor() + " "
+                    + pgs.getMasterGen());
         }
     }
     

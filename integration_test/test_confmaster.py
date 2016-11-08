@@ -1853,7 +1853,7 @@ class TestConfMaster(unittest.TestCase):
 
         # check whether heartbeat connections are closed
         for s in self.cluster['servers']:
-            ret = util.await(10)(
+            ret = util.await(100)(
                     util.con_compare(init_cons[s['id']], lt), 
                     util.connection_count_closure(s))
             self.assertTrue(ret, 'Heartbeat connections are not disconnected, after cluster_off.')
@@ -1864,7 +1864,7 @@ class TestConfMaster(unittest.TestCase):
 
         # check whether heartbeat connections are established
         for s in self.cluster['servers']:
-            ret = util.await(10)(
+            ret = util.await(100)(
                     util.con_compare(init_cons[s['id']], ge), 
                     util.connection_count_closure(s))
             self.assertTrue(ret, 'Heartbeat connections are not established, after cluster_on.')
@@ -1891,7 +1891,7 @@ class TestConfMaster(unittest.TestCase):
 
         # check whether heartbeat connections are closed
         for s in self.cluster['servers']:
-            ret = util.await(10)(
+            ret = util.await(100)(
                     util.con_compare(init_cons[s['id']], lt), 
                     util.connection_count_closure(s))
             self.assertTrue(ret, 'Heartbeat connections are not disconnected, after cluster_off.')
@@ -1903,12 +1903,12 @@ class TestConfMaster(unittest.TestCase):
         for s in self.cluster['servers']:
             # check whether heartbeat connections are still closed
             if s in left_pgs_list:
-                ret = util.await(10)(
+                ret = util.await(100)(
                         util.con_compare(init_cons[s['id']], lt, ['gw']), 
                         util.connection_count_closure(s))
                 self.assertTrue(ret, 'Heartbeat connections are not disconnected, after pgs_leave and cluster_on.')
             else:
-                ret = util.await(10)(
+                ret = util.await(100)(
                         util.con_compare(init_cons[s['id']], ge), 
                         util.connection_count_closure(s))
                 self.assertTrue(ret, 'Heartbeat connections are not established, after cluster_on.')
@@ -1925,7 +1925,7 @@ class TestConfMaster(unittest.TestCase):
 
         # check whether heartbeat connections are established
         for s in self.cluster['servers']:
-            ret = util.await(10)(
+            ret = util.await(100)(
                     util.con_compare(init_cons[s['id']], ge), 
                     util.connection_count_closure(s))
             self.assertTrue(ret, 'Heartbeat connections are not established, after cluster_on.')
@@ -1935,7 +1935,7 @@ class TestConfMaster(unittest.TestCase):
             ret = util.failover(s, self.leader_cm)
             self.assertTrue(ret, 'Failover error, incorrect state of PGS')
 
-            ret = util.await(10)(
+            ret = util.await(50)(
                 lambda x: x,
                 util.check_cluster_closure(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], None, True))
             self.assertTrue(ret, 'cluster_on_off_failover, incorrect state of Cluster')
@@ -1968,7 +1968,7 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ret, 'Failed to cluster_on')
 
             # state of pgs must be changed
-            ret = util.await(10, True)(
+            ret = util.await(50, True)(
                     lambda pgs: pgs['state'] == 'F' and pgs['color'] == 'RED',
                     util.get_pgs_info_closure(
                         self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'], s['id']))
@@ -1979,7 +1979,7 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ret, 'Failed to recover pgs')
 
             # check_cluster state
-            ret = util.await(10)(
+            ret = util.await(50)(
                 lambda x: x,
                 util.check_cluster_closure(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], None, True))
             self.assertTrue(ret, 'cluster_on_off_interleaved_fail, incorrect state of Cluster')
@@ -2064,7 +2064,7 @@ class TestConfMaster(unittest.TestCase):
                 ret = util.failover(s, dest_cm)
                 self.assertTrue(ret, 'Failover error, incorrect state of PGS')
 
-                ret = util.await(10)(
+                ret = util.await(50)(
                     lambda x: x,
                     util.check_cluster_closure(self.cluster['cluster_name'], dest_cm_ip, dest_cm_port, None, True))
                 self.assertTrue(ret, 'after mgmt cluster migration, incorrect state of Cluster')

@@ -16,91 +16,130 @@
 
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
+import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_NO;
+import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_FAILURE;
+
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.codehaus.jackson.type.TypeReference;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
+import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.config.Config;
-import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
+import com.navercorp.nbasearc.confmaster.heartbeat.HBState;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
-import com.navercorp.nbasearc.confmaster.repository.znode.RedisServerData;
-import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 
-public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarget {
+public class RedisServer implements HeartbeatTarget, Comparable<RedisServer>, ClusterComponent {
     
-    private BlockingSocketImpl serverConnection;    
+    protected BlockingSocket connectionForCommand;
+    
+    protected HBSession hbSession;
+
+    private Config config;
+    private MemoryObjectMapper mapper = new MemoryObjectMapper();
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    
     private Cluster cluster;
     
-    private HBSession hbc;
-    private HBRefData hbcRefData;
+    private int pgId;
+    private String path;
+    private String name;
+    private RedisServerData persistentData;
+    private int znodeVersion;
     
-    private final Config config;
+    public RedisServer(ApplicationContext context, byte[] d,
+            String clusterName, String pgsId, int pgId, int znodeVersion) {
+    	persistentData = mapper.readValue(d, RedisServerData.class);
+    	init(context, clusterName, pgsId, pgId, znodeVersion);
+    }
+
+    public RedisServer(ApplicationContext context, RedisServerData d,
+            String clusterName, String pgsId, int pgId, int znodeVersion) {
+        persistentData = d;
+        init(context, clusterName, pgsId, pgId, znodeVersion);
+    }
     
-    public RedisServer(ApplicationContext context, String path, String name,
-            Cluster cluster, byte[] data) {
-        super(context);
+    public RedisServer(ApplicationContext context, String clusterName,
+            String pgsId, String pmName, String pmIp, int backendPort,
+            int pgId, int znodeVersion) {
+    	persistentData = new RedisServerData(pmName, pmIp, backendPort);
+    	init(context, clusterName, pgsId, pgId, znodeVersion);
+    }
+    
+    private void init(ApplicationContext context, String clusterName,
+            String pgsId, int pgId, int znodeVersion) {
         this.config = context.getBean(Config.class);
         
-        setTypeRef(new TypeReference<RedisServerData>(){}); 
-
-        setPath(path);
-        setName(name);
-        setNodeType(NodeType.RS);
-        setData(data);
-        this.cluster = cluster;
+        this.znodeVersion = znodeVersion;
+        this.path = PathUtil.rsPath(pgsId, clusterName);
+        this.name = pgsId;
+        this.cluster = context.getBean(ClusterComponentContainer.class).getCluster(clusterName);
+        this.pgId = pgId;
         
-        setServerConnection(
+        connectionForCommand = 
             new BlockingSocketImpl(
-                this.getData().getPmIp(), this.getData().getRedisPort(), 
+                persistentData.pmIp, persistentData.redisPort, 
                 config.getClusterPgsTimeout(), Constant.REDIS_PING, 
-                config.getDelim(), config.getCharset()));
+                config.getDelim(), config.getCharset());
         
-        hbcRefData = new HBRefData();
-        hbcRefData.setZkData(getData().getState(), getData().getStateTimestamp(), stat.getVersion())
-            .setLastState(getData().getState())
-            .setLastStateTimestamp(getData().getStateTimestamp())
+        HBState hbRefData = new HBState();
+        hbRefData.setZkData(persistentData.state, persistentData.stateTimestamp, znodeVersion)
+            .setLastState(persistentData.state)
+            .setLastStateTimestamp(persistentData.stateTimestamp)
             .setSubmitMyOpinion(false);
+        
+        hbSession = new HBSession(context, this, persistentData.pmIp,
+                persistentData.redisPort, cluster.getMode(), persistentData.hb,
+                Constant.REDIS_PING + "\r\n", hbRefData);
+        
     }
     
-    public void updateHBRef() {
-        hbcRefData.setZkData(getData().getState(), 
-                getData().getStateTimestamp(), stat.getVersion());
-        getHbc().updateHbState(cluster.getData().getMode(), getData().getHB());
+    public void propagateStateToHeartbeatSession() {
+        hbSession.getHeartbeatState().setZkData(persistentData.state, 
+        		persistentData.stateTimestamp, znodeVersion);
+        hbSession.toggleHearbeat(cluster.getMode(), persistentData.hb);
     }
 
+    @Override
     public void release() {
         try {
-            getHbc().updateHbState(cluster.getData().getMode(), Constant.HB_MONITOR_NO);
-            getServerConnection().close();
+            hbSession.toggleHearbeat(cluster.getMode(), Constant.HB_MONITOR_NO);
+            connectionForCommand.close();
         } catch (Exception e) {
             Logger.error("stop heartbeat fail. RS:" + getName(), e);
         }
 
         try {
-            getHbc().callbackDelete();
-            getHbc().urgent();
+            hbSession.callbackDelete();
+            turnOnUrgentHeartbeat();
         } catch (Exception e) {
             Logger.error("failed while delete rs. " + toString(), e);
         }
     }
     
     public List<String> executeQueryAndMultiReply(String query, int replyCount) throws IOException {
-        return getServerConnection().executeAndMultiReply(query, replyCount);
+        return connectionForCommand.executeAndMultiReply(query, replyCount);
     }
     
     public void closeConnection() throws IOException {
-        getServerConnection().close();
+        connectionForCommand.close();
     }
 
     @Override
-    public int getVersion() {
-        return this.stat.getVersion();
+    public int getZNodeVersion() {
+        return znodeVersion;
     }
 
     @Override
@@ -110,31 +149,18 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
 
     @Override
     public String getView() {
-        return this.getData().getState();
+        return persistentData.state;
     }
 
     @Override
     public void setState(String state, long state_timestamp) {
-        RedisServerData rsModified = 
-                RedisServerData.builder().from(getData())
-                    .withState(state)
-                    .withStateTimestamp(state_timestamp).build();
-        setData(rsModified);
-    }
-    
-    @Override
-    public long getStateTimestamp() {
-        return getData().getStateTimestamp();
+    	persistentData.state = state;
+    	persistentData.stateTimestamp = state_timestamp;
     }
 
     @Override
-    public String getTargetOfHeartbeatPath() {
-        return this.getPath();
-    }
-    
-    @Override
-    public String getHB() {
-        return this.getData().getHB();
+    public String getHeartbeat() {
+        return persistentData.hb;
     }
     
     @Override
@@ -143,23 +169,18 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
     }
     
     @Override
-    public String getPingMsg() {
-        return Constant.REDIS_PING + "\r\n";
-    }
-    
-    @Override
-    public HBRefData getRefData() {
-        return hbcRefData;
+    public HBState getHeartbeatState() {
+        return hbSession.getHeartbeatState();
     }
 
     @Override
     public String getIP() {
-        return getData().getPmIp();
+        return persistentData.pmIp;
     }
 
     @Override
     public int getPort() {
-        return getData().getRedisPort();
+        return persistentData.redisPort;
     }
 
     @Override
@@ -168,27 +189,13 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
     }
 
     public String executeQuery(String query) throws IOException {
-        return getServerConnection().execute(query);
+        return connectionForCommand.execute(query);
     }
 
     public String executeQuery(String query, int retryCount) throws IOException {
-        return getServerConnection().execute(query, retryCount);
+        return connectionForCommand.execute(query, retryCount);
     }
 
-    @Override
-    @SuppressWarnings("unchecked")
-    public ZNode<RedisServerData> getZNode() {
-        return this;
-    }
-
-    public HBSession getHbc() {
-        return hbc;
-    }
-
-    public void setHbc(HBSession hbc) {
-        this.hbc = hbc;
-    }
-    
     public String replPing() {
         try {
             String reply = executeQuery(Constant.PGS_PING);
@@ -196,7 +203,7 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
                     "\", REPLY=\"" + reply + 
                     "\", CLUSTER:" + getClusterName() + 
                     ", PGSID:" + getName() + 
-                    ", STATE:" + getData().getState());
+                    ", STATE:" + persistentData.state);
             if (reply.equals(Constant.REDIS_PONG)) {
                 return Constant.SERVER_STATE_NORMAL;
             } else {
@@ -205,14 +212,6 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
         } catch (IOException e) {
             return Constant.SERVER_STATE_FAILURE;
         }
-    }
-
-    public BlockingSocketImpl getServerConnection() {
-        return serverConnection;
-    }
-
-    public void setServerConnection(BlockingSocketImpl serverConnection) {
-        this.serverConnection = serverConnection;
     }
     
     @Override
@@ -229,4 +228,162 @@ public class RedisServer extends ZNode<RedisServerData> implements HeartbeatTarg
         return toString();
     }
 
+    @Override
+    public String getPath() {
+        return path;
+    }
+
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public NodeType getNodeType() {
+        return NodeType.RS;
+    }
+
+    @Override
+    public int compareTo(RedisServer rs) {
+        return name.compareTo(rs.name);
+    }
+    
+    public Lock readLock() {
+        return lock.readLock();
+    }
+
+    public Lock writeLock() {
+        return lock.writeLock();
+    }
+    
+    public int getPgId() {
+        return pgId;
+    }
+
+    public void turnOnUrgentHeartbeat() {
+        hbSession.urgent();
+    }
+
+    public String persistentDataToString() {
+        return persistentData.toString();
+    }
+
+    public byte[] persistentDataToBytes() {
+        return persistentData.toBytes();
+    }
+
+    public RedisServerData clonePersistentData() {
+        return (RedisServerData) persistentData.clone();
+    }
+
+    public void setPersistentData(RedisServerData d) {
+        this.persistentData = d;
+    }
+
+    public void setPersistentData(byte []d) {
+        this.persistentData = mapper.readValue(d, RedisServerData.class);
+    }
+
+	@JsonAutoDetect(
+	        fieldVisibility=Visibility.ANY, 
+	        getterVisibility=Visibility.NONE, 
+	        setterVisibility=Visibility.NONE)
+	@JsonIgnoreProperties(
+	        ignoreUnknown=true)
+	@JsonPropertyOrder(
+	        {"pm_Name", "pm_IP", "backend_Port_Of_Redis", "state", "stateTimestamp", "hb"})
+	public static class RedisServerData implements Cloneable {
+	    
+	    @JsonProperty("pm_Name")
+	    public String pmName;
+	    @JsonProperty("pm_IP")
+	    public String pmIp;
+	    @JsonProperty("backend_Port_Of_Redis")
+	    public int redisPort;
+	    @JsonProperty("state")
+	    public String state;
+	    @JsonProperty("stateTimestamp")
+	    public long stateTimestamp;
+	    @JsonProperty("hb")
+	    public String hb;
+	
+	    @JsonIgnore
+	    private final MemoryObjectMapper mapper = new MemoryObjectMapper();
+	    
+	    public RedisServerData() {}
+	    
+	    public RedisServerData(final String pmName,
+	                            final String pmIp,
+	                            final int redisPort) {
+	        this.pmName = pmName;
+	        this.pmIp = pmIp;
+	        this.redisPort = redisPort;
+
+	        // Use default value
+	        this.state = SERVER_STATE_FAILURE;
+	        this.stateTimestamp = 0L;
+	        this.hb = HB_MONITOR_NO;
+	    }
+	    
+	    @Override
+	    public boolean equals(Object obj) {
+	        if (obj == null) {
+	            return false;
+	        }
+	        if (obj == this) {
+	            return true;
+	        }
+	        if (!(obj instanceof RedisServerData)) {
+	            return false;
+	        }
+	
+	        RedisServerData rhs = (RedisServerData) obj;
+	        if (!pmName.equals(rhs.pmName)) {
+	            return false;
+	        }
+	        if (!pmIp.equals(rhs.pmIp)) {
+	            return false;
+	        }
+	        if (redisPort != rhs.redisPort) {
+	            return false;
+	        }
+	        if (!state.equals(rhs.state)) {
+	            return false;
+	        }
+	        return true;
+	    }
+	    
+	    @Override
+	    public int hashCode() {
+	        assert false : "hashCode not designed";
+	        return 42; // any arbitrary constant will do
+	    }
+	    
+	    @Override
+	    public Object clone() {
+	        try {
+	            return super.clone();
+	        } catch (CloneNotSupportedException e) {
+	            throw new RuntimeException(e);
+	        }
+	    }
+	
+	    @Override
+	    public String toString() {
+	        try {
+	            return mapper.writeValueAsString(this);
+	        } catch (Exception e) {
+	            throw new RuntimeException(e.getMessage());
+	        }
+	    }
+	
+		public byte[] toBytes() {
+			return mapper.writeValueAsBytes(this);
+		}
+	}
+
+	@Override
+	public void setZNodeVersion(int version) {
+		this.znodeVersion = version;
+	}
 }

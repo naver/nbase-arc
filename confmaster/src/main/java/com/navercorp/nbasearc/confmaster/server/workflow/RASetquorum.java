@@ -30,7 +30,7 @@ public class RASetquorum {
 
     public void setquorum(PartitionGroupServer master, int q, String quorumMembers)
             throws MgmtSetquorumException, MgmtSmrCommandException {
-        master.setquorum(q, quorumMembers);
+        master.setQuorum(q, quorumMembers);
     }
 
 }

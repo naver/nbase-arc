@@ -41,7 +41,6 @@ import process_mgmt
 import shutil
 import exceptions
 from arcci.arcci import *
-import pdb
 
 proc_mgmt = process_mgmt.ProcessMgmt()
 
@@ -300,13 +299,17 @@ def cm_command( ip, port, cmd, line=1 ):
 
 
 def cm_success(reply):
-    jsonObj = json.loads(reply, encoding='ascii')
-    if jsonObj['state'] != 'success':
-        log('REPLY:%s' % reply[:-1])
+    try:
+        jsonObj = json.loads(reply, encoding='ascii')
+        if jsonObj['state'] != 'success':
+            log('REPLY:%s' % reply[:-1])
+            return False, None
+        if jsonObj.has_key('data'):
+            return True, jsonObj['data']
+        return True, None
+    except ValueError as e:
+        log('reply: "%s", e: "%s"' %(reply.strip(), str(e)))
         return False, None
-    if jsonObj.has_key('data'):
-        return True, jsonObj['data']
-    return True, None
 
 
 def cluster_info(mgmt_ip, mgmt_port, cluster_name):

@@ -31,10 +31,10 @@ import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.OpinionDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion.OpinionData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.RealState;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
@@ -46,13 +46,13 @@ public class HBResultProcessor {
     private Config config;
     
     @Autowired
-    private ZooKeeperHolder zookeeper;
+    private ZooKeeperHolder zk;
+    
+    @Autowired
+    private Opinion opinion;
 
     @Autowired 
     private WorkflowExecutor workflowExecutor;
-    
-    @Autowired
-    private OpinionDao opinionDao;
     
     public static String OPINION_FORMAT = 
             "{\"name\":\"{}\",\"opinion\":\"{}\",\"version\":{},\"state_timestamp\":{},\"creation_time\":{}}";
@@ -60,9 +60,9 @@ public class HBResultProcessor {
     public String proc(HBResult result, boolean putOpinion)
             throws NodeExistsException, MgmtZooKeeperException {
         HeartbeatTarget target = result.getTarget();
-        HBRefData data = target.getRefData();
+        HBState data = target.getHeartbeatState();
         
-        if (target.getHB().equals(Constant.HB_MONITOR_NO)) {
+        if (target.getHeartbeat().equals(Constant.HB_MONITOR_NO)) {
             Logger.debug("{} is not a target of heartbeat. {}", 
                     target.getNodeType().toString() + target.getName(), result); 
             return null;
@@ -86,11 +86,11 @@ public class HBResultProcessor {
         return null;
     }
     
-    private void pgs(HBRefData refData, HBResult result, boolean putOpinion) 
+    private void pgs(HBState refData, HBResult result, boolean putOpinion) 
             throws MgmtZooKeeperException, NodeExistsException {
-        final RealState newState = PartitionGroupServer.convertToState(result.getResponse());
+        final RealState newState = PartitionGroupServer.convertReplyToState(result.getResponse());
         long stateTimestamp = Constant.DEFAULT_STATE_TIMESTAMP;
-        HBRefData.ZKData zkData = refData.getZkData(); 
+        HBState.ZKData zkData = refData.getZkData(); 
         
         if (newState.getRole().equals(PGS_ROLE_NONE)) {
             stateTimestamp = zkData.stateTimestamp;
@@ -119,9 +119,9 @@ public class HBResultProcessor {
         }
     }
     
-    private void common(HBRefData refData, HBResult result, boolean putOpinion)
+    private void common(HBState refData, HBResult result, boolean putOpinion)
             throws MgmtZooKeeperException, NodeExistsException {
-        HBRefData.ZKData zkData = refData.getZkData();
+        HBState.ZKData zkData = refData.getZkData();
         
         if (zkData.state.equals(result.getState()) && refData.isSubmitMyOpinion())  {
             if (putOpinion) {
@@ -139,14 +139,14 @@ public class HBResultProcessor {
         }
     }
 
-    private void putMyOpinion(long stateTimestamp, HBRefData refData,
+    private void putMyOpinion(long stateTimestamp, HBState refData,
             HBResult result, String newState) throws MgmtZooKeeperException,
             NodeExistsException {
-        String path = makePathOfMyOpinion(result.getTarget().getTargetOfHeartbeatPath());
+        String path = makePathOfMyOpinion(result.getTarget().getPath());
 
         if (refData.isSubmitMyOpinion()) {
         		try {
-					OpinionData op = opinionDao.getOpinion(path);
+					OpinionData op = opinion.getOpinion(path);
 					if (op.getOpinion().equals(newState) 
 							&& op.getStatetimestamp() == stateTimestamp
 							&& op.getVersion() == refData.getZkData().version) {
@@ -162,7 +162,7 @@ public class HBResultProcessor {
         byte[] data = makeDataOfMyOpinion(refData, stateTimestamp, result, newState);
         
         try {
-            zookeeper.createEphemeralZNode(path, data);
+            zk.createEphemeralZNode(path, data);
         } catch (NodeExistsException e) {
             Logger.error("Put my opinion fail. path: {}, opinion: {}", 
                     path, makeStringOfMyOpinion(refData, stateTimestamp, newState), e);
@@ -180,11 +180,11 @@ public class HBResultProcessor {
         refData.setSubmitMyOpinion(true);
     }
     
-    private void removeMyOpinion(HBRefData refData, HBResult result,
+    private void removeMyOpinion(HBState refData, HBResult result,
             String newView) throws MgmtZooKeeperException {
-        String path = makePathOfMyOpinion(result.getTarget().getTargetOfHeartbeatPath());
+        String path = makePathOfMyOpinion(result.getTarget().getPath());
 
-        zookeeper.deleteZNode(path, -1);
+        zk.deleteZNode(path, -1);
 
         refData.setSubmitMyOpinion(false);
     }
@@ -194,7 +194,7 @@ public class HBResultProcessor {
         return path;
     }
 
-    private byte[] makeDataOfMyOpinion(HBRefData data, long stateTimestamp,
+    private byte[] makeDataOfMyOpinion(HBState data, long stateTimestamp,
             HBResult result, String newState) {
         String jsonData = makeStringOfMyOpinion(data, stateTimestamp, newState);
         try {
@@ -204,8 +204,8 @@ public class HBResultProcessor {
         }
     }
     
-    private String makeStringOfMyOpinion(HBRefData data, long stateTimestamp, String newState) {
-        HBRefData.ZKData zkData = data.getZkData(); 
+    private String makeStringOfMyOpinion(HBState data, long stateTimestamp, String newState) {
+        HBState.ZKData zkData = data.getZkData(); 
         return MessageFormatter.arrayFormat(OPINION_FORMAT,
             new Object[] { config.getIp() + ":" + config.getPort(),
                             newState, zkData.version, stateTimestamp, System.currentTimeMillis() });

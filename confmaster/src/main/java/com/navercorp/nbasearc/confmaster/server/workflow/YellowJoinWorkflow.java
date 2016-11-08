@@ -28,13 +28,11 @@ import org.springframework.context.ApplicationContext;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class YellowJoinWorkflow extends CascadingWorkflow {
     private final long jobID = JobIDGenerator.getInstance().getID();
@@ -42,20 +40,18 @@ public class YellowJoinWorkflow extends CascadingWorkflow {
     final ApplicationContext context;
     final Config config;
     final WorkflowExecutor wfExecutor;
-    final WorkflowLogDao workflowLogDao;
-    final PartitionGroupServerImo pgsImo;
+    final WorkflowLogger workflowLogger;
     
     final YJRoleSlave roleSlave;
 
     public YellowJoinWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg, context.getBean(PartitionGroupImo.class));
+        super(cascading, pg, context.getBean(ClusterComponentContainer.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
-        this.workflowLogDao = context.getBean(WorkflowLogDao.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
+        this.workflowLogger = context.getBean(WorkflowLogger.class);
         
         this.roleSlave = context.getBean(YJRoleSlave.class);
     }
@@ -63,8 +59,7 @@ public class YellowJoinWorkflow extends CascadingWorkflow {
     @Override
     protected void _execute() throws MgmtSmrCommandException {
         final List<PartitionGroupServer> joinedPgsList = pg
-                .getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
-                        Integer.valueOf(pg.getName())));
+                .getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
         final PartitionGroupServer master = pg.getMaster(joinedPgsList);
 
         if (master == null) {
@@ -72,8 +67,8 @@ public class YellowJoinWorkflow extends CascadingWorkflow {
         }
 
         for (PartitionGroupServer pgs : joinedPgsList) {
-            if (pgs.getData().getColor() == YELLOW
-                    && pgs.getData().getRole().equals(PGS_ROLE_LCONN)) {
+            if (pgs.getColor() == YELLOW
+                    && pgs.getRole().equals(PGS_ROLE_LCONN)) {
                 LogSequence log = pgs.getLogSeq();
                 roleSlave.roleSlave(pgs, pg, log, master, jobID);
             }

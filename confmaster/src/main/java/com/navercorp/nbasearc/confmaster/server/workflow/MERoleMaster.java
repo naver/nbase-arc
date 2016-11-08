@@ -22,7 +22,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
@@ -35,7 +34,7 @@ public class MERoleMaster {
     // Since it is a singleton instance and represents a part of workflow logic running in multiple threads.
 
     @Autowired
-    WorkflowLogDao workflowLogDao;
+    WorkflowLogger workflowLogger;
 
     public void roleMaster(PartitionGroupServer newMaster, PartitionGroup pg,
             LogSequence newMasterLog, List<PartitionGroupServer> joinedPgsList,
@@ -44,12 +43,12 @@ public class MERoleMaster {
         
         newMaster.roleMaster(smrVersion, pg, newMasterLog, newQ,
                 pg.getQuorumMembersString(newMaster, joinedPgsList), jobID,
-                workflowLogDao);
+                workflowLogger);
 
-        RoleMasterZkResult result = newMaster.roleMasterZk(pg, joinedPgsList,
-                newMasterLog, newQ, smrVersion, jobID, workflowLogDao);
-        newMaster.setData(result.pgsM);
-        pg.setData(result.pgM);
+        RoleMasterZkResult result = newMaster.updateZNodeAsMaster(pg, joinedPgsList,
+                newMasterLog, newQ, smrVersion, jobID, workflowLogger);
+        newMaster.setPersistentData(result.pgsM);
+        pg.setPersistentData(result.pgM);
     }
     
 }

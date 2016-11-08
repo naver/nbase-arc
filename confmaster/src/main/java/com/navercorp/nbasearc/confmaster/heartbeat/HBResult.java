@@ -102,8 +102,8 @@ public class HBResult {
                 .arrayFormat("HeartbeatResult[path: {}, state: {}, response: {}, remote: {}:{}, id: {}, type: {}, lastState: {}, lastTimestamp: {}]",
                         new Object[]{target.getPath(), state, response, remoteIP,
                             remotePort, sessionID, target.getNodeType(), 
-                            target.getRefData().getLastState(), 
-                            target.getRefData().getLastStateTimestamp()});
+                            target.getHeartbeatState().getLastState(), 
+                            target.getHeartbeatState().getLastStateTimestamp()});
     }
     
 }

@@ -34,28 +34,31 @@ import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
 
 public class HBSession {
     
-    private ClientSession session;
-    private HBSessionHandler handler;
-    private String hbState = "";
-    private int clusterMode;
-    
     private final ApplicationContext context;
     private final EventSelector hbProcessor;
     private final WorkflowExecutor workflowExecutor;
+    
+    private ClientSession session;
+    private HBSessionHandler handler;
+    
+    private String hbOnOff = "";
+    private int prevClusterMode;
+    private HBState hbState;
 
-    public HBSession(ApplicationContext context, EventSelector hbProcessor,
+    public HBSession(ApplicationContext context, 
             HeartbeatTarget target, String ip, int port, int mode,
-            String hbState) {
+            String hbOnOff, String pingMsg, HBState hbState) {
         this.context = context;
         this.workflowExecutor = context.getBean(WorkflowExecutor.class);
-        this.hbProcessor = hbProcessor;
-
+        this.hbProcessor = context.getBean(HeartbeatChecker.class).getEventSelector();
+        this.hbState = hbState;
+        
         session = createHbcSession(target, ip, port);
         setHandler((HBSessionHandler) session.getHandler());
         
-        getHandler().setPingMsg(target.getPingMsg());
+        getHandler().setPingMsg(pingMsg);
         
-        updateHbState(mode, hbState);
+        toggleHearbeat(mode, hbOnOff);
     }
     
     private ClientSession createHbcSession(HeartbeatTarget target, String ip, int port) {
@@ -92,27 +95,27 @@ public class HBSession {
     }
     
     public synchronized void callbackDelete() {
-        if (getHbState().equals(HB_MONITOR_YES)) {
+        if (getHbOnOff().equals(HB_MONITOR_YES)) {
             stop();
         }
     }
     
-    public synchronized void updateHbState(int mode, String value)  {
-        if (getHbState().equals(value) && clusterMode == mode) {
+    public synchronized void toggleHearbeat(int newClusterMode, String hbOnOff)  {
+        if (getHbOnOff().equals(hbOnOff) && prevClusterMode == newClusterMode) {
             return;
         }
         
-        clusterMode = mode;
-        setHbState(value);
-        if (clusterMode == CLUSTER_ON) {
-            if (getHbState().equals(HB_MONITOR_YES)) {
+        setHbOnOff(hbOnOff);
+        if (newClusterMode == CLUSTER_ON) {
+            if (getHbOnOff().equals(HB_MONITOR_YES)) {
                 start();
-            } else if (getHbState().equals(HB_MONITOR_NO)) {
+            } else if (getHbOnOff().equals(HB_MONITOR_NO)) {
                 stop();
             }
-        } else if (clusterMode == CLUSTER_OFF) {
+        } else if (newClusterMode == CLUSTER_OFF) {
             stop();
         }
+        prevClusterMode = newClusterMode;
     }
 
     public synchronized void start() {
@@ -132,12 +135,12 @@ public class HBSession {
         workflowExecutor.perform(OPINION_DISCARD, handler.getTarget());
     }
     
-    public String getHbState() {
-        return hbState;
+    public String getHbOnOff() {
+        return hbOnOff;
     }
 
-    public void setHbState(String hbState) {
-        this.hbState = hbState;
+    public void setHbOnOff(String hbOnOff) {
+        this.hbOnOff = hbOnOff;
     }
     
     public void urgent() {
@@ -154,6 +157,14 @@ public class HBSession {
     
     public int getID() {
         return session.getID();
+    }
+
+    public HBState getHeartbeatState() {
+        return hbState;
+    }
+
+    public void setHeartbeatState(HBState hbState) {
+        this.hbState = hbState;
     }
     
 }

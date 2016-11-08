@@ -1,6 +1,5 @@
 import os
 import util
-import pdb
 import telnetlib
 
 class ZooKeeper:

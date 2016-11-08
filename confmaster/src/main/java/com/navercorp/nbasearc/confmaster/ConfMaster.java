@@ -32,9 +32,9 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperExcept
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.heartbeat.HeartbeatChecker;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.ClusterContollerServer;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.command.CommandExecutor;
 import com.navercorp.nbasearc.confmaster.server.command.ConfmasterService;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionHandler;
@@ -54,7 +54,7 @@ public class ConfMaster {
     private ApplicationContext context;
     
     @Autowired
-    private ZooKeeperHolder zookeeper;
+    private ZooKeeperHolder zk;
     
     @Autowired
     private Config config;
@@ -78,6 +78,8 @@ public class ConfMaster {
     private GracefulTerminator terminator;
     
     private ClusterContollerServer server;
+    
+    private int numberOfHeartbeatCheckers = 0;
 
     public void initialize() throws InterruptedException,
             MgmtZooKeeperException, KeeperException, Exception {
@@ -90,7 +92,7 @@ public class ConfMaster {
         heartbeatChecker.initialize();
 
         // Database layer
-        zookeeper.initialize();
+        zk.initialize();
         
         // Mgmt initialize
         confmasterService.initialize();
@@ -118,7 +120,7 @@ public class ConfMaster {
         jobExecutor.release();
         
         // Database layer
-        zookeeper.release();
+        zk.release();
     }
 
     public void run() {
@@ -126,6 +128,18 @@ public class ConfMaster {
             heartbeatChecker.process();
             Logger.flush(INFO);
         }
+    }
+
+    public int getMajority() {
+        return getNumberOfHeartbeatCheckers() / 2 + 1;
+    }
+
+    public int getNumberOfHeartbeatCheckers() {
+        return numberOfHeartbeatCheckers;
+    }
+
+    public void setNumberOfHeartbeatCheckers(int numberOfHeartbeatChecker) {
+        this.numberOfHeartbeatCheckers = numberOfHeartbeatChecker;
     }
     
     public static void main(String[] args) {

@@ -41,11 +41,11 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandNotFound
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtStateNotSatisfiedException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType;
@@ -60,7 +60,7 @@ public class CommandTemplate implements Callable<JobResult> {
     
     private final DefaultConversionService cs = new DefaultConversionService();
     private final ConfMaster confMaster;
-    private final ClusterImo clusterImo;
+    private final ClusterComponentContainer container;
     
     public CommandTemplate(String request, CommandCallback callback, 
             ApplicationContext context, Map<String, CommandCaller> commandMethods, 
@@ -71,7 +71,7 @@ public class CommandTemplate implements Callable<JobResult> {
         this.commandMethods = commandMethods;
         this.lockMethods = lockMethods;
         this.confMaster = confMaster;
-        this.clusterImo = context.getBean(ClusterImo.class);
+        this.container = context.getBean(ClusterComponentContainer.class);
     }
     
     @Override
@@ -221,14 +221,14 @@ public class CommandTemplate implements Callable<JobResult> {
         }
 
         final String clusterName = command.getClusterName(args, 1);
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (cluster == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
         
-        if ((requiredMode & cluster.getData().getMode()) != 0) {
+        if ((requiredMode & cluster.getMode()) != 0) {
             return true;
         }
 

@@ -27,72 +27,65 @@ import org.apache.zookeeper.Op;
 import org.apache.zookeeper.OpResult;
 import org.springframework.context.ApplicationContext;
 
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
-import com.navercorp.nbasearc.confmaster.repository.znode.RedisServerData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
-import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
 public class StartOfTheEpochWorkflow {
     final ApplicationContext context;
-    final ZooKeeperHolder zookeeper;
-    final PartitionGroupDao pgDao;
-    final PartitionGroupServerDao pgsDao;
-    final RedisServerImo rsImo;
+    final ZooKeeperHolder zk;
+    final ClusterComponentContainer container;
 
     final PartitionGroup pg;
     final PartitionGroupServer pgs;
     RedisServer rs;
 
-    PartitionGroupServerData pgsM;
-    PartitionGroupData pgM;
-    RedisServerData rsM;
+    PartitionGroupServer.PartitionGroupServerData pgsM;
+    RedisServer.RedisServerData rsM;
+    PartitionGroup.PartitionGroupData pgM;
     List<OpResult> results;
 
     public StartOfTheEpochWorkflow(PartitionGroup pg, PartitionGroupServer pgs,
             ApplicationContext context) {
         this.context = context;
-        this.zookeeper = context.getBean(ZooKeeperHolder.class);
-        this.pgDao = context.getBean(PartitionGroupDao.class);
-        this.pgsDao = context.getBean(PartitionGroupServerDao.class);
-        this.rsImo = context.getBean(RedisServerImo.class);
+        this.zk = context.getBean(ZooKeeperHolder.class);
+        this.container = context.getBean(ClusterComponentContainer.class);
 
         this.pg = pg;
         this.pgs = pgs;
     }
 
     public void execute() throws InterruptedException, KeeperException {
-        final int mgen = pg.getData().currentGen();
-        final int copy = pg.getData().getCopy();
+        final int mgen = pg.currentGen();
+        final int copy = pg.getCopy();
 
         if (mgen != -1 || copy != 0) {
             return;
         }
 
-        pgsM = PartitionGroupServerData.builder().from(pgs.getData())
-                .withHb(HB_MONITOR_YES).withColor(BLUE).build();
+        pgsM = pgs.clonePersistentData();
+        pgsM.hb = HB_MONITOR_YES;
+        pgsM.color = BLUE;
 
-        rs = rsImo.get(pgs.getName(), pgs.getClusterName());
-        rsM = RedisServerData.builder().from(rs.getData())
-                .withHb(HB_MONITOR_YES).build();
+        rs = container.getRs(pgs.getClusterName(), pgs.getName());
+        rsM = rs.clonePersistentData();
+    	rsM.hb = HB_MONITOR_YES;
 
-        pgM = PartitionGroupData.builder().from(pg.getData()).withCopy(1)
-                .withQuorum(0).build();
+        pgM = pg.clonePersistentData();
+        pgM.copy = 1;
+        pgM.quorum = 0;
 
         List<Op> opList = new ArrayList<Op>();
-        opList.add(pgsDao.createUpdatePgsOperation(pgs.getPath(), pgsM));
-        opList.add(pgsDao.createUpdateRsOperation(rs.getPath(), rsM));
-        opList.add(pgDao.createUpdatePgOperation(pg.getPath(), pgM));
+        opList.add(Op.setData(pgs.getPath(), pgsM.toBytes(), -1));
+        opList.add(Op.setData(rs.getPath(), rsM.toBytes(), -1));
+        opList.add(Op.setData(pg.getPath(), pgM.toBytes(), -1));
 
-        results = zookeeper.getZooKeeper().multi(opList);
-        pgs.setStat(((OpResult.SetDataResult) results.get(0)).getStat());
-        pgs.setData(pgsM);
-        rs.setData(rsM);
-        pg.setData(pgM);
+        results = zk.getZooKeeper().multi(opList);
+        pgs.setZNodeVersion(((OpResult.SetDataResult) results.get(0)).getStat().getVersion());
+        pgs.setPersistentData(pgsM);
+        rs.setPersistentData(rsM);
+        pg.setPersistentData(pgM);
     }
 }

@@ -40,9 +40,10 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentMock;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 
@@ -72,12 +73,12 @@ public class Workflow201Test extends BasicSetting {
     }
 
     @Autowired
-    ZooKeeperHolder zookeeper;
+    ZooKeeperHolder zk;
 
     public String getConfiguration() {
         StringBuilder sb = new StringBuilder();
         for (PartitionGroupServer pgs : getPgsList()) {
-            sb.append(pgs).append("\n").append(pgs.getData()).append("\n");
+            sb.append(pgs).append("\n").append(pgs.persistentDataToString()).append("\n");
         }
 
         return sb.toString();
@@ -93,8 +94,8 @@ public class Workflow201Test extends BasicSetting {
         }
 
         for (PartitionGroupServer pgs : getPgsList()) {
-            String r = pgs.getData().getRole();
-            Color c = pgs.getData().getColor();
+            String r = pgs.getRole();
+            Color c = pgs.getColor();
             
             if (r.equals(PGS_ROLE_MASTER)) {
                 if (c != GREEN) {
@@ -110,7 +111,7 @@ public class Workflow201Test extends BasicSetting {
             colorMap.put(c, colorMap.get(c) + 1);
         }
         
-        quorum = getPg().getData().getQuorum();
+        quorum = getPg().getQuorum();
         
         if (masterCnt != 1) {
             return false;
@@ -133,10 +134,10 @@ public class Workflow201Test extends BasicSetting {
         createPg();
 
         // Check initial value of PG
-        assertEquals(-1, getPg().getData().currentGen());
-        assertEquals(Integer.valueOf(0), getPg().getData().getCopy());
-        assertEquals(Integer.valueOf(0), getPg().getData().getQuorum());
-        assertEquals(0, getPg().getData().getPgsIdList().size());
+        assertEquals(-1, getPg().currentGen());
+        assertEquals(0, getPg().getCopy());
+        assertEquals(0, getPg().getQuorum());
+        assertEquals(0, getPg().getPgsIdList().size());
 
         // Add first PGS
         createPgs(0);
@@ -156,9 +157,9 @@ public class Workflow201Test extends BasicSetting {
         System.out.println("ME\n" + getConfiguration());
 
         // Check Master
-        assertEquals(PGS_ROLE_MASTER, master.getData().getRole());
-        assertEquals(GREEN, master.getData().getColor());
-        assertEquals(0, getPg().getData().currentGen());
+        assertEquals(PGS_ROLE_MASTER, master.getRole());
+        assertEquals(GREEN, master.getColor());
+        assertEquals(0, getPg().currentGen());
 
         // Add Slave
         for (int slaveIdx = 1; slaveIdx < 3; slaveIdx++) {
@@ -172,10 +173,9 @@ public class Workflow201Test extends BasicSetting {
 
             // to LCONN
             PartitionGroupServer slave = getPgs(slaveIdx);
-            PartitionGroupServerData slave1M = PartitionGroupServerData
-                    .builder().from(slave.getData()).withRole(PGS_ROLE_LCONN)
-                    .build();
-            slave.setData(slave1M);
+            PartitionGroupServerData slave1M = slave.clonePersistentData();
+            slave1M.setRole(PGS_ROLE_LCONN);
+            slave.setPersistentData(slave1M);
 
             // RA
             RoleAdjustmentWorkflow ra = new RoleAdjustmentWorkflow(getPg(),
@@ -184,8 +184,8 @@ public class Workflow201Test extends BasicSetting {
             System.out.println("RA\n" + getConfiguration());
 
             // Check lconn
-            assertEquals(PGS_ROLE_LCONN, slave.getData().getRole());
-            assertEquals(YELLOW, slave.getData().getColor());
+            assertEquals(PGS_ROLE_LCONN, slave.getRole());
+            assertEquals(YELLOW, slave.getColor());
         }
         
         // YJ
@@ -197,10 +197,9 @@ public class Workflow201Test extends BasicSetting {
             PartitionGroupServer slave = getPgs(slaveIdx);
 
             // Check whether pgs became a slave
-            assertEquals(PGS_ROLE_SLAVE, slave.getData().getRole());
-            assertEquals(YELLOW, slave.getData().getColor());
-            assertEquals(getPg().getData().currentGen() + 1, slave.getData()
-                    .getMasterGen());
+            assertEquals(PGS_ROLE_SLAVE, slave.getRole());
+            assertEquals(YELLOW, slave.getColor());
+            assertEquals(getPg().currentGen() + 1, slave.getMasterGen());
         }
 
         // MG
@@ -216,55 +215,55 @@ public class Workflow201Test extends BasicSetting {
 
         // Kill master
         BlockingSocketImpl msockDead = mock(BlockingSocketImpl.class);
-        master.setServerConnection(msockDead);
+        ClusterComponentMock.setConnectionForCommand(master, msockDead);
         when(msockDead.execute(anyString())).thenReturn("");
         
-        PartitionGroupServerData pgsM = PartitionGroupServerData.builder()
-                .from(master.getData()).withRole(PGS_ROLE_NONE).build();
-        master.setData(pgsM);
+        PartitionGroupServerData pgsM = master.clonePersistentData();
+        pgsM.setRole(PGS_ROLE_NONE);
+        master.setPersistentData(pgsM);
 
         // RA
-        final int mgen = getPg().getData().currentGen();
+        final int mgen = getPg().currentGen();
         RoleAdjustmentWorkflow ra = new RoleAdjustmentWorkflow(getPg(), false,
                 context);
         ra.execute();
 
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (!pgs.getData().getRole().equals(PGS_ROLE_SLAVE)) {
+            if (!pgs.getRole().equals(PGS_ROLE_SLAVE)) {
                 continue;
             }
 
-            pgsM = PartitionGroupServerData.builder().from(pgs.getData())
-                    .withRole(PGS_ROLE_LCONN).build();
-            pgs.setData(pgsM);
+            pgsM = pgs.clonePersistentData();
+            pgsM.setRole(PGS_ROLE_LCONN);
+            pgs.setPersistentData(pgsM);
             ra = new RoleAdjustmentWorkflow(getPg(), false, context);
             ra.execute();
 
-            assertEquals(PGS_ROLE_LCONN, pgs.getData().getRole());
-            assertEquals(BLUE, pgs.getData().getColor());
+            assertEquals(PGS_ROLE_LCONN, pgs.getRole());
+            assertEquals(BLUE, pgs.getColor());
         }
 
         // Check
-        assertEquals(PGS_ROLE_NONE, master.getData().getRole());
-        assertEquals(RED, master.getData().getColor());
+        assertEquals(PGS_ROLE_NONE, master.getRole());
+        assertEquals(RED, master.getColor());
 
         // ME
         me = new MasterElectionWorkflow(getPg(), null, false, context);
         me.execute();
 
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)) {
+            if (pgs.getRole().equals(PGS_ROLE_MASTER)) {
                 master = pgs;
             }
         }
         assertNotNull(master);
-        assertEquals(GREEN, master.getData().getColor());
-        assertEquals(mgen + 1, getPg().getData().currentGen());
+        assertEquals(GREEN, master.getColor());
+        assertEquals(mgen + 1, getPg().currentGen());
 
         // BJ
         int bsCnt = 0;
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_LCONN)) {
+            if (pgs.getRole().equals(PGS_ROLE_LCONN)) {
                 bsCnt++;
             }
         }
@@ -274,8 +273,8 @@ public class Workflow201Test extends BasicSetting {
 
         int gsCnt = 0;
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_SLAVE)) {
-                assertEquals(GREEN, pgs.getData().getColor());
+            if (pgs.getRole().equals(PGS_ROLE_SLAVE)) {
+                assertEquals(GREEN, pgs.getColor());
                 gsCnt++;
             }
         }
@@ -296,10 +295,10 @@ public class Workflow201Test extends BasicSetting {
         createPg();
 
         // Check initial value of PG
-        assertEquals(-1, getPg().getData().currentGen());
-        assertEquals(Integer.valueOf(0), getPg().getData().getCopy());
-        assertEquals(Integer.valueOf(0), getPg().getData().getQuorum());
-        assertEquals(0, getPg().getData().getPgsIdList().size());
+        assertEquals(-1, getPg().currentGen());
+        assertEquals(0, getPg().getCopy());
+        assertEquals(0, getPg().getQuorum());
+        assertEquals(0, getPg().getPgsIdList().size());
 
         // Add first PGS
         createPgs(0);
@@ -317,9 +316,9 @@ public class Workflow201Test extends BasicSetting {
         doCommand("op_wf " + clusterName + " " + getPg().getName() + " ME false forced");
 
         // Check Master
-        assertEquals(PGS_ROLE_MASTER, master.getData().getRole());
-        assertEquals(GREEN, master.getData().getColor());
-        assertEquals(0, getPg().getData().currentGen());
+        assertEquals(PGS_ROLE_MASTER, master.getRole());
+        assertEquals(GREEN, master.getColor());
+        assertEquals(0, getPg().currentGen());
 
         // Add Slave
         for (int slaveIdx = 1; slaveIdx < 3; slaveIdx++) {
@@ -333,17 +332,16 @@ public class Workflow201Test extends BasicSetting {
 
             // to LCONN
             PartitionGroupServer slave = getPgs(slaveIdx);
-            PartitionGroupServerData slave1M = PartitionGroupServerData
-                    .builder().from(slave.getData()).withRole(PGS_ROLE_LCONN)
-                    .build();
-            slave.setData(slave1M);
+            PartitionGroupServerData slave1M = slave.clonePersistentData();
+    		slave1M.setRole(PGS_ROLE_LCONN);
+            slave.setPersistentData(slave1M);
 
             // RA
             doCommand("op_wf " + clusterName + " " + getPg().getName() + " RA false forced");
 
             // Check lconn
-            assertEquals(PGS_ROLE_LCONN, slave.getData().getRole());
-            assertEquals(YELLOW, slave.getData().getColor());
+            assertEquals(PGS_ROLE_LCONN, slave.getRole());
+            assertEquals(YELLOW, slave.getColor());
         }
         
         // YJ
@@ -353,10 +351,9 @@ public class Workflow201Test extends BasicSetting {
             PartitionGroupServer slave = getPgs(slaveIdx);
 
             // Check whether pgs became a slave
-            assertEquals(PGS_ROLE_SLAVE, slave.getData().getRole());
-            assertEquals(YELLOW, slave.getData().getColor());
-            assertEquals(getPg().getData().currentGen() + 1, slave.getData()
-                    .getMasterGen());
+            assertEquals(PGS_ROLE_SLAVE, slave.getRole());
+            assertEquals(YELLOW, slave.getColor());
+            assertEquals(getPg().currentGen() + 1, slave.getMasterGen());
         }
 
         // MG
@@ -370,51 +367,51 @@ public class Workflow201Test extends BasicSetting {
         
         // Kill master
         BlockingSocketImpl msockDead = mock(BlockingSocketImpl.class);
-        master.setServerConnection(msockDead);
+        ClusterComponentMock.setConnectionForCommand(master, msockDead);
         when(msockDead.execute(anyString())).thenReturn("");
         
-        PartitionGroupServerData pgsM = PartitionGroupServerData.builder()
-                .from(master.getData()).withRole(PGS_ROLE_NONE).build();
-        master.setData(pgsM);
+        PartitionGroupServerData pgsM = master.clonePersistentData();
+        pgsM.setRole(PGS_ROLE_NONE);
+        master.setPersistentData(pgsM);
 
         // RA
-        final int mgen = getPg().getData().currentGen();
+        final int mgen = getPg().currentGen();
         doCommand("op_wf " + clusterName + " " + getPg().getName() + " RA false forced");
 
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (!pgs.getData().getRole().equals(PGS_ROLE_SLAVE)) {
+            if (!pgs.getRole().equals(PGS_ROLE_SLAVE)) {
                 continue;
             }
 
-            pgsM = PartitionGroupServerData.builder().from(pgs.getData())
-                    .withRole(PGS_ROLE_LCONN).build();
-            pgs.setData(pgsM);
+            pgsM = pgs.clonePersistentData();
+            pgsM.setRole(PGS_ROLE_LCONN);
+            pgs.setPersistentData(pgsM);
             doCommand("op_wf " + clusterName + " " + getPg().getName() + " RA false forced");
 
-            assertEquals(PGS_ROLE_LCONN, pgs.getData().getRole());
-            assertEquals(BLUE, pgs.getData().getColor());
+            assertEquals(PGS_ROLE_LCONN, pgs.getRole());
+            assertEquals(BLUE, pgs.getColor());
         }
 
         // Check
-        assertEquals(PGS_ROLE_NONE, master.getData().getRole());
-        assertEquals(RED, master.getData().getColor());
+        assertEquals(PGS_ROLE_NONE, master.getRole());
+        assertEquals(RED, master.getColor());
 
         // ME
         doCommand("op_wf " + clusterName + " " + getPg().getName() + " ME false forced");
 
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)) {
+            if (pgs.getRole().equals(PGS_ROLE_MASTER)) {
                 master = pgs;
             }
         }
         assertNotNull(master);
-        assertEquals(GREEN, master.getData().getColor());
-        assertEquals(mgen + 1, getPg().getData().currentGen());
+        assertEquals(GREEN, master.getColor());
+        assertEquals(mgen + 1, getPg().currentGen());
 
         // BJ
         int bsCnt = 0;
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_LCONN)) {
+            if (pgs.getRole().equals(PGS_ROLE_LCONN)) {
                 bsCnt++;
             }
         }
@@ -423,8 +420,8 @@ public class Workflow201Test extends BasicSetting {
 
         int gsCnt = 0;
         for (PartitionGroupServer pgs : getPgsList()) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_SLAVE)) {
-                assertEquals(GREEN, pgs.getData().getColor());
+            if (pgs.getRole().equals(PGS_ROLE_SLAVE)) {
+                assertEquals(GREEN, pgs.getColor());
                 gsCnt++;
             }
         }

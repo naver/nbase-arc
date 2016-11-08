@@ -29,14 +29,13 @@ import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.ver1_2.ZDSGatewayAffinity;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 import com.navercorp.nbasearc.confmaster.server.command.ConfmasterService;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionSupport.LeaderElectionEventType;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 @Component
 public class LeaderElectionHandler implements LeaderElectionAware {
@@ -47,9 +46,7 @@ public class LeaderElectionHandler implements LeaderElectionAware {
     @Autowired
     private ZooKeeperHolder zk;
     @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
-    @Autowired
-    private ZDSGatewayAffinity znodeStructAffinity;
+    private WorkflowLogger workflowLogger;
 
     @Autowired
     private WorkflowExecutor workflowExecutor;
@@ -106,18 +103,17 @@ public class LeaderElectionHandler implements LeaderElectionAware {
         Logger.info("become leader");
         LeaderState.setLeader();
         
-        workflowLogDao.initialize();
+        workflowLogger.initialize();
         
         JobIDGenerator.getInstance().initialize();
 
-        workflowLogDao.log(JobIDGenerator.getInstance().getID(), 
+        workflowLogger.log(JobIDGenerator.getInstance().getID(), 
                 Constant.SEVERITY_MAJOR, "LeaderElectionWorkflow",
                 Constant.LOG_TYPE_WORKFLOW, "", "New leader was elected.", 
                 String.format("{\"ip\":\"%s\",\"port\":%d}", config.getIp(), config.getPort()));
         
         confmasterService.loadAll();
-        
-        znodeStructAffinity.updateZNodeDirectoryStructure(config.getCharset());
+        confmasterService.updateZNodeDirectoryStructure();
         
         /*
          * Leader ConfMaster.state transition:

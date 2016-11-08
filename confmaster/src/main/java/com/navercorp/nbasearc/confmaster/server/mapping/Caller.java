@@ -121,7 +121,7 @@ public class Caller {
             boolean hasClusterHint = false;
             for (Annotation[] paramAnns : method.getParameterAnnotations()) {
                 for (Annotation paramAnn : paramAnns) {
-                    if (ParamClusterHint.class.isInstance(paramAnn)) {
+                    if (ClusterHint.class.isInstance(paramAnn)) {
                         hasClusterHint = true;
                     }
                 }
@@ -147,7 +147,7 @@ public class Caller {
                         Param commandParam = (Param) paramAnn;
                         validParamAnn(commandParam, paramTypes[i], paramTypes.length, i);
                         argTypes.put(paramTypes[i], commandParam.type());
-                    } else if (ParamClusterHint.class.isInstance(paramAnn)) {
+                    } else if (ClusterHint.class.isInstance(paramAnn)) {
                         validParamClusterHintAnn();
                         paramIdxClusterHint = i;    // method(command_name, arg1, arg2, ...)
                         clusterHint = paramTypes[i];

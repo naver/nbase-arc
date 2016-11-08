@@ -23,7 +23,6 @@ import org.springframework.stereotype.Component;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 
 @Component("RARoleLconn")
@@ -33,15 +32,15 @@ public class RARoleLconn {
     // Since it is a singleton instance and represents a part of workflow logic running in multiple threads.
 
     @Autowired
-    WorkflowLogDao workflowLogDao;
+    WorkflowLogger workflowLogger;
 
     public void roleLconn(PartitionGroupServer pgs, Color color, long jobID)
             throws MgmtSmrCommandException {
         pgs.roleLconn();
         Logger.info("{} {}->{} {}->{}", new Object[] { pgs,
-                pgs.getData().getRole(), PGS_ROLE_LCONN,
-                pgs.getData().getColor(), color });
-        pgs.setData(pgs.roleLconnZk(jobID, color, workflowLogDao).pgsM);
+                pgs.getRole(), PGS_ROLE_LCONN,
+                pgs.getColor(), color });
+        pgs.setPersistentData(pgs.updateZNodeAsLconn(jobID, color, workflowLogger));
     }
 
 }

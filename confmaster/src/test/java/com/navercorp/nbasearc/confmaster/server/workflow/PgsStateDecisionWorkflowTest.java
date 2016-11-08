@@ -33,8 +33,8 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
-import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion.OpinionData;
 import com.navercorp.nbasearc.confmaster.server.cluster.UsedOpinionSet;
 import com.navercorp.nbasearc.confmaster.server.workflow.PGSStateDecisionWorkflow.MakeDecisionResult;
 

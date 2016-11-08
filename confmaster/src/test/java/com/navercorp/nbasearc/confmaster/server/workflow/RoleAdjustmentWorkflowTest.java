@@ -34,10 +34,10 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.mimic.MimicPGS;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -74,16 +74,16 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
     public void after() throws Exception {
         // Clear cluster
         Cluster cluster = getCluster();
-        for (PartitionGroupServer pgs : pgsImo.getList(cluster.getName())) {
+        for (PartitionGroupServer pgs : container.getPgsList(cluster.getName())) {
             deletePgs(Integer.valueOf(pgs.getName()),
-                    pgsImo.getList(cluster.getName()).size() == 1);
+                    container.getPgsList(cluster.getName()).size() == 1);
         }
 
-        if (!pgImo.getList(cluster.getName()).isEmpty()) {
+        if (!container.getPgList(cluster.getName()).isEmpty()) {
             deletePg();
         }
 
-        if (!gwImo.getList(cluster.getName()).isEmpty()) {
+        if (!container.getGwList(cluster.getName()).isEmpty()) {
             deleteGw();
         }
         
@@ -131,8 +131,8 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
         RoleAdjustmentWorkflow ra = new RoleAdjustmentWorkflow(getPg(), false,
                 context);
         ra.execute();
-        assertEquals(PGS_ROLE_NONE, p1.getData().getRole());
-        assertEquals(BLUE, p1.getData().getColor());
+        assertEquals(PGS_ROLE_NONE, p1.getRole());
+        assertEquals(BLUE, p1.getColor());
         
         runWorkflows();
         
@@ -147,14 +147,15 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
         doCommand("pgs_join " + getPgs(1).getClusterName() + " " + getPgs(1).getName());
         PartitionGroupServer p2 = getPgs(1);
         
-        p2.setData(PartitionGroupServerData.builder().from(p2.getData())
-                .withRole(PGS_ROLE_LCONN).build());
+        PartitionGroupServerData d2 = p2.clonePersistentData();
+        d2.setRole(PGS_ROLE_LCONN);
+        p2.setPersistentData(d2);
         ra = new RoleAdjustmentWorkflow(getPg(), false, context);
         ra.execute();
-        assertEquals(PGS_ROLE_LCONN, p2.getData().getRole());
-        assertEquals(YELLOW, p2.getData().getColor());
-        assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
-        assertEquals(GREEN, p1.getData().getColor());
+        assertEquals(PGS_ROLE_LCONN, p2.getRole());
+        assertEquals(YELLOW, p2.getColor());
+        assertEquals(PGS_ROLE_MASTER, p1.getRole());
+        assertEquals(GREEN, p1.getColor());
         
         runWorkflows();
         
@@ -176,16 +177,17 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
         doCommand("pgs_join " + getPgs(2).getClusterName() + " " + getPgs(2).getName());
         PartitionGroupServer p3 = getPgs(2);
         
-        p3.setData(PartitionGroupServerData.builder().from(p3.getData())
-                .withRole(PGS_ROLE_LCONN).build());
+        PartitionGroupServerData d3 = p3.clonePersistentData();
+        d3.setRole(PGS_ROLE_LCONN);
+        p3.setPersistentData(d3);        		
         ra = new RoleAdjustmentWorkflow(getPg(), false, context);
         ra.execute();
-        assertEquals(PGS_ROLE_LCONN, p3.getData().getRole());
-        assertEquals(YELLOW, p3.getData().getColor());
-        assertEquals(PGS_ROLE_SLAVE, p2.getData().getRole());
-        assertEquals(GREEN, p2.getData().getColor());
-        assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
-        assertEquals(GREEN, p1.getData().getColor());
+        assertEquals(PGS_ROLE_LCONN, p3.getRole());
+        assertEquals(YELLOW, p3.getColor());
+        assertEquals(PGS_ROLE_SLAVE, p2.getRole());
+        assertEquals(GREEN, p2.getColor());
+        assertEquals(PGS_ROLE_MASTER, p1.getRole());
+        assertEquals(GREEN, p1.getColor());
         
         runWorkflows();
         
@@ -206,19 +208,20 @@ public class RoleAdjustmentWorkflowTest extends BasicSetting {
         
         // Slave2 fail and RA
         mimics[2].mSmr.execute("role none");
-        p3.setData(PartitionGroupServerData.builder().from(p3.getData())
-                .withRole(PGS_ROLE_NONE).build());
+        d3 = p3.clonePersistentData();
+        d3.setRole(PGS_ROLE_NONE);
+        p3.setPersistentData(d3);
         
         ra = new RoleAdjustmentWorkflow(getPg(), false, context);
         ra.execute();
 
         // RA/toRed make master lconn.
-        assertEquals(BLUE, p1.getData().getColor());
-        assertEquals(PGS_ROLE_LCONN, p1.getData().getRole());
-        assertEquals(SERVER_STATE_LCONN, p1.getData().getState());
-        assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(1, p1.getData().getMasterGen());
-        assertEquals(0, pg.getData().currentGen());
+        assertEquals(BLUE, p1.getColor());
+        assertEquals(PGS_ROLE_LCONN, p1.getRole());
+        assertEquals(SERVER_STATE_LCONN, p1.getState());
+        assertEquals(HB_MONITOR_YES, p1.getHeartbeat());
+        assertEquals(1, p1.getMasterGen());
+        assertEquals(0, pg.currentGen());
     }
     
 }

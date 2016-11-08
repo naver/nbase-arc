@@ -23,66 +23,61 @@ import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.Op;
 import org.apache.zookeeper.OpResult;
 import org.apache.zookeeper.ZooDefs;
+import org.apache.zookeeper.data.Stat;
 import org.springframework.context.ApplicationContext;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeAlreayExistsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.MemoryObjectMapper;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.GatewayDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.NotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.OpinionDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
-import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
-import com.navercorp.nbasearc.confmaster.server.cluster.FailureDetector;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
-import com.navercorp.nbasearc.confmaster.server.imo.FailureDetectorImo;
-import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.NodeType;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion.OpinionData;
 
 public class CommonStateDecisionWorkflow {
     
-    private ZooKeeperHolder zookeeper;
+    private final ZooKeeperHolder zk;
+    private final Opinion opinion;
     private HeartbeatTarget target;
     private int majority;
 
     private final String path;
     private final long jobID = JobIDGenerator.getInstance().getID();
 
-    private final FailureDetectorImo fdImo;
-    private final GatewayImo gwImo;
+    private final ClusterComponentContainer container;
+    private final WorkflowLogger workflowLogger;
+    private final GatewayLookup gwInfoNotifier;
     
-    private final GatewayDao gwDao;
-    private final OpinionDao opinionDao;
-    private final WorkflowLogDao workflowLogDao;
-    private final NotificationDao notificationDao;
+    private final ConfMaster confmaster;
 
     protected CommonStateDecisionWorkflow(HeartbeatTarget target, ApplicationContext context) {
         this.target = target;
         this.path = target.getPath();
         
-        this.zookeeper = context.getBean(ZooKeeperHolder.class);
+        this.zk = context.getBean(ZooKeeperHolder.class);
+        this.opinion = context.getBean(Opinion.class);
         
-        this.fdImo = context.getBean(FailureDetectorImo.class);
-        this.gwImo = context.getBean(GatewayImo.class); 
+        this.container = context.getBean(ClusterComponentContainer.class); 
+        this.workflowLogger = context.getBean(WorkflowLogger.class);
+        this.gwInfoNotifier = context.getBean(GatewayLookup.class);
         
-        this.gwDao = context.getBean(GatewayDao.class);
-        this.opinionDao = context.getBean(OpinionDao.class);
-        this.workflowLogDao = context.getBean(WorkflowLogDao.class);
-        this.notificationDao = context.getBean(NotificationDao.class);
+        this.confmaster = context.getBean(ConfMaster.class);
     }
     
     public String execute(ThreadPool executor) throws NoNodeException,
             MgmtZooKeeperException, MgmtZNodeDoesNotExistException,
             MgmtZNodeAlreayExistsException {
-        majority = fdImo.get().getMajority();
+        majority = confmaster.getMajority();
         if (NodeType.PGS == target.getNodeType()) {
             Logger.error("This workflow is not for a pgs.");
             return null;
@@ -129,11 +124,10 @@ public class CommonStateDecisionWorkflow {
      */
     private GatherOpinionsResult gatherOpinions() throws NoNodeException,
             MgmtZooKeeperException {
-        FailureDetector fd = fdImo.get();
-        majority = fd.getMajority();
+        majority = confmaster.getMajority();
         
         List<OpinionData> opinions;
-        opinions = opinionDao.getOpinions(path);
+        opinions = opinion.getOpinions(path);
         if (0 == opinions.size()) {
             Logger.info("Majority check fail. "
                     + "Total: 0, Available: 0, Majority: " + majority);
@@ -143,7 +137,7 @@ public class CommonStateDecisionWorkflow {
 
         int numberOfOpinions = opinions.size();
         for (OpinionData data : opinions) {
-            if (target.getVersion() > data.getVersion()) {
+            if (target.getZNodeVersion() > data.getVersion()) {
                 numberOfOpinions--;
             }
         }
@@ -180,7 +174,7 @@ public class CommonStateDecisionWorkflow {
         int N = 0;
 
         for (OpinionData data : opinions) {
-            if (target.getVersion() != data.getVersion()) {
+            if (target.getZNodeVersion() != data.getVersion()) {
                 continue;
             }
 
@@ -212,7 +206,7 @@ public class CommonStateDecisionWorkflow {
         }
 
         if (newState.equals(Constant.SERVER_STATE_FAILURE)) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                             Constant.SEVERITY_MAJOR,
                             "CommonFailureDetectionWorkflow",
                             Constant.LOG_TYPE_WORKFLOW,
@@ -223,7 +217,7 @@ public class CommonStateDecisionWorkflow {
                                     target.getNodeType(), target.getName(),
                                     target.getView(), newState));
         } else if (newState.equals(Constant.SERVER_STATE_NORMAL)) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                             Constant.SEVERITY_MODERATE,
                             "CommonFailureDetectionWorkflow",
                             Constant.LOG_TYPE_WORKFLOW,
@@ -247,7 +241,8 @@ public class CommonStateDecisionWorkflow {
 
         default:
             target.setState(newState, 0);
-            zookeeper.reflectMemoryIntoZk(target.getZNode());
+            Stat stat = zk.setData(target.getPath(), target.persistentDataToBytes(), -1);
+            target.setZNodeVersion(stat.getVersion());
             break;
         }
     }
@@ -260,32 +255,32 @@ public class CommonStateDecisionWorkflow {
             return;
         }
         
-        Gateway gw = gwImo.get(target.getName(), target.getClusterName());
+        Gateway gw = (Gateway) container.get(target.getPath());
         boolean existInZookeeper = 
-                notificationDao.isGatewayExist(gw.getClusterName(), gw.getName());
+                gwInfoNotifier.isGatewayExist(gw.getClusterName(), gw.getName());
 
         List<Op> ops = new ArrayList<Op>();
         if (newState.equals(Constant.SERVER_STATE_FAILURE)) {
             if (existInZookeeper) {
-                notificationDao.addDeleteGatewayOp(ops,
+                gwInfoNotifier.addDeleteGatewayOp(ops,
                         gw.getClusterName(), gw.getName());
             }
         } else if (newState.equals(Constant.SERVER_STATE_NORMAL) && !existInZookeeper) {
-            notificationDao.addCreateGatewayOp(ops,
-                    gw.getClusterName(), gw.getName(), gw.getData().getPmIp(),
-                    gw.getData().getPort());
+            gwInfoNotifier.addCreateGatewayOp(ops,
+                    gw.getClusterName(), gw.getName(), gw.getPmIp(),
+                    gw.getPort());
         }
 
         if (!ops.isEmpty()) {
-            GatewayData gwData = (GatewayData) gw.getData().clone();
-            gwData.setState(newState);
+        	Gateway.GatewayData gwData = gw.clonePersistentData();
+            gwData.state = newState;
 
             MemoryObjectMapper mapper = new MemoryObjectMapper();
             byte[] data = mapper.writeValueAsBytes(gwData);
 
             ops.add(Op.setData(gw.getPath(), data, -1));
 
-            List<OpResult> results = zookeeper.multi(ops);
+            List<OpResult> results = zk.multi(ops);
             for (OpResult result : results) {
                 if (result.getType() == ZooDefs.OpCode.error) {
                     OpResult.ErrorResult errRes = (OpResult.ErrorResult) result;
@@ -297,7 +292,8 @@ public class CommonStateDecisionWorkflow {
         }
         
         gw.setState(newState, 0);
-        gwDao.updateGw(gw);
+        Stat stat = zk.setData(gw.getPath(), gw.persistentDataToBytes(), -1);
+        gw.setZNodeVersion(stat.getVersion());
     }
 
     public String getPath() {

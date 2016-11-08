@@ -24,65 +24,86 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.zookeeper.Op;
 import org.apache.zookeeper.OpResult;
-import org.codehaus.jackson.type.TypeReference;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
+import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
 import org.slf4j.helpers.MessageFormatter;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
+import com.navercorp.nbasearc.confmaster.Constant.Color;
 import com.navercorp.nbasearc.confmaster.config.Config;
-import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
+import com.navercorp.nbasearc.confmaster.heartbeat.HBState;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
-import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-
-public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
-        implements HeartbeatTarget {
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
+ 
+public class PartitionGroupServer implements HeartbeatTarget,
+        Comparable<PartitionGroupServer>, ClusterComponent {
     
-    private BlockingSocket serverConnection;
-    private Cluster cluster;
+    protected BlockingSocket connectionForCommand;
     
-    private HBSession hbc;
-    private HBRefData hbcRefData;
+    protected HBSession hbSession;
     private UsedOpinionSet usedOpinions;
     
-    private final ZooKeeperHolder zookeeper;
-    private final PartitionGroupDao pgDao;
-    private final PartitionGroupServerDao pgsDao;
-    private final Config config;
+    private ZooKeeperHolder zk;
+    private Config config;
+    private MemoryObjectMapper mapper = new MemoryObjectMapper();
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public PartitionGroupServer(ApplicationContext context, String path,
-            String name, Cluster cluster, byte[] data) {
-        super(context);
-        this.zookeeper = context.getBean(ZooKeeperHolder.class);
-        this.pgDao = context.getBean(PartitionGroupDao.class);
-        this.pgsDao = context.getBean(PartitionGroupServerDao.class);
+    private Cluster cluster;
+    
+    private String path;
+    private String name;
+    private PartitionGroupServerData persistentData;
+    private int znodeVersion;
+
+    public PartitionGroupServer(ApplicationContext context, byte[] d,
+            String clusterName, String pgsId, int znodeVersion) {
+        persistentData = mapper.readValue(d, PartitionGroupServerData.class);
+        init(context, clusterName, pgsId, znodeVersion);
+    }
+
+    public PartitionGroupServer(ApplicationContext context,
+            PartitionGroupServerData d, String clusterName, String pgsId,
+            int znodeVersion) {
+        persistentData = d;
+        init(context, clusterName, pgsId, znodeVersion);
+    }
+    
+    public PartitionGroupServer(ApplicationContext context, String clusterName,
+            String pgsId, String pgId, String pmName, String pmIp,
+            int basePort, int backendPort, int znodeVersion) {
+        persistentData = new PartitionGroupServerData(
+                pgId, pmName, pmIp, basePort, backendPort);	
+    	init(context, clusterName, pgsId, znodeVersion);
+    }
+    
+    private void init(ApplicationContext context, String clusterName, String pgsId, int znodeVersion) {
+        this.zk = context.getBean(ZooKeeperHolder.class);
         this.config = context.getBean(Config.class);
         
-        setTypeRef(new TypeReference<PartitionGroupServerData>(){});
+        this.path = PathUtil.pgsPath(pgsId, clusterName);
+        this.name = pgsId;
+        this.cluster = context.getBean(ClusterComponentContainer.class).getCluster(clusterName);
         
-        setPath(path);
-        setName(name);
-        this.cluster = cluster;
-        setNodeType(NodeType.PGS);
-        setData(data);
+        this.setZNodeVersion(znodeVersion);
         
-        BlockingSocketImpl con = new BlockingSocketImpl(getData().getPmIp(),
-                getData().getSmrMgmtPort(), config.getClusterPgsTimeout(),
+        BlockingSocketImpl con = new BlockingSocketImpl(persistentData.pmIp,
+                persistentData.smrMgmtPort, config.getClusterPgsTimeout(),
                 PGS_PING, config.getDelim(), config.getCharset());
         con.setFirstHandshaker(new BlockingSocketImpl.FirstHandshaker() {
             @Override
@@ -121,15 +142,20 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                 }
             }
         });
-        setServerConnection(con);
+        connectionForCommand = con;
         
-        hbcRefData = new HBRefData();
-        hbcRefData.setZkData(getData().getRole(), getData().getStateTimestamp(), stat.getVersion())
-                  .setLastState(getData().getRole())
-                  .setLastStateTimestamp(getData().getStateTimestamp())
+
+        HBState hbRefData = new HBState();
+        hbRefData.setZkData(persistentData.role, persistentData.stateTimestamp, 0)
+                  .setLastState(persistentData.role)
+                  .setLastStateTimestamp(persistentData.stateTimestamp)
                   .setSubmitMyOpinion(false);
         
         usedOpinions = new UsedOpinionSet();
+
+        hbSession = new HBSession(context, this, persistentData.pmIp,
+                persistentData.smrMgmtPort, cluster.getMode(),
+                persistentData.hb, PGS_PING + "\r\n", hbRefData);
     }
     
     /*
@@ -138,58 +164,51 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
      * Master PGS are in the same machine than this function return true,
      * otherwise return false.
      */
-    public boolean isMasterInSameMachine(
-            PhysicalMachineClusterImo pmClusterImo,
-            PartitionGroupServerImo pgsImo) {
-        final String machineName = getData().getPmName();
-        final PhysicalMachineCluster machineInfo = 
-                pmClusterImo.get(getClusterName(), machineName);
-        final List<Integer> localPgsIdList = machineInfo.getData().getPgsIdList();
+    public boolean isMasterInSameMachine(ClusterComponentContainer container) {
+        final String machineName = persistentData.pmName;
+        final PhysicalMachineCluster machineInfo = container.getPmc(machineName, getClusterName());
+        final List<Integer> localPgsIdList = machineInfo.getPgsIdList();
         
         for (final Integer id : localPgsIdList) {
-            PartitionGroupServer anotherPGS = 
-                    pgsImo.get(String.valueOf(id), getClusterName());
-            if (getData().getPgId() == anotherPGS.getData().getPgId()
-                    && anotherPGS.getData().getRole().equals(PGS_ROLE_MASTER)
-                    && machineName.equals(anotherPGS.getData().getPmName())) {
+            PartitionGroupServer anotherPGS = container.getPgs(getClusterName(), String.valueOf(id));
+            if (persistentData.pgId == anotherPGS.persistentData.pgId
+                    && anotherPGS.persistentData.role.equals(PGS_ROLE_MASTER)
+                    && machineName.equals(anotherPGS.persistentData.pmName)) {
                 return true;
             }
         }
         return false;
     }
     
-    public void updateHBRef() {
-        hbcRefData.setZkData(
-                getData().getRole(), getData().getStateTimestamp(), stat.getVersion());
-        getHbc().updateHbState(cluster.getData().getMode(), getData().getHb());
+    public void propagateStateToHeartbeatSession() {
+        hbSession.getHeartbeatState().setZkData(
+                persistentData.role, persistentData.stateTimestamp, znodeVersion);
+        hbSession.toggleHearbeat(cluster.getMode(), persistentData.hb);
     }
 
+    @Override
     public void release() {
         try {
-            getHbc().updateHbState(cluster.getData().getMode(), HB_MONITOR_NO);
-            getServerConnection().close();
+            hbSession.toggleHearbeat(cluster.getMode(), HB_MONITOR_NO);
+            connectionForCommand.close();
         } catch (Exception e) {
             Logger.error("stop heartbeat fail. PGS:" + getName(), e);
         }
 
         try {
-            getHbc().callbackDelete();
-            getHbc().urgent();
+            hbSession.callbackDelete();
+            turnOnUrgentHeartbeat();
         } catch (Exception e) {
             Logger.error("failed while delete pgs. " + toString(), e);
         }
     }
 
     public String executeQuery(String query) throws IOException {
-        return getServerConnection().execute(query);
+        return connectionForCommand.execute(query);
     }
 
     public String executeQuery(String query, int retryCount) throws IOException {
-        return getServerConnection().execute(query, retryCount);
-    }
-    
-    public void closeConnection() throws IOException {
-        getServerConnection().close();
+        return connectionForCommand.execute(query, retryCount);
     }
     
     public long getActiveStateTimestamp() throws IOException {
@@ -199,8 +218,8 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         if (resAry.length < 3)
         {
             Logger.error("Invalid response. PGS_ID=" + getName() +
-                    ", IP=" + getData().getPmIp() +
-                    ", PORT=" + getData().getSmrBasePort() +
+                    ", IP=" + persistentData.pmIp +
+                    ", PORT=" + persistentData.smrBasePort +
                     ", RESPONSE=" + response);
             return -1;
         }
@@ -213,8 +232,8 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         String role = extractRole(response);
         if (role == null) {
             Logger.error("Invalid response. PGS_ID=" + getName() +
-                    ", IP=" + getData().getPmIp() +
-                    ", PORT=" + getData().getSmrBasePort() +
+                    ", IP=" + persistentData.pmIp +
+                    ", PORT=" + persistentData.smrBasePort +
                     ", RESPONSE=" + response);
             return "";
         }
@@ -231,8 +250,8 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
 
     @Override
-    public int getVersion() {
-        return this.stat.getVersion();
+    public int getZNodeVersion() {
+        return znodeVersion;
     }
 
     @Override
@@ -242,30 +261,22 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
 
     @Override
     public String getView() {
-        return this.getData().getRole();
+        return this.persistentData.role;
     }
     
     @Override
     public void setState(String state, long state_timestamp) {
-        PartitionGroupServerData modified = 
-             PartitionGroupServerData.builder()
-                .from(getData()).withState(state).withStateTimestamp(state_timestamp).build();
-        this.setData(modified);
+        persistentData.state = state;
+        persistentData.stateTimestamp = state_timestamp;
     }
     
-    @Override
     public long getStateTimestamp() {
-        return getData().getStateTimestamp();
+        return persistentData.stateTimestamp;
     }
     
     @Override
-    public String getTargetOfHeartbeatPath() {
-        return this.getPath();
-    }
-    
-    @Override
-    public String getHB() {
-        return this.getData().getHb();
+    public String getHeartbeat() {
+        return persistentData.hb;
     }
     
     @Override
@@ -274,23 +285,18 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
     
     @Override
-    public String getPingMsg() {
-        return PGS_PING + "\r\n";
-    }
-    
-    @Override
-    public HBRefData getRefData() {
-        return hbcRefData;
+    public HBState getHeartbeatState() {
+        return hbSession.getHeartbeatState();
     }
 
     @Override
     public String getIP() {
-        return getData().getPmIp();
+        return persistentData.pmIp;
     }
 
     @Override
     public int getPort() {
-        return getData().getSmrMgmtPort();
+        return persistentData.smrMgmtPort;
     }
 
     @Override
@@ -299,30 +305,8 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
 
     public void syncLastState() {
-        hbcRefData.setLastState(getData().getState())
-            .setLastStateTimestamp(getData().getStateTimestamp());
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public ZNode<PartitionGroupServerData> getZNode() {
-        return this;
-    }
-
-    public HBSession getHbc() {
-        return hbc;
-    }
-
-    public void setHbc(HBSession hbc) {
-        this.hbc = hbc;
-    }
-
-    public BlockingSocket getServerConnection() {
-        return serverConnection;
-    }
-
-    public void setServerConnection(BlockingSocket serverConnection) {
-        this.serverConnection = serverConnection;
+        hbSession.getHeartbeatState().setLastState(persistentData.state)
+            .setLastStateTimestamp(persistentData.stateTimestamp);
     }
 
     public static class RealState {
@@ -356,15 +340,15 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
 
         @Override
         public String toString() {
-            return "role: " + getRole() + ", state: " + getState()
+            return "role: " + role + ", state: " + getState()
                     + ", timestamp: " + getStateTimestamp();
         }
     }
 
     public boolean isAvailable() {
-        return (getData().getState().equals(SERVER_STATE_NORMAL) ||
-                getData().getState().equals(SERVER_STATE_LCONN)) &&
-               getData().getHb().equals(HB_MONITOR_YES);
+        return (persistentData.state.equals(SERVER_STATE_NORMAL) ||
+                persistentData.state.equals(SERVER_STATE_LCONN)) &&
+               persistentData.hb.equals(HB_MONITOR_YES);
     }
     
     public RealState getRealState() {        
@@ -375,48 +359,48 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
                     "\", REPLY=\"" + reply + 
                     "\", CLUSTER:" + getClusterName() + 
                     ", PGS:" + getName() + 
-                    ", STATE:" + getData().getState() + 
-                    ", ROLE:" + getData().getRole());
+                    ", STATE:" + persistentData.state + 
+                    ", ROLE:" + persistentData.role);
     
-            return convertToState(reply);
+            return convertReplyToState(reply);
         } catch (IOException e) {
             return new RealState(false, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                    getStateTimestamp());
+                    persistentData.stateTimestamp);
         }
     }
     
     public long getNewMasterRewindCseq(LogSequence logSeq) {
-        if (getData().getOldMasterSmrVersion().equals(SMR_VERSION_101)) {
+        if (persistentData.oldMasterSmrVersion.equals(SMR_VERSION_101)) {
             Logger.info("new master rewind cseq: {}, om: {}",
-                    logSeq.getLogCommit(), getData().getOldMasterSmrVersion());
+                    logSeq.getLogCommit(), persistentData.oldMasterSmrVersion);
             return logSeq.getLogCommit();
         } else {
             Logger.info("new master rewind cseq: {}, om: {}",
-                    logSeq.getLogCommit(), getData().getOldMasterSmrVersion());
+                    logSeq.getLogCommit(), persistentData.oldMasterSmrVersion);
             return logSeq.getMax();
         }
     }
     
     public long getSlaveJoinSeq(LogSequence logSeq) {
-        if (getData().getOldMasterSmrVersion().equals(SMR_VERSION_101)) {
-            if (getData().getOldRole().equals(PGS_ROLE_MASTER)) {
+        if (persistentData.oldMasterSmrVersion.equals(SMR_VERSION_101)) {
+            if (persistentData.oldRole.equals(PGS_ROLE_MASTER)) {
                 final long seq = Math.min(logSeq.getLogCommit(),
                         logSeq.getBeCommit());
                 Logger.info("slave join rewind cseq: {}, om: {}, or: {}",
-                        new Object[] { seq, getData().getOldMasterSmrVersion(),
-                                getData().getOldRole() });
+                        new Object[] { seq, persistentData.oldMasterSmrVersion,
+                                persistentData.oldRole });
                 return seq;
             }
         }
 
         final long seq = logSeq.getLogCommit();
         Logger.info("slave join rewind cseq: {}, om: {}, or: {}", new Object[] {
-                seq, getData().getOldMasterSmrVersion(),
-                getData().getOldRole() });
+                seq, persistentData.oldMasterSmrVersion,
+                persistentData.oldRole });
         return seq;
     }
     
-    static public RealState convertToState(String reply) {
+    static public RealState convertReplyToState(String reply) {
         String[] tokens = reply.split(" ");
         String role;
         String state;
@@ -463,15 +447,15 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
     
     public LogSequence getLogSeq() {
-        if (!getData().getRole().equals(PGS_ROLE_LCONN) &&
-                !getData().getRole().equals(PGS_ROLE_SLAVE) &&
-                !getData().getRole().equals(PGS_ROLE_MASTER)) {
+        if (!persistentData.role.equals(PGS_ROLE_LCONN) &&
+                !persistentData.role.equals(PGS_ROLE_SLAVE) &&
+                !persistentData.role.equals(PGS_ROLE_MASTER)) {
             Logger.error("getseq Logger fail. target pgs if not available" +
                     "CLUSTER=" + getClusterName() + 
-                    ", PG=" + getData().getPgId() + 
+                    ", PG=" + persistentData.pgId + 
                     ", PGS=" + getName() +
-                    ", IP=" + getData().getPmIp() +
-                    ", PORT=" + getData().getSmrBasePort());
+                    ", IP=" + persistentData.pmIp +
+                    ", PORT=" + persistentData.smrBasePort);
             return null;
         }
         
@@ -481,10 +465,10 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         } catch (IOException e) {
             Logger.error("getseq Logger fail. " +
                     "CLUSTER=" + getClusterName() + 
-                    ", PG=" + getData().getPgId() + 
+                    ", PG=" + persistentData.pgId + 
                     ", PGS=" + getName() +
-                    ", IP=" + getData().getPmIp() +
-                    ", PORT=" + getData().getSmrBasePort(), e);
+                    ", IP=" + persistentData.pmIp +
+                    ", PORT=" + persistentData.smrBasePort, e);
             return null;
         }
         
@@ -514,15 +498,15 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
     
     private void roleMasterCmdResult(String cmd, String reply, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
+            WorkflowLogger workflowLogger) throws MgmtSmrCommandException {
         // Make information for logging
         String infoFmt = 
                 "{\"PGS\":{},\"IP\":\"{}\",\"PORT\":\"{}\",\"CMD\":\"{}\",\"REPLY\":\"{}\"}";
-        Object[] infoArgs = new Object[] { getName(), getData().getPmIp(),
-                getData().getSmrBasePort(), cmd, reply };
+        Object[] infoArgs = new Object[] { getName(), persistentData.pmIp,
+                persistentData.smrBasePort, cmd, reply };
         
         if (!reply.equals(S2C_OK)) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleMaster",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "master election fail. {}, cmd: \"{}\", reply: \"{}\"", 
@@ -531,7 +515,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             throw new MgmtSmrCommandException("Role master fail. "
                     + MessageFormatter.arrayFormat(infoFmt, infoArgs));
         } else {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleMaster",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "master election success. {}, cmd: \"{}\", reply: \"{}\"", 
@@ -542,7 +526,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     
     public void roleMaster(String smrVersion, PartitionGroup pg,
             LogSequence logSeq, int quorum, String quorumMembers, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
+            WorkflowLogger workflowLogger) throws MgmtSmrCommandException {
         String cmd;
         if (smrVersion.equals(SMR_VERSION_201)) {
             cmd = "role master " + getName() + " " + quorum + " "
@@ -554,7 +538,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         
         try {
             // Workflow log
-            workflowLogDao.log(jobID, SEVERITY_MODERATE, "RoleMaster",
+            workflowLogger.log(jobID, SEVERITY_MODERATE, "RoleMaster",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "try master election. cmd: \"" + cmd + "\"");
             
@@ -562,9 +546,9 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             String reply = executeQuery(cmd);
             
             // Check result
-            roleMasterCmdResult(cmd, reply, jobID, workflowLogDao);
+            roleMasterCmdResult(cmd, reply, jobID, workflowLogger);
         } catch (IOException e) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleMaster",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "master election fail. {}, cmd: \"{}\", e: \"{}\"", 
@@ -573,28 +557,28 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
-    public class RoleMasterZkResult {
-        public final PartitionGroupData pgM;
-        public final PartitionGroupServerData pgsM;
-        
-        public RoleMasterZkResult(PartitionGroupData pgM, PartitionGroupServerData pgsM) {
-            this.pgM = pgM;
-            this.pgsM = pgsM;
-        }
-    }
+	public class RoleMasterZkResult {
+		public final PartitionGroup.PartitionGroupData pgM;
+		public final PartitionGroupServerData pgsM;
+
+		public RoleMasterZkResult(PartitionGroup.PartitionGroupData pgM,
+				PartitionGroupServerData pgsM) {
+			this.pgM = pgM;
+			this.pgsM = pgsM;
+		}
+	}
     
-    public RoleMasterZkResult roleMasterZk(PartitionGroup pg,
+    public RoleMasterZkResult updateZNodeAsMaster(PartitionGroup pg,
             List<PartitionGroupServer> pgsList, LogSequence logSeq, int quorum,
-            String masterVersion, long jobID, WorkflowLogDao workflowLogDao)
+            String masterVersion, long jobID, WorkflowLogger workflowLogger)
             throws MgmtSmrCommandException {
         try {
-            PartitionGroupData pgM = 
-                PartitionGroupData.builder().from(pg.getData())
-                    .addMasterGen(logSeq.getMax()).build();
+        	PartitionGroup.PartitionGroupData pgM = pg.clonePersistentData();
+        	pgM.addMasterGen(logSeq.getMax());
             
             // For backward compatibility, confmaster adds 1 to currentGen
             // since 1.2 and smaller version of confmaster follow a rule, PG.mGen + 1 = PGS.mGen.
-            // Notice that it add 2 to currentGen because pg.getData().currentGen has not updated yet.
+            // Notice that it add 2 to currentGen because pg.persistentData.currentGen has not updated yet.
             // Please see below for more details.
             // +--------------------+---------+----------+
             // |                    | PG.mGen | PGS.mGen |
@@ -604,23 +588,22 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             // | Update PG.mGen     | 4(3+1)  | 5        |
             // | To-be              | 4       | 5        |
             // +--------------------+---------+----------+
-            PartitionGroupServerData pgsM = 
-                PartitionGroupServerData.builder().from(getData())
-                    .withMasterGen(pg.getData().currentGen() + 2)
-                    .withRole(PGS_ROLE_MASTER)
-                    .withOldRole(PGS_ROLE_MASTER)
-                    .withOldMasterSmrVersion(masterVersion)
-                    .withColor(GREEN).build();
+            PartitionGroupServerData pgsM = (PartitionGroupServerData) persistentData.clone(); 
+			pgsM.masterGen = pg.currentGen() + 2;
+			pgsM.setRole(PGS_ROLE_MASTER);
+			pgsM.oldRole = PGS_ROLE_MASTER;
+			pgsM.oldMasterSmrVersion = masterVersion;
+			pgsM.color = GREEN;
             
             List<Op> ops = new ArrayList<Op>();
-            ops.add(pgsDao.createUpdatePgsOperation(getPath(), pgsM));
-            ops.add(pgDao.createUpdatePgOperation(pg.getPath(), pgM));
+            ops.add(Op.setData(getPath(), pgsM.toBytes(), -1));
+            ops.add(Op.setData(pg.getPath(), pgM.toBytes(), -1));
 
-            List<OpResult> results = zookeeper.multi(ops);
-            zookeeper.handleResultsOfMulti(results);
+            List<OpResult> results = zk.multi(ops);
+            zk.handleResultsOfMulti(results);
             return new RoleMasterZkResult(pgM, pgsM);
         } catch (Exception e) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleMaster",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "master election success but update zookeeper error. {}, e: \"{}\"", 
@@ -630,18 +613,18 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     }
     
     private void roleSlaveCmdResult(String cmd, String reply, Color color, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
+            WorkflowLogger workflowLogger) throws MgmtSmrCommandException {
         // Make information for logging
         String infoFmt = 
                 "{\"PGS\":{},\"IP\":\"{}\",\"PORT\":\"{}\",\"CMD\":\"{}\",\"REPLY\":\"{}\"}";
-        Object[] infoArgs = new Object[] { getName(), getData().getPmIp(),
-                getData().getSmrBasePort(), cmd, reply };
+        Object[] infoArgs = new Object[] { getName(), persistentData.pmIp,
+                persistentData.smrBasePort, cmd, reply };
         
         // Check result
         if (!reply.equals(S2C_OK)) {
             Logger.info("", 
                     new Object[]{this, cmd, reply});
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleSlave",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "slave join fail. {}, cmd: \"{}\", color: {}, reply: \"{}\"",
@@ -650,7 +633,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             throw new MgmtSmrCommandException("Slave join Fail. " + 
                     MessageFormatter.arrayFormat(infoFmt, infoArgs));
         } else {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleSlave",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "slave join success. {}, cmd: \"{}\", color: {}, reply: \"{}\"",
@@ -661,14 +644,14 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
 
     public void roleSlave(PartitionGroup pg, LogSequence targetLogSeq,
             PartitionGroupServer master, Color color, long jobID,
-            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
+            WorkflowLogger workflowLogger) throws MgmtSmrCommandException {
         // Make 'role slave' command
         String cmd = "role slave " + getName() + " "
-                + master.getData().getPmIp() + " "
-                + master.getData().getSmrBasePort() + " "
+                + master.persistentData.pmIp + " "
+                + master.persistentData.smrBasePort + " "
                 + getSlaveJoinSeq(targetLogSeq);
         try {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MODERATE, "RolsSlave",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "try slave join. cmd: \"" + cmd + "\", color: " + color);
@@ -677,9 +660,9 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
             String reply = executeQuery(cmd);
             
             // Check reply
-            roleSlaveCmdResult(cmd, reply, color, jobID, workflowLogDao);
+            roleSlaveCmdResult(cmd, reply, color, jobID, workflowLogger);
         } catch (IOException e) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleSlave",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "Slave join error. {}, cmd: \"{}\", color: {}, exception: \"{}\"",
@@ -688,28 +671,19 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
 
-    public class RoleSlaveZkResult {
-        public final PartitionGroupServerData pgsM;
-        
-        public RoleSlaveZkResult(PartitionGroupServerData pgsM) {
-            this.pgsM = pgsM;
-        }
-    }
-    
-    public RoleSlaveZkResult roleSlaveZk(long jobID, int mGen, Color color, String masterVersion,
-            WorkflowLogDao workflowLogDao) throws MgmtSmrCommandException {
-        PartitionGroupServerData pgsM = 
-            PartitionGroupServerData.builder().from(getData())
-                .withMasterGen(mGen)
-                .withRole(PGS_ROLE_SLAVE)
-                .withOldRole(PGS_ROLE_SLAVE)
-                .withOldMasterSmrVersion(masterVersion)
-                .withColor(color).build();
+    public PartitionGroupServerData updateZNodeAsSlave(long jobID, int mGen, Color color, String masterVersion,
+            WorkflowLogger workflowLogger) throws MgmtSmrCommandException {
+		PartitionGroupServerData pgsM = (PartitionGroupServerData) persistentData.clone();
+		pgsM.masterGen = mGen;
+		pgsM.setRole(PGS_ROLE_SLAVE);
+		pgsM.oldRole = PGS_ROLE_SLAVE;
+		pgsM.oldMasterSmrVersion = masterVersion;
+		pgsM.color = color;
         try {
-            pgsDao.updatePgs(getPath(), pgsM);
-            return new RoleSlaveZkResult(pgsM);
+        	zk.setData(getPath(), pgsM.toBytes(), -1);
+            return pgsM;
         } catch (Exception e) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MAJOR, "RoleSlave",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "slave join success, but update zookeeper error. {}, e: \"{}\"", 
@@ -732,29 +706,21 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
 
-    public RoleLconnZkResult roleLconnZk(long jobID, Color color, WorkflowLogDao workflowLogDao) 
+    public PartitionGroupServerData updateZNodeAsLconn(long jobID, Color color, WorkflowLogger workflowLogger) 
                     throws MgmtSmrCommandException {        
         try {
-            PartitionGroupServerData pgsM = 
-                PartitionGroupServerData.builder().from(getData())
-                    .withRole(PGS_ROLE_LCONN).withColor(color).build();
-            pgsDao.updatePgs(getPath(), pgsM);
-            return new RoleLconnZkResult(pgsM);
+			PartitionGroupServerData pgsM = (PartitionGroupServerData) persistentData.clone();
+			pgsM.setRole(PGS_ROLE_LCONN);
+			pgsM.color = color;
+			zk.setData(getPath(), pgsM.toBytes(), -1);
+            return pgsM;
         } catch (Exception e) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                     SEVERITY_MODERATE, "RoleLconn",
                     LOG_TYPE_WORKFLOW, getClusterName(),
                     "role lconn sucess but update zookeeper error. {}, e: \"{}\"", 
                     this, e.getMessage());
             throw new MgmtSmrCommandException("Role lconn zookeeper Error, " + e.getMessage());
-        }
-    }
-
-    public class RoleLconnZkResult {
-        public final PartitionGroupServerData pgsM;
-        
-        public RoleLconnZkResult(PartitionGroupServerData pgsM) {
-            this.pgsM = pgsM;
         }
     }
 
@@ -813,7 +779,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
         }
     }
     
-    public void setquorum(int q, String quorumMembers)
+    public void setQuorum(int q, String quorumMembers)
             throws MgmtSetquorumException, MgmtSmrCommandException {
         final String v = smrVersion();
         String cmd; 
@@ -841,7 +807,7 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     
     @Override
     public String toString() {
-        return fullName(getClusterName(), getData().getPgId(), getName());
+        return fullName(getClusterName(), persistentData.pgId, getName());
     }
     
     public static String fullName(String clusterName, Integer pgId, String pgsId) {
@@ -856,4 +822,250 @@ public class PartitionGroupServer extends ZNode<PartitionGroupServerData>
     public String getFullName() {
         return toString();
     }
+
+	@Override
+	public String getPath() {
+		return path;
+	}
+
+	@Override
+	public String getName() {
+		return name;
+	}
+
+	@Override
+	public NodeType getNodeType() {
+		return NodeType.PGS;
+	}
+
+	@Override
+	public int compareTo(PartitionGroupServer pgs) {
+	    return name.compareTo(pgs.name);
+	}
+    
+    public Lock readLock() {
+        return lock.readLock();
+    }
+
+    public Lock writeLock() {
+        return lock.writeLock();
+    }
+    
+    @Override
+    public void setZNodeVersion(int v) {
+    	this.znodeVersion = v;
+    }
+
+    public void turnOnUrgentHeartbeat() {
+        hbSession.urgent();
+    }
+
+    public void setPersistentData(PartitionGroupServerData d) {
+        persistentData = d;
+    }
+
+    public void setPersistentData(byte[] d) {
+        persistentData = mapper.readValue(d, PartitionGroupServerData.class);
+    }
+    
+    @JsonAutoDetect(
+            fieldVisibility=Visibility.ANY, 
+            getterVisibility=Visibility.NONE, 
+            setterVisibility=Visibility.NONE)
+    @JsonIgnoreProperties(
+            ignoreUnknown=true)
+    @JsonPropertyOrder(
+            { "pg_ID", "pm_Name", "pm_IP", "backend_Port_Of_Redis",
+            "replicator_Port_Of_SMR", "management_Port_Of_SMR", "state",
+            "stateTimestamp", "hb", "smr_Role", "old_SMR_Role", "color", "master_Gen", "old_master_version" })
+    public static class PartitionGroupServerData implements Cloneable {
+        
+        @JsonProperty("pg_ID")
+        public int pgId;
+        @JsonProperty("pm_Name")
+        public String pmName;
+        @JsonProperty("pm_IP")
+        public String pmIp;
+        @JsonProperty("backend_Port_Of_Redis")
+        public int redisPort;
+        @JsonProperty("replicator_Port_Of_SMR")
+        public int smrBasePort;
+        @JsonProperty("management_Port_Of_SMR")
+        public int smrMgmtPort;
+        @JsonProperty("state")
+        public String state = SERVER_STATE_FAILURE;
+        @JsonProperty("stateTimestamp")
+        public long stateTimestamp = 0L;
+        @JsonProperty("hb")
+        public String hb = HB_MONITOR_NO;
+        @JsonProperty("smr_Role")
+        private String role = PGS_ROLE_NONE;
+        @JsonProperty("old_SMR_Role")
+        public String oldRole = PGS_ROLE_NONE;
+        @JsonProperty("color")
+        public Color color = Color.RED;
+        @JsonProperty("master_Gen")
+        public int masterGen = -1;
+        @JsonProperty("old_master_version")
+        public String oldMasterSmrVersion = SMR_VERSION_101;
+    
+        @JsonIgnore
+        private final MemoryObjectMapper mapper = new MemoryObjectMapper();
+        
+        public PartitionGroupServerData() {}
+        
+        public PartitionGroupServerData(String pgId, String pmName,
+                String pmIp, int basePort, int backendPort) {
+            this.pgId = Integer.valueOf(pgId);
+            this.pmName = pmName;
+            this.pmIp = pmIp;
+            this.smrBasePort = basePort;
+            this.smrMgmtPort = basePort + 3;
+            this.redisPort = backendPort;
+        }
+        
+        public void setRole(String role) {
+            this.role = role;
+
+            if (role.equals(PGS_ROLE_NONE)) {
+                this.state = SERVER_STATE_FAILURE;
+            } else if (role.equals(PGS_ROLE_LCONN)) {
+                this.state = SERVER_STATE_LCONN;
+            } else if (role.equals(PGS_ROLE_SLAVE)) {
+                this.state = SERVER_STATE_NORMAL;
+            } else if (role.equals(PGS_ROLE_MASTER)) {
+                this.state = SERVER_STATE_NORMAL;
+            }
+        }
+
+        public String getRole() {
+            return role;
+        }
+        
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj == this) {
+                return true;
+            }
+            if (!(obj instanceof PartitionGroupServerData)) {
+                return false;
+            }
+    
+            PartitionGroupServerData rhs = (PartitionGroupServerData) obj;
+            if (pgId != rhs.pgId) {
+                return false;
+            }
+            if (!pmName.equals(rhs.pmName)) {
+                return false;
+            }
+            if (!pmIp.equals(rhs.pmIp)) {
+                return false;
+            }
+            if (redisPort != rhs.redisPort) {
+                return false;
+            }
+            if (smrBasePort != rhs.smrBasePort) {
+                return false;
+            }
+            if (smrMgmtPort != rhs.smrMgmtPort) {
+                return false;
+            }
+            if (!state.equals(rhs.state)) {
+                return false;
+            }
+            if (!role.equals(rhs.role)) {
+                return false;
+            }
+            if (masterGen != rhs.masterGen) {
+                return false;
+            }
+            if (!hb.equals(rhs.hb)) {
+                return false;
+            }
+            if (stateTimestamp != rhs.stateTimestamp) {
+                return false;
+            }
+            return true;
+        }
+        
+        @Override
+        public int hashCode() {
+            assert false : "hashCode not designed";
+            return 42; // any arbitrary constant will do
+        }
+        
+        @Override
+        public Object clone() {
+            try {
+                return super.clone();
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    
+        @Override
+        public String toString() {
+            return mapper.writeValueAsString(this);
+        }
+
+        public byte[] toBytes() {
+            return mapper.writeValueAsBytes(this);
+        }
+        
+    }
+
+	public int getRedisPort() {
+		return persistentData.redisPort;
+	}
+    
+    public Color getColor() {
+    	return persistentData.color;
+    }
+
+	public String getRole() {
+		return persistentData.role;
+	}
+
+	public String getState() {
+		return persistentData.state;
+	}
+
+	public int getPgId() {
+		return persistentData.pgId;
+	}
+
+	public String getPmIp() {
+		return persistentData.pmIp;
+	}
+
+	public int getSmrBasePort() {
+		return persistentData.smrBasePort;
+	}
+	
+	public int getSmrMgmtPort() {
+		return persistentData.smrMgmtPort;
+	}
+
+	public String getPmName() {
+		return persistentData.pmName;
+	}
+
+	public byte[] persistentDataToBytes() {
+		return persistentData.toBytes();
+	}
+	
+	public String persistentDataToString() {
+		return persistentData.toString();
+	}
+
+	public PartitionGroupServerData clonePersistentData() {
+		return (PartitionGroupServerData) persistentData.clone();
+	}
+
+	public int getMasterGen() {
+		return persistentData.masterGen;
+	}
 }

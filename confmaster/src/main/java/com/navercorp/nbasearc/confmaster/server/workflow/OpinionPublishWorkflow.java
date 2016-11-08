@@ -36,18 +36,18 @@ public class OpinionPublishWorkflow {
     protected OpinionPublishWorkflow(HBResult result, ApplicationContext context) {
         this.result = result;
         this.target = result.getTarget();
-        this.hbcRefDataVersion = target.getRefData().increaseAndGetHbcRefDataVersion();
+        this.hbcRefDataVersion = target.getHeartbeatState().increaseAndGetHbcRefDataVersion();
         this.hbcProc = context.getBean(HBResultProcessor.class);
     }
     
     public String execute(ThreadPool executor) throws NodeExistsException,
             MgmtZooKeeperException {
-        if (target.getHB().equals(Constant.HB_MONITOR_NO)) {
+        if (target.getHeartbeat().equals(Constant.HB_MONITOR_NO)) {
             // Ignore it.
             return null;
         }
         
-        if (target.getRefData().getHbcRefDataVersion() > this.hbcRefDataVersion) {
+        if (target.getHeartbeatState().getHbcRefDataVersion() > this.hbcRefDataVersion) {
             return null;
         }
         

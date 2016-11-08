@@ -47,56 +47,47 @@ import org.codehaus.jackson.map.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 
-import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.Constant.Color;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBResult;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBResultProcessor;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.heartbeat.HeartbeatChecker;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.ClusterBackupScheduleDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkNotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.ClusterData;
-import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PhysicalMachineData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.ClientSessionHandler.ReplyFormatter;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster.ClusterData;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponent;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
-import com.navercorp.nbasearc.confmaster.server.cluster.PGSComponentMock;
+import com.navercorp.nbasearc.confmaster.server.cluster.Gateway.GatewayData;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentMock;
 import com.navercorp.nbasearc.confmaster.server.cluster.PGSJoinLeaveSetting;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
+import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine.PhysicalMachineData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachineCluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
 import com.navercorp.nbasearc.confmaster.server.command.CommandExecutor;
 import com.navercorp.nbasearc.confmaster.server.command.ConfmasterService;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineImo;
-import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionHandler;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 public class BasicSetting {
 
     @Autowired
     protected ApplicationContext context;
     @Autowired
-    protected ZooKeeperHolder zookeeper;
+    protected ZooKeeperHolder zk;
     
     @Autowired
     protected LeaderElectionHandler leaderElection;
@@ -112,30 +103,12 @@ public class BasicSetting {
     protected WorkflowExecutor workflowExecutor;
     
     @Autowired
-    protected PhysicalMachineClusterImo pmClusterImo;
-    @Autowired
-    protected ClusterImo clusterImo;
-    @Autowired
-    protected PhysicalMachineImo pmImo;
-    @Autowired
-    protected PartitionGroupImo pgImo;
-    @Autowired
-    protected PartitionGroupServerImo pgsImo;
-    @Autowired
-    protected RedisServerImo rsImo;
-    @Autowired
-    protected GatewayImo gwImo;    
+    protected ClusterComponentContainer container;    
 
     @Autowired
-    protected ZkNotificationDao notificationDao;
+    protected GatewayLookup gwInfoNotifier;
     @Autowired
-    protected ZkWorkflowLogDao workflowLogDao;
-    @Autowired
-    protected ClusterBackupScheduleDao clusterBackupScheduleDao;
-    @Autowired
-    protected PartitionGroupDao pgDao;
-    @Autowired
-    protected PartitionGroupServerDao pgsDao;
+    protected WorkflowLogger workflowLogger;
     
     @Autowired
     protected ConfmasterService confmasterService;
@@ -146,7 +119,7 @@ public class BasicSetting {
     ReplyFormatter replyFormatter = new ReplyFormatter();
     ObjectMapper objectMapper = new ObjectMapper();
     
-    final protected long assertionTimeout = 5L;  
+    final protected long assertionTimeout = 10L;  
     
     final protected String ok = S2C_OK;
     final protected long timeout = 10000000L;
@@ -171,47 +144,34 @@ public class BasicSetting {
             slot.add(0);
         }
         
-        clusterData = new ClusterData();
-        clusterData.setMode(Constant.CLUSTER_ON);
-        clusterData.setPnPgMap(slot);
-        clusterData.setQuorumPolicy(quorumPolicy);
-        clusterData.setKeySpaceSize(keyspaceSize);
+        clusterData = new ClusterData(quorumPolicy, slot, CLUSTER_ON);
     }
     
     // Partition Group
     protected static String pgName = "0";
     protected static PartitionGroupData pgData = new PartitionGroupData();
     static {
-        pgData = PartitionGroupData.builder().from(new PartitionGroupData())
-                .addMasterGen(0L).build();
+        pgData = new PartitionGroupData();
     }
     
     // Partition Group Server 1
     protected static String[] pgsNames = new String[]{"0", "1", "2"};
     protected static PartitionGroupServerData[] pgsDatas = new PartitionGroupServerData[3];
     static {
-        pgsDatas[0] = new PartitionGroupServerData();
-        pgsDatas[0].initialize(Integer.valueOf(pgName), pmName, pmData.getIp(),
-                8109, 8100, 8103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                Color.RED, pgData.currentGen(), HB_MONITOR_NO);
-        pgsDatas[1] = new PartitionGroupServerData();
-        pgsDatas[1].initialize(Integer.valueOf(pgName), pmName, pmData.getIp(),
-                9109, 9100, 9103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                Color.RED, pgData.currentGen(), HB_MONITOR_NO);
-        pgsDatas[2] = new PartitionGroupServerData();
-        pgsDatas[2].initialize(Integer.valueOf(pgName), pmName, pmData.getIp(),
-                10109, 10100, 10103, SERVER_STATE_FAILURE, PGS_ROLE_NONE,
-                Color.RED, pgData.currentGen(), HB_MONITOR_NO);
+    	/*
+		String pgId, String pmName, String pmIp, int backendPort, int basePort
+    	 */
+        pgsDatas[0] = new PartitionGroupServerData(pgName, pmName, pmData.ip, 8100, 8109);
+        pgsDatas[1] = new PartitionGroupServerData(pgName, pmName, pmData.ip, 9100, 9109);
+        pgsDatas[2] = new PartitionGroupServerData(pgName, pmName, pmData.ip, 10100, 10109);
     }
-    protected static PGSComponentMock[] pgsMockups = new PGSComponentMock[3];
+    protected static ClusterComponentMock[] pgsMockups = new ClusterComponentMock[3];
     
     // Gateway
     protected static String gwName = "1";
     protected static GatewayData gwData;
     static {
-        gwData = new GatewayData();
-        gwData.initialize(pmName, pmData.getIp(), 6000, SERVER_STATE_FAILURE,
-                HB_MONITOR_YES);
+        gwData = new GatewayData(pmName, pmData.ip, 6000);
     }
     
     public static void beforeClass() throws Exception {
@@ -225,13 +185,13 @@ public class BasicSetting {
     }
     
     public void before() throws Exception {
-        zookeeper.initialize();
+        zk.initialize();
         heartbeatChecker.initialize();
         
         commandExecutor.initialize();
         workflowExecutor.initialize();
         
-        zookeeper.deleteAllZNodeRecursive();
+        zk.deleteAllZNodeRecursive();
         
         confmasterService.initialize();
         executor.initialize();
@@ -250,9 +210,9 @@ public class BasicSetting {
         
         LeaderState.init();
         
-        zookeeper.deleteAllZNodeRecursive();
+        zk.deleteAllZNodeRecursive();
         
-        zookeeper.release();
+        zk.release();
     }
 
     public JobResult tryCommand(String line) throws Exception {
@@ -271,16 +231,16 @@ public class BasicSetting {
         JobResult result = doCommand("pm_add " + pmName + " " + pmIp);
         assertEquals("perform pm_add.", ok, result.getMessages().get(0));
         
-        PhysicalMachine pm = pmImo.get(pmName);
+        PhysicalMachine pm = container.getPm(pmName);
         assertNotNull("check pm after pm_add.", pm);
-        assertEquals("check pm data.", pmIp, pm.getData().getIp());
+        assertEquals("check pm data.", pmIp, pm.getIp());
     }
     
     public void pmDel(String pmName) throws Exception {
         JobResult result = doCommand("pm_del " + pmName);
         assertEquals("perform pm_del.", ok, result.getMessages().get(0));
         
-        PhysicalMachine pm = pmImo.get(pmName);
+        PhysicalMachine pm = container.getPm(pmName);
         assertNull("check pm after pm_del.", pm);
     }
     
@@ -292,70 +252,70 @@ public class BasicSetting {
         JobResult result = doCommand(command.trim());
         assertEquals("check result of pg_add", ok, result.getMessages().get(0));
         
-        PartitionGroup pg = pgImo.get(pgId, clusterName);
+        PartitionGroup pg = container.getPg(clusterName, pgId);
         assertNotNull("check pg after pg_add", pg);
     }
     
     public void pgDel(String pgId, String clusterName) throws Exception {
         JobResult result = doCommand("pg_del " + clusterName + " " + pgId);
         assertEquals("check result of pg_del", ok, result.getMessages().get(0));
-        assertNull("check pg deleted", pgImo.get(pgId, clusterName));
+        assertNull("check pg deleted", container.getPg(clusterName, pgId));
     }
     
     public void pgsAdd(String pgsId, String pgId, String clusterName, int port) throws Exception {
         String command = "";
-        for (String s : new String[]{"pgs_add", clusterName, pgsId, pgId, pmName, pmData.getIp(), String.valueOf(port), String.valueOf(port + 9)}) {
+        for (String s : new String[]{"pgs_add", clusterName, pgsId, pgId, pmName, pmData.ip, String.valueOf(port), String.valueOf(port + 9)}) {
             command += s + " ";
         }
         JobResult result = doCommand(command.trim());
         assertEquals("check result of pgs_add", ok, result.getMessages().get(0));
         
-        PartitionGroupServer pgs = pgsImo.get(pgsId, clusterName);
+        PartitionGroupServer pgs = container.getPgs(clusterName, pgsId);
         assertNotNull(pgs);
         
-        PhysicalMachineCluster pmCluster = pmClusterImo.get(clusterName, pmName);
+        PhysicalMachineCluster pmCluster = container.getPmc(pmName, clusterName);
         assertTrue("Check pm-cluster contains this pgs.", 
-                pmCluster.getData().getPgsIdList().contains(Integer.valueOf(pgsId)));
+                pmCluster.getPgsIdList().contains(Integer.valueOf(pgsId)));
     }
 
     public void pgsDel(String pgsId, boolean isLastPgs) throws Exception {
         JobResult result = doCommand("pgs_del " + clusterName + " " + pgsId);
         assertEquals("check result of pgs_del", ok, result.getMessages().get(0));
-        assertNull("check pgs deleted", pgsImo.get(pgsId, clusterName));
+        assertNull("check pgs deleted", container.getPgs(clusterName, pgsId));
         
         if (!isLastPgs) {
-            PhysicalMachineCluster pmCluster = pmClusterImo.get(clusterName, pmName);
+            PhysicalMachineCluster pmCluster = container.getPmc(pmName, clusterName);
             assertFalse("Check pm-cluster does not contains this pgs.", 
-                    pmCluster.getData().getPgsIdList().contains(Integer.valueOf(pgsId)));
+                    pmCluster.getPgsIdList().contains(Integer.valueOf(pgsId)));
         }
     }
     
     public void gwAdd(String gwId, String clusterName) throws Exception {
         String command = "";
-        for (String s : new String[]{"gw_add", clusterName, gwId, pmName, pmData.getIp(), "6000"}) {
+        for (String s : new String[]{"gw_add", clusterName, gwId, pmName, pmData.ip, "6000"}) {
             command += s + " ";
         }
         JobResult result = doCommand(command.trim());
         assertEquals("check result of gw_add", ok, result.getMessages().get(0));
         
-        Gateway gateway = gwImo.get(gwId, clusterName);
+        Gateway gateway = container.getGw(clusterName, gwId);
         assertNotNull(gateway);
         
-        PhysicalMachineCluster pmCluster = pmClusterImo.get(clusterName, pmName);
+        PhysicalMachineCluster pmCluster = container.getPmc(pmName, clusterName);
         assertTrue("Check pm-cluster contains this gw.", 
-                pmCluster.getData().getGwIdList().contains(Integer.valueOf(gwId)));
+                pmCluster.getGwIdList().contains(Integer.valueOf(gwId)));
     }
 
     public void gwDel(String gwId, String clusterName) throws Exception {
         JobResult result = doCommand("gw_del " + clusterName + " " + gwId);
         assertEquals("check result of gw_del", ok, result.getMessages().get(0));
-        assertNull("check gateway deleted", gwImo.get(gwId, clusterName));
+        assertNull("check gateway deleted", container.getGw(clusterName, gwId));
         
         // TODO : test for ClusterInPhysicalMachine, whether it is deleted, when it contains no gw and no pgs. 
-        PhysicalMachineCluster pmCluster = pmClusterImo.get(clusterName, pmName);
+        PhysicalMachineCluster pmCluster = container.getPmc(pmName, clusterName);
         if (pmCluster != null) {
             assertFalse("Check pm-cluster does not contains this gw.", 
-                    pmCluster.getData().getGwIdList().contains(Integer.valueOf(gwId)));
+                    pmCluster.getGwIdList().contains(Integer.valueOf(gwId)));
         }
     }
     
@@ -363,20 +323,20 @@ public class BasicSetting {
         JobResult result = doCommand("cluster_add " + clusterName + " " + quorumPolicy);
         assertEquals("perform cluster_add.", ok, result.getMessages().get(0));
         
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         assertNotNull("check cluster after cluster_add.", cluster);
         List<Integer> qpExpected = new ArrayList<Integer>();
         for (String quorum : quorumPolicy.split(":")) {
             qpExpected.add(Integer.valueOf(quorum));
         }
         assertEquals("check cluster data.", qpExpected, 
-                cluster.getData().getQuorumPolicy());
+                cluster.getQuorumPolicy());
     }
     
     public void clusterDel(String clusterName) throws Exception {
         JobResult result = doCommand("cluster_del " + clusterName);
         assertEquals("check result of cluster_del", ok, result.getMessages().get(0));
-        assertNull("check cluster deleted.", clusterImo.get(clusterName));
+        assertNull("check cluster deleted.", container.getCluster(clusterName));
     }
     
     public void slotSetPg(String clusterName, String pgName) throws Exception {
@@ -387,16 +347,16 @@ public class BasicSetting {
         JobResult result = doCommand(command.trim());
         assertEquals("check result of slot_set_pg", ok, result.getMessages().get(0));
         
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         List<Integer> slot = new ArrayList<Integer>();
         for (int i = 0; i < 8192; i++) {
             slot.add(0);
         }
-        assertEquals("check slot of pg after slot_set_pg", slot, cluster.getData().getPnPgMap());
+        assertEquals("check slot of pg after slot_set_pg", slot, cluster.getPnPgMap());
     }
     
     public void createPm() throws Exception {
-        pmAdd(pmName, pmData.getIp());
+        pmAdd(pmName, pmData.ip);
     }
     
     public void deletePm() throws Exception {
@@ -412,7 +372,7 @@ public class BasicSetting {
     }
     
     public Cluster getCluster() {
-        return clusterImo.get(clusterName);
+        return container.getCluster(clusterName);
     }
     
     public void createPg() throws Exception {
@@ -426,46 +386,47 @@ public class BasicSetting {
     
     public void createPgs(int index) throws Exception {
         pgsAdd(pgsNames[index], 
-                String.valueOf(pgsDatas[index].getPgId()), 
+                String.valueOf(pgsDatas[index].pgId), 
                 clusterName, 
-                pgsDatas[index].getSmrBasePort());
+                pgsDatas[index].smrBasePort);
     }
     
     public void deletePgs(int index, boolean isLastPgs) throws Exception {
-        if (getPgs(index).getData().getHb().equals(HB_MONITOR_YES)) {
+        if (getPgs(index).getHeartbeat().equals(HB_MONITOR_YES)) {
             joinLeave.pgsLeave(getPgs(index), getRs(index), pgsMockups[index], FORCED);
         }
         pgsDel(pgsNames[index], isLastPgs);
     }
     
     public PartitionGroup getPg() {
-        return pgImo.get(pgName, clusterName);
+        return container.getPg(clusterName, pgName);
     }
     
     public PartitionGroupServer getPgs(int index) {
-        return pgsImo.get(pgsNames[index], clusterName);
+        return container.getPgs(clusterName, pgsNames[index]);
     }
     
     public List<PartitionGroupServer> getPgsList() {
-        return pgsImo.getList(clusterName);
+        return container.getPgsList(clusterName);
     }
     
     public void setPgs(PartitionGroupServer pgs) throws SecurityException,
             NoSuchFieldException, IllegalArgumentException,
             IllegalAccessException {
-        Field containerField = PartitionGroupServerImo.class.getDeclaredField("container");
+        Field containerField = ClusterComponentContainer.class.getDeclaredField("map");
         containerField.setAccessible(true);
-        Map<String, PartitionGroupServer> container = 
-                (Map<String, PartitionGroupServer>) containerField.get(pgsImo);
-        container.put(pgs.getPath(), pgs);
+        @SuppressWarnings("unchecked")
+        Map<String, ClusterComponent> m = 
+                (Map<String, ClusterComponent>) containerField.get(container);
+        m.put(pgs.getPath(), pgs);
     }
     
     public RedisServer getRs(int index) {
-        return rsImo.get(pgsNames[index], clusterName);
+        return container.getRs(clusterName, pgsNames[index]);
     }
     
     public Gateway getGw() {
-        return gwImo.get(gwName, clusterName);
+        return container.getGw(clusterName, gwName);
     }
 
     public void createGw() throws Exception {
@@ -480,12 +441,12 @@ public class BasicSetting {
         setPgs(spy(getPgs(id)));
         
         // Create mocks for PGS
-        pgsMockups[id] = new PGSComponentMock(getPgs(id), getRs(id)); 
+        pgsMockups[id] = new ClusterComponentMock(getPgs(id), getRs(id)); 
 
         // Mock Heartbeat Session Handler
         final HBSessionHandler handler = mock(HBSessionHandler.class);
         doNothing().when(handler).handleResult(anyString(), anyString());
-        getPgs(id).getHbc().setHandler(handler);
+        ClusterComponentMock.getHeartbeatSession(getPgs(id)).setHandler(handler);
     }
 
     public void joinPgs(int id) throws Exception {
@@ -499,12 +460,12 @@ public class BasicSetting {
             when(msock.execute(anyString())).thenAnswer(m);
         } catch (IOException e) {
         }
-        pgs.setServerConnection(msock);
+        ClusterComponentMock.setConnectionForCommand(pgs, msock);
         
         try {
             BlockingSocketImpl msockRs = mock(BlockingSocketImpl.class);
             RedisServer rs = getRs(Integer.valueOf(pgs.getName()));
-            rs.setServerConnection(msockRs);
+            ClusterComponentMock.setConnectionForCommand(rs, msockRs);
             when(msockRs.execute(REDIS_PING)).thenReturn(REDIS_PONG);
             when(msockRs.execute(REDIS_REP_PING)).thenReturn(REDIS_PONG);
         } catch (IOException e) {
@@ -518,9 +479,9 @@ public class BasicSetting {
                 role, 
                 pgs, 
                 pingResp, 
-                pgs.getData().getPmIp(),
-                pgs.getData().getSmrMgmtPort(), 
-                pgs.getHbc().getID());
+                pgs.getPmIp(),
+                pgs.getSmrMgmtPort(), 
+                ClusterComponentMock.getHeartbeatSession(pgs).getID());
         hbcProc.proc(result, false);
     }
     
@@ -534,12 +495,12 @@ public class BasicSetting {
     };
 
     protected void validateNormal(PartitionGroupServer pgs, PartitionGroup pg, String role, int mgen) {
-        assertEquals(GREEN, pgs.getData().getColor());
-        assertEquals(role, pgs.getData().getRole());
-        assertEquals(SERVER_STATE_NORMAL, pgs.getData().getState());
-        assertEquals(HB_MONITOR_YES, pgs.getData().getHb());
-        assertEquals(mgen + 1, pgs.getData().getMasterGen());
-        assertEquals(mgen, pg.getData().currentGen());
+        assertEquals(GREEN, pgs.getColor());
+        assertEquals(role, pgs.getRole());
+        assertEquals(SERVER_STATE_NORMAL, pgs.getState());
+        assertEquals(HB_MONITOR_YES, pgs.getHeartbeat());
+        assertEquals(mgen + 1, pgs.getMasterGen());
+        assertEquals(mgen, pg.currentGen());
     }
     
     /*
@@ -566,12 +527,12 @@ public class BasicSetting {
         MasterFinder masterCond = new MasterFinder(getPgsList());
         await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
         assertEquals(p1, masterCond.getMaster());
-        assertEquals(GREEN, p1.getData().getColor());
-        assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
-        assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
-        assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-        assertEquals(1, p1.getData().getMasterGen());
-        assertEquals(0, pg.getData().currentGen());
+        assertEquals(GREEN, p1.getColor());
+        assertEquals(PGS_ROLE_MASTER, p1.getRole());
+        assertEquals(SERVER_STATE_NORMAL, p1.getState());
+        assertEquals(HB_MONITOR_YES, p1.getHeartbeat());
+        assertEquals(1, p1.getMasterGen());
+        assertEquals(0, pg.currentGen());
         QuorumValidator quorumValidator = new QuorumValidator(mimics[0], 0); 
         await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
         
@@ -587,23 +548,23 @@ public class BasicSetting {
     
             RoleColorValidator slaveCond = new RoleColorValidator(p2, PGS_ROLE_SLAVE, GREEN);
             await("test for role slave.").atMost(assertionTimeout, SECONDS).until(slaveCond);
-            assertEquals(GREEN, p2.getData().getColor());
-            assertEquals(PGS_ROLE_SLAVE, p2.getData().getRole());
-            assertEquals(SERVER_STATE_NORMAL, p2.getData().getState());
-            assertEquals(HB_MONITOR_YES, p2.getData().getHb());
-            assertEquals(1, p2.getData().getMasterGen());
-            assertEquals(0, pg.getData().currentGen());
+            assertEquals(GREEN, p2.getColor());
+            assertEquals(PGS_ROLE_SLAVE, p2.getRole());
+            assertEquals(SERVER_STATE_NORMAL, p2.getState());
+            assertEquals(HB_MONITOR_YES, p2.getHeartbeat());
+            assertEquals(1, p2.getMasterGen());
+            assertEquals(0, pg.currentGen());
             quorumValidator = new QuorumValidator(mimics[0], pgsIdx); 
             await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
             
             // Master must not be changed
             assertEquals(p1, masterCond.getMaster());
-            assertEquals(GREEN, p1.getData().getColor());
-            assertEquals(PGS_ROLE_MASTER, p1.getData().getRole());
-            assertEquals(SERVER_STATE_NORMAL, p1.getData().getState());
-            assertEquals(HB_MONITOR_YES, p1.getData().getHb());
-            assertEquals(1, p1.getData().getMasterGen());
-            assertEquals(0, pg.getData().currentGen());
+            assertEquals(GREEN, p1.getColor());
+            assertEquals(PGS_ROLE_MASTER, p1.getRole());
+            assertEquals(SERVER_STATE_NORMAL, p1.getState());
+            assertEquals(HB_MONITOR_YES, p1.getHeartbeat());
+            assertEquals(1, p1.getMasterGen());
+            assertEquals(0, pg.currentGen());
         }
         
         return mimics;
@@ -621,8 +582,8 @@ public class BasicSetting {
         }
         
         public Boolean call() throws Exception {
-            if (pgs.getData().getRole().equals(role)
-                    && pgs.getData().getColor() == color) {
+            if (pgs.getRole().equals(role)
+                    && pgs.getColor() == color) {
                 return true;
             }
             return false;
@@ -639,8 +600,8 @@ public class BasicSetting {
         
         public Boolean call() throws Exception {
             for (PartitionGroupServer pgs : pgsList) {
-                if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)
-                        && pgs.getData().getColor() == GREEN) {
+                if (pgs.getRole().equals(PGS_ROLE_MASTER)
+                        && pgs.getColor() == GREEN) {
                     setMaster(pgs);
                     return true;
                 }
@@ -668,8 +629,8 @@ public class BasicSetting {
         
         public Boolean call() throws Exception {
             for (PartitionGroupServer pgs : pgsList) {
-                if (pgs.getData().getRole().equals(PGS_ROLE_SLAVE)
-                        && pgs.getData().getColor() == GREEN) {
+                if (pgs.getRole().equals(PGS_ROLE_SLAVE)
+                        && pgs.getColor() == GREEN) {
                     addSlave(pgs);
                 }
             }
@@ -702,7 +663,7 @@ public class BasicSetting {
         }
         
         public Boolean call() throws Exception {
-            return pgs.getData().getRole().equals(role);
+            return pgs.getRole().equals(role);
         }
     }
 
@@ -716,7 +677,7 @@ public class BasicSetting {
         }
         
         public Boolean call() throws Exception {
-            return pgs.getData().getColor().equals(color);
+            return pgs.getColor().equals(color);
         }
     }
     
@@ -730,8 +691,8 @@ public class BasicSetting {
         }
         
         public Boolean call() throws Exception {
-            System.out.println("m(" + pgs.getData().getState() + "), e(" + state + ")");
-            return pgs.getData().getState().equals(state);
+            System.out.println("m(" + pgs.getState() + "), e(" + state + ")");
+            return pgs.getState().equals(state);
         }
     }
     
@@ -759,7 +720,7 @@ public class BasicSetting {
         }
 
         public Boolean call() throws Exception {
-            if (pgs.getData().getMasterGen() == mGen) {
+            if (pgs.getMasterGen() == mGen) {
                 return true;
             }
             return false;

@@ -16,71 +16,97 @@
 
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
+import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
+import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_FAILURE;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.codehaus.jackson.type.TypeReference;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
+import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.config.Config;
-import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
+import com.navercorp.nbasearc.confmaster.heartbeat.HBState;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSession;
+import com.navercorp.nbasearc.confmaster.io.BlockingSocket;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
-import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandler;
-import com.navercorp.nbasearc.confmaster.server.watcher.WatchEventHandlerGw;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 
-public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
+public class Gateway implements HeartbeatTarget, Comparable<Gateway>, ClusterComponent {
+
+    protected BlockingSocket connectionForCommand;
     
-    private BlockingSocketImpl serverConnection;
+    private HBSession hbSession;
+    
+    private Config config;
+    private MemoryObjectMapper mapper = new MemoryObjectMapper();
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
     private Cluster cluster;
     
-    private HBSession hbc;
-    private HBRefData hbcRefData;
-    
-    private WatchEventHandlerGw watcher;
-    
-    private final Config config;
-    
-    public Gateway(ApplicationContext context, String path, String name,
-            Cluster cluster, byte[] data) {
-        super(context);
-        
-        this.config = context.getBean(Config.class);
-        
-        setTypeRef(new TypeReference<GatewayData>(){});
-        setPath(path);
-        setName(name);
-        this.cluster = cluster;
-        setNodeType(NodeType.GW);
-        setData(data);
-        
-        setServerConnection(
-            new BlockingSocketImpl(
-                getData().getPmIp(), getData().getPort() + 1, 
-                config.getClusterGwTimeout(), Constant.GW_PING,
-                config.getDelim(), config.getCharset()));
-        
-        hbcRefData = new HBRefData();
-        hbcRefData.setZkData(getData().getState(), getData().getStateTimestamp(), stat.getVersion())
-                  .setLastState(getData().getState())
-                  .setLastStateTimestamp(getData().getStateTimestamp())
-                  .setSubmitMyOpinion(false);
+    private String name;
+    private String path;
+    private GatewayData persistentData;
+    private int znodeVersion;
+
+	public Gateway(ApplicationContext context, String clusterName, String gwId,
+			String pmName, String pmIp, int port, int znodeVersion) {
+    	persistentData = new GatewayData(pmName, pmIp, port);
+    	init(context, clusterName, gwId, znodeVersion);
     }
     
+    public Gateway(ApplicationContext context, String clusterName, String gwId,
+            byte[] d, int znodeVersion) {
+        persistentData = mapper.readValue(d, GatewayData.class);
+        init(context, clusterName, gwId, znodeVersion);
+    }
+    
+    public Gateway(ApplicationContext context, String clusterName, String gwId,
+            GatewayData d, int znodeVersion) {
+        persistentData = d;
+        init(context, clusterName, gwId, znodeVersion);
+    }
+    
+    public void init(ApplicationContext context, String clusterName, String gwId, int znodeVersion) {
+        this.config = context.getBean(Config.class);
+        
+        this.path = PathUtil.gwPath(gwId, clusterName);
+        this.name = gwId;
+        this.cluster = context.getBean(ClusterComponentContainer.class).getCluster(clusterName);
+        
+        connectionForCommand = 
+            new BlockingSocketImpl(
+                persistentData.pmIp, persistentData.port + 1, 
+                config.getClusterGwTimeout(), Constant.GW_PING,
+                config.getDelim(), config.getCharset());
+        
+        HBState hbRefData = new HBState();
+        hbRefData.setZkData(persistentData.state, persistentData.stateTimestamp, znodeVersion)
+                  .setLastState(persistentData.state)
+                  .setLastStateTimestamp(persistentData.stateTimestamp)
+                  .setSubmitMyOpinion(false);
+
+        hbSession = new HBSession(context, this, persistentData.pmIp,
+                persistentData.port, cluster.getMode(), persistentData.hb,
+                Constant.GW_PING + "\r\n", hbRefData);
+    }
+    
+    @Override
     public void release() {
         try {
-            getServerConnection().close();
-            getHbc().callbackDelete();
+            connectionForCommand.close();
+            hbSession.callbackDelete();
         } catch (Exception e) {
             Logger.error("failed while delete gw. " + toString(), e);
         }
@@ -92,22 +118,17 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
      * Run Length Encoding Format : <Affinity Type><Slot Size><Affinity Type><Slot Size>...
      *                              ex) A2048R2048N4096
      */
-    public String getAffinity(ClusterImo clusterImo,
-            PhysicalMachineClusterImo pmClusterImo, PartitionGroupServerImo pgsImo) {
-        return getAffinity(getClusterName(), getData().getPmName(),
-                clusterImo, pmClusterImo, pgsImo);
+    public String getAffinity(ClusterComponentContainer cache) {
+        return getAffinity(getClusterName(), persistentData.pmName, cache);
     }
     
-    public static String getAffinity(String clusterName, String pmName, 
-            ClusterImo clusterImo, PhysicalMachineClusterImo pmClusterImo,
-            PartitionGroupServerImo pgsImo) {
-        final Cluster cluster = clusterImo.get(clusterName);
-        final List<Integer> pnPgMap = cluster.getData().getPnPgMap();
-        final PhysicalMachineCluster machineInfo = 
-                pmClusterImo.get(clusterName, pmName);
+    public static String getAffinity(String clusterName, String pmName, ClusterComponentContainer container) {
+        final Cluster cluster = container.getCluster(clusterName);
+        final List<Integer> pnPgMap = cluster.getPnPgMap();
+        final PhysicalMachineCluster machineInfo = container.getPmc(pmName, clusterName);
         final List<Integer> localPgsIdList;
         if (machineInfo != null) {
-            localPgsIdList = machineInfo.getData().getPgsIdList();
+            localPgsIdList = machineInfo.getPgsIdList();
         } else {
             /*
              * When machineInfo is null, there are no PGS in the machine,
@@ -119,14 +140,14 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
         Arrays.fill(keySpace, Constant.AFFINITY_TYPE_NONE);
 
         for (Integer pgsID : localPgsIdList) {
-            PartitionGroupServer pgs = pgsImo.get(String.valueOf(pgsID), clusterName);
+            PartitionGroupServer pgs = container.getPgs(clusterName, String.valueOf(pgsID));
 
             // Get an affinity type that the gateway should use for the PGS.
             char affinityType = Constant.AFFINITY_TYPE_NONE;
-            if (pgs.getData().getRole().equals(Constant.PGS_ROLE_MASTER)) {
+            if (pgs.getRole().equals(Constant.PGS_ROLE_MASTER)) {
                 affinityType = Constant.AFFINITY_TYPE_ALL;
-            } else if (pgs.getData().getRole().equals(Constant.PGS_ROLE_SLAVE)) {
-                if (pgs.isMasterInSameMachine(pmClusterImo, pgsImo)) {
+            } else if (pgs.getRole().equals(Constant.PGS_ROLE_SLAVE)) {
+                if (pgs.isMasterInSameMachine(container)) {
                     continue;
                 }
                 affinityType = Constant.AFFINITY_TYPE_READ;
@@ -136,7 +157,7 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
 
             // Set affinity type for the keyspace.
             for (int slot = 0; slot < Constant.KEY_SPACE_SIZE; slot++) {
-                if (pgs.getData().getPgId() == pnPgMap.get(slot)) {
+                if (pgs.getPgId() == pnPgMap.get(slot)) {
                     keySpace[slot] = affinityType;
                 }
             }
@@ -146,39 +167,14 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     }
 
     @Override
-    public int getVersion() {
-        return this.stat.getVersion();
-    }
-
-    @Override
     public String getClusterName() {
         return cluster.getName();
-    }
-
-    @Override
-    public String getTargetOfHeartbeatPath() {
-        return this.getPath();
-    }
-    
-    @Override
-    public String getHB() {
-        return this.getData().getHB();
-    }
-
-    @Override
-    public String getView() {
-        return this.getData().getState();
     }
     
     @Override
     public void setState(String state, long state_timestamp) {
-        this.getData().setState(state);
-        this.getData().setStateTimestamp(state_timestamp);
-    }
-    
-    @Override
-    public long getStateTimestamp() {
-        return getData().getStateTimestamp();
+        persistentData.state = state;
+        persistentData.stateTimestamp = state_timestamp;
     }
     
     @Override
@@ -187,23 +183,8 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     }
     
     @Override
-    public String getPingMsg() {
-        return Constant.GW_PING + "\r\n";
-    }
-    
-    @Override
-    public HBRefData getRefData() {
-        return hbcRefData;
-    }
-
-    @Override
-    public String getIP() {
-        return getData().getPmIp();
-    }
-
-    @Override
-    public int getPort() {
-        return getData().getPort();
+    public HBState getHeartbeatState() {
+        return hbSession.getHeartbeatState();
     }
 
     @Override
@@ -212,41 +193,11 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     }
 
     public String executeQuery(String query) throws IOException {
-        return getServerConnection().execute(query);
+        return connectionForCommand.execute(query);
     }
 
     public String executeQuery(String query, int retryCount) throws IOException {
-        return getServerConnection().execute(query, retryCount);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    public ZNode<GatewayData> getZNode() {
-        return this;
-    }
-
-    public WatchEventHandler getWatcher() {
-        return watcher;
-    }
-
-    public void setWatcher(WatchEventHandlerGw watcher) {
-        this.watcher = watcher;
-    }
-    
-    public BlockingSocketImpl getServerConnection() {
-        return serverConnection;
-    }
-
-    public void setServerConnection(BlockingSocketImpl serverConnection) {
-        this.serverConnection = serverConnection;
-    }
-
-    public HBSession getHbc() {
-        return hbc;
-    }
-
-    public void setHbc(HBSession hbc) {
-        this.hbc = hbc;
+        return connectionForCommand.execute(query, retryCount);
     }
 
     static class RunLengthEncoder {
@@ -279,5 +230,199 @@ public class Gateway extends ZNode<GatewayData> implements HeartbeatTarget {
     public String getFullName() {
         return toString();
     }
+
+	@Override
+	public int compareTo(Gateway o) {
+		return name.compareTo(o.name);
+	}
+
+	@Override
+	public String getPath() {
+		return path;
+	}
+
+	@Override
+	public String getName() {
+		return name;
+	}
+
+	@Override
+	public NodeType getNodeType() {
+		return NodeType.GW;
+	}
+	
+	public int getZNodeVersion() {
+		return znodeVersion;
+	}
+
+    public Lock readLock() {
+        return lock.readLock();
+    }
+
+    public Lock writeLock() {
+        return lock.writeLock();
+    }
+
+    public void propagateStateToHeartbeatSession(int mode) {
+        hbSession.getHeartbeatState().setZkData(getState(),
+                persistentData.stateTimestamp, getZNodeVersion());
+        hbSession.toggleHearbeat(mode, getHeartbeat());
+    }
     
+    public void turnOnUrgentHeartbeat() {
+        hbSession.urgent();
+    }
+
+    public byte[] persistentDataToBytes() {
+        return persistentData.toBytes();
+    }
+    
+    public String persistentDataToString() {
+        return persistentData.toString();
+    }
+    
+    public GatewayData clonePersistentData() {
+        return (GatewayData) persistentData.clone();
+    }
+
+    public void setPersistentData(GatewayData d) {
+        persistentData = d;
+    }
+    
+    public void setPersistentData(byte[] data) {
+        persistentData = mapper.readValue(data, GatewayData.class);
+    }
+
+    @JsonAutoDetect(
+            fieldVisibility=Visibility.ANY, 
+            getterVisibility=Visibility.NONE, 
+            setterVisibility=Visibility.NONE)
+    @JsonIgnoreProperties(
+            ignoreUnknown=true)
+    @JsonPropertyOrder(
+            {"pm_Name", "pm_IP", "port", "state", "stateTimestamp", "hb"})
+    public static class GatewayData implements Cloneable {
+        
+        @JsonProperty("pm_Name")
+        public String pmName;
+        @JsonProperty("pm_IP")
+        public String pmIp;
+        @JsonProperty("port")
+        public int port;
+        @JsonProperty("state")    
+        public String state;
+        @JsonProperty("stateTimestamp")
+        public long stateTimestamp;
+        @JsonProperty("hb")
+        public String hb;
+    
+        @JsonIgnore
+        private final MemoryObjectMapper mapper = new MemoryObjectMapper();
+
+        public GatewayData() {}
+        
+        public GatewayData(String pmName, String pmIp, int port) {
+            this.pmName = pmName;
+            this.pmIp = pmIp;
+            this.port = port;
+            
+            // Use default value
+            this.stateTimestamp = 0;
+            this.state = SERVER_STATE_FAILURE;
+            this.hb = HB_MONITOR_YES;
+        }
+        
+        @Override
+        public Object clone() {
+            try {
+                return super.clone();
+            } catch (CloneNotSupportedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null) {
+                return false;
+            }
+            if (obj == this) {
+                return true;
+            }
+            if (!(obj instanceof GatewayData)) {
+                return false;
+            }
+    
+            GatewayData rhs = (GatewayData) obj;
+            if (!pmName.equals(rhs.pmName)) {
+                return false;
+            }
+            if (!pmIp.equals(rhs.pmIp)) {
+                return false;
+            }
+            if (port != rhs.port) {
+                return false;
+            }
+            if (!state.equals(rhs.state)) {
+                return false;
+            }
+            if (!hb.equals(rhs.hb)) {
+                return false;
+            }
+            return true;
+        }
+        
+        @Override
+        public int hashCode() {
+            assert false : "hashCode not designed";
+            return 42; // any arbitrary constant will do
+        }
+        
+        @Override
+        public String toString() {
+            return mapper.writeValueAsString(this);
+        }
+        
+        public byte[] toBytes() {
+            return mapper.writeValueAsBytes(this);
+        }
+    
+    }
+
+    public String getPmName() {
+        return persistentData.pmName;
+    }
+
+    public String getState() {
+        return persistentData.state;
+    }
+
+    public String getPmIp() {
+        return persistentData.pmIp;
+    }
+    
+    @Override
+    public String getHeartbeat() {
+        return persistentData.hb;
+    }
+
+    @Override
+    public String getView() {
+        return persistentData.state;
+    }
+
+    @Override
+    public void setZNodeVersion(int version) {
+        znodeVersion = version;
+    }
+
+    @Override
+    public String getIP() {
+        return persistentData.pmIp;
+    }
+
+    @Override
+    public int getPort() {
+        return persistentData.port;
+    }
 }

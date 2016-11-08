@@ -16,25 +16,21 @@
 
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
-import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
-import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
+import com.navercorp.nbasearc.confmaster.heartbeat.HBState;
 
 public interface HeartbeatTarget {
 
-    int getVersion();
+    int getZNodeVersion();
 
     String getPath();
 
-    String getTargetOfHeartbeatPath();
-
     String getName();
-    
+
     String getFullName();
 
     NodeType getNodeType();
 
-    String getHB();
+    String getHeartbeat();
 
     String getClusterName();
 
@@ -42,13 +38,11 @@ public interface HeartbeatTarget {
 
     void setState(String state, long state_timestamp);
 
-    long getStateTimestamp();
+    void setZNodeVersion(int version);
 
     boolean isHBCResponseCorrect(String recvedLine);
 
-    String getPingMsg();
-
-    HBRefData getRefData();
+    HBState getHeartbeatState();
 
     String getIP();
 
@@ -56,6 +50,5 @@ public interface HeartbeatTarget {
 
     UsedOpinionSet getUsedOpinions();
 
-    <T> ZNode<T> getZNode();
-
+    byte[] persistentDataToBytes();
 }

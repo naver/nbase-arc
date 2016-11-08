@@ -24,7 +24,6 @@ import org.springframework.stereotype.Component;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
@@ -36,22 +35,22 @@ public class YJRoleSlave {
     // Since it is a singleton instance and represents a part of workflow logic running in multiple threads.
 
     @Autowired
-    protected WorkflowLogDao workflowLogDao;
+    protected WorkflowLogger workflowLogger;
 
     public void roleSlave(PartitionGroupServer pgs, PartitionGroup pg,
             LogSequence logSeq, PartitionGroupServer master, long jobID)
             throws MgmtSmrCommandException {
         final String masterVersion = master.smrVersion();
-        pgs.roleSlave(pg, logSeq, master, YELLOW, jobID, workflowLogDao);
+        pgs.roleSlave(pg, logSeq, master, YELLOW, jobID, workflowLogger);
 
         Logger.info("{} {}->{} {}->{}", new Object[] { pgs,
-                pgs.getData().getRole(), PGS_ROLE_SLAVE,
-                pgs.getData().getColor(), YELLOW });
+                pgs.getRole(), PGS_ROLE_SLAVE,
+                pgs.getColor(), YELLOW });
 
         // For backward compatibility, confmaster adds 1 to currentGen
         // since 1.2 and smaller version of confmaster follow a rule, PG.mGen + 1 = PGS.mGen.
-        pgs.setData(pgs.roleSlaveZk(jobID, pg.getData().currentGen() + 1, YELLOW,
-                masterVersion, workflowLogDao).pgsM);
+        pgs.setPersistentData(pgs.updateZNodeAsSlave(jobID, pg.currentGen() + 1, YELLOW,
+                masterVersion, workflowLogger));
     }
 
 }

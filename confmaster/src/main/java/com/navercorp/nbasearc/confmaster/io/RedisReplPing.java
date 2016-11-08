@@ -54,13 +54,13 @@ public class RedisReplPing implements Callable<RedisReplPing.Result> {
             if (!reply.equals(REDIS_PONG)) {
                 Logger.error("Send redis replicated ping fail. {} {}:{}, reply: \"{}\"", 
                         new Object[]{pgs, pgs.getIP(),
-                                pgs.getData().getRedisPort(), reply});
+                                pgs.getRedisPort(), reply});
                 return new Result(pgs, false);
             }
         } catch (IOException e) {
             Logger.error("Send redis replicated ping fail. {} {}:{}", 
                     new Object[]{pgs, pgs.getIP(),
-                            pgs.getData().getRedisPort()});
+                            pgs.getRedisPort()});
             return new Result(pgs, false);
         }
 
