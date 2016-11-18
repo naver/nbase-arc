@@ -31,4 +31,6 @@ public @interface CommandMapping {
     public ArityType arityType() default ArityType.EQUAL;
     
     public int requiredState();
+    
+    public int requiredMode() default 0;
 }

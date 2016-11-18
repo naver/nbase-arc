@@ -37,12 +37,12 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ClientSessionHandler.ReplyFormatter;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.mimic.MimicPGS;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -81,16 +81,16 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         // Clear cluster
         Cluster cluster = getCluster();
         if (cluster != null) {
-            for (PartitionGroupServer pgs : pgsImo.getList(cluster.getName())) {
+            for (PartitionGroupServer pgs : container.getPgsList(cluster.getName())) {
                 deletePgs(Integer.valueOf(pgs.getName()),
-                        pgsImo.getList(cluster.getName()).size() == 1);
+                        container.getPgsList(cluster.getName()).size() == 1);
             }
     
-            if (!pgImo.getList(cluster.getName()).isEmpty()) {
+            if (!container.getPgList(cluster.getName()).isEmpty()) {
                 deletePg();
             }
     
-            if (!gwImo.getList(cluster.getName()).isEmpty()) {
+            if (!container.getGwList(cluster.getName()).isEmpty()) {
                 deleteGw();
             }
         }
@@ -153,8 +153,9 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         doCommand("pgs_join " + getPgs(1).getClusterName() + " " + getPgs(1).getName());
         PartitionGroupServer p2 = getPgs(1);
         
-        p2.setData(PartitionGroupServerData.builder().from(p2.getData())
-                .withRole(PGS_ROLE_LCONN).build());
+        PartitionGroupServerData d2 = p2.clonePersistentData();
+        d2.setRole(PGS_ROLE_LCONN);
+        p2.setPersistentData(d2);
         
         runWorkflows();
         
@@ -177,8 +178,9 @@ public class RoleChangeWorkflowTest extends BasicSetting {
             doCommand("pgs_join " + getPgs(2).getClusterName() + " " + getPgs(2).getName());
             PartitionGroupServer p3 = getPgs(2);
             
-            p3.setData(PartitionGroupServerData.builder().from(p3.getData())
-                    .withRole(PGS_ROLE_LCONN).build());
+            PartitionGroupServerData d3 = p3.clonePersistentData();
+            d3.setRole(PGS_ROLE_LCONN);
+            p3.setPersistentData(d3);
             
             runWorkflows();
             
@@ -204,8 +206,8 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         init(3);
 
         doCommand("pg_dq " + getPg().getClusterName() + " " + getPg().getName());
-        assertEquals(Integer.valueOf(3), getPg().getData().getCopy());
-        assertEquals(Integer.valueOf(1), getPg().getData().getQuorum());
+        assertEquals(3, getPg().getCopy());
+        assertEquals(1, getPg().getQuorum());
         
         mimics[0].mSmr.setSeqLog(100, 100, 200, 100);
         mimics[1].mSmr.setSeqLog(100, 100, 100, 100);
@@ -245,8 +247,8 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         init(2);
 
         doCommand("pg_dq " + getPg().getClusterName() + " " + getPg().getName());
-        assertEquals(Integer.valueOf(2), getPg().getData().getCopy());
-        assertEquals(Integer.valueOf(0), getPg().getData().getQuorum());
+        assertEquals(2, getPg().getCopy());
+        assertEquals(0, getPg().getQuorum());
         
         mimics[0].mSmr.setSeqLog(100, 100, 200, 100);
         mimics[1].mSmr.setSeqLog(0, 0, 0, 0);
@@ -273,8 +275,8 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         }
 
         doCommand("pg_iq " + getPg().getClusterName() + " " + getPg().getName());
-        assertEquals(Integer.valueOf(2), getPg().getData().getCopy());
-        assertEquals(Integer.valueOf(1), getPg().getData().getQuorum());
+        assertEquals(2, getPg().getCopy());
+        assertEquals(1, getPg().getQuorum());
         
         mimics[0].mSmr.setSeqLog(100, 100, 200, 100);
         mimics[1].mSmr.setSeqLog(100, 100, 200, 100);

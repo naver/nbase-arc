@@ -27,20 +27,17 @@ import org.springframework.util.StringUtils;
 
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
 
 public class RoleChangeWorkflow {
     final ApplicationContext context;
     final Config config;
     final WorkflowExecutor wfExecutor;
-    final PartitionGroupServerDao pgsDao;
-    final PartitionGroupServerImo pgsImo;
-    final RedisServerImo rsImo;
+    final ZooKeeperHolder zk;
+    final ClusterComponentContainer container;
 
     final PartitionGroup pg;
     // first come first served
@@ -53,9 +50,8 @@ public class RoleChangeWorkflow {
         this.context = context;
         this.config = context.getBean(Config.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
-        this.pgsDao = context.getBean(PartitionGroupServerDao.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
-        this.rsImo = context.getBean(RedisServerImo.class);
+        this.zk = context.getBean(ZooKeeperHolder.class);
+        this.container = context.getBean(ClusterComponentContainer.class);
 
         this.pg = pg;
         this.masterHints = masterHints;
@@ -73,18 +69,17 @@ public class RoleChangeWorkflow {
     
     private void _execute() throws Exception {
         final List<PartitionGroupServer> joinedPgsList = pg
-                .getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
-                        Integer.valueOf(pg.getName())));
+                .getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
         final PartitionGroupServer master = pg.getMaster(joinedPgsList);
         
         final String cmd = "role lconn";
         Logger.info("RC pgs: {}, cmd: \"{}\"", master, cmd);
         master.executeQuery(cmd);
 
-        PartitionGroupServerData masterM = PartitionGroupServerData.builder()
-                .from(master.getData()).withRole(PGS_ROLE_LCONN).build();
-        pgsDao.updatePgs(master.getPath(), masterM);
-        master.setData(masterM);
+        PartitionGroupServer.PartitionGroupServerData masterM = master.clonePersistentData();
+        masterM.setRole(PGS_ROLE_LCONN);
+        zk.setData(master.getPath(), masterM.toBytes(), -1);
+        master.setPersistentData(masterM);
         
         try {
             RoleAdjustmentWorkflow ra = new RoleAdjustmentWorkflow(pg, false,
@@ -108,12 +103,12 @@ public class RoleChangeWorkflow {
         List<String> resSlaveJoinFail = new ArrayList<String>();
         PartitionGroupServer newMaster = null;
         for (PartitionGroupServer pgs : joinedPgsList) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)) {
+            if (pgs.getRole().equals(PGS_ROLE_MASTER)) {
                 newMaster = pgs;
                 continue;
             }
             
-            if (!pgs.getData().getRole().equals(PGS_ROLE_SLAVE)) {
+            if (!pgs.getRole().equals(PGS_ROLE_SLAVE)) {
                 resSlaveJoinFail.add(pgs.getName());
             }
         }

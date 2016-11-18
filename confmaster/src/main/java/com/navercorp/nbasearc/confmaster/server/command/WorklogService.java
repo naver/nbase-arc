@@ -28,29 +28,28 @@ import org.springframework.stereotype.Service;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.znode.ZkWorkflowLog;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 @Service
 public class WorklogService {
 
     @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
+    private WorkflowLogger workflowLogger;
 
     @CommandMapping(name="worklog_info", 
             usage="worklog_info",
             requiredState=ConfMaster.READY)
     public String worklogInfo() throws JsonParseException, JsonMappingException,
             KeeperException, InterruptedException, IOException {
-        if (workflowLogDao.getNumLogs() == 0) {
+        if (workflowLogger.getNumLogs() == 0) {
             return "-ERR confmaster does not have any log.";
         }
         
-        final long logStx = workflowLogDao.getNumOfStartLog();
-        final long logEdx = logStx + workflowLogDao.getNumLogs() - 1;
+        final long logStx = workflowLogger.getNumOfStartLog();
+        final long logEdx = logStx + workflowLogger.getNumLogs() - 1;
         
         StringBuilder sb = new StringBuilder("{");
         sb.append("\"start\":");
@@ -73,7 +72,7 @@ public class WorklogService {
             requiredState=ConfMaster.READY)
     public String worklogGet(Long requestedLogStartNo, Long requestedLogEndNo)
             throws MgmtZooKeeperException {
-        String err = workflowLogDao.isValidLogNo(requestedLogStartNo, requestedLogEndNo);
+        String err = workflowLogger.isValidLogNo(requestedLogStartNo, requestedLogEndNo);
         if (null != err) {
             return err;
         }
@@ -84,7 +83,7 @@ public class WorklogService {
         long deletedNo = -1;
         long no = requestedLogStartNo;
         for (; no <= requestedLogEndNo ; no ++) {
-            ZkWorkflowLog log = workflowLogDao.getLog(no);
+        	WorkflowLogger.ZkWorkflowLog log = workflowLogger.getLog(no);
             if (null == log) {
                 deletedNo = no;
                 break;
@@ -119,7 +118,7 @@ public class WorklogService {
             requiredState=ConfMaster.READY)
     public String worklogHead(Long logCount) throws NoNodeException,
             MgmtZooKeeperException {
-        if (workflowLogDao.getNumLogs() == 0) {
+        if (workflowLogger.getNumLogs() == 0) {
             return "-ERR confmaster does not have any log.";
         }
 
@@ -128,7 +127,7 @@ public class WorklogService {
         
         long offset = 0;
         for (; offset < logCount; offset++) {
-            ZkWorkflowLog log = workflowLogDao.getLogFromBeginning(offset);
+        	WorkflowLogger.ZkWorkflowLog log = workflowLogger.getLogFromBeginning(offset);
             if (null == log) {
                 break;
             }
@@ -154,12 +153,12 @@ public class WorklogService {
                     "delete workflow logs",
             requiredState=ConfMaster.RUNNING)
     public String worklogDel(Long maxLogNo) {
-        if (workflowLogDao.getNumLogs() == 0) {
+        if (workflowLogger.getNumLogs() == 0) {
             return "-ERR confmaster does not have any log.";
         }
         
         while (true) {
-            boolean ret = workflowLogDao.deleteLog(maxLogNo);
+            boolean ret = workflowLogger.deleteLog(maxLogNo);
             if (!ret) {
                 break;
             }

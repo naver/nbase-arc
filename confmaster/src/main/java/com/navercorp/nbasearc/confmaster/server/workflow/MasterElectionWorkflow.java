@@ -30,15 +30,12 @@ import org.springframework.context.ApplicationContext;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.SortedLogSeqSet;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class MasterElectionWorkflow extends CascadingWorkflow {
     private final long jobID = JobIDGenerator.getInstance().getID();
@@ -47,9 +44,7 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
     final Config config;
     final WorkflowExecutor wfExecutor;
 
-    final PartitionGroupDao pgDao;
-    final WorkflowLogDao workflowLogDao;
-    final PartitionGroupServerImo pgsImo;
+    final WorkflowLogger workflowLogger;
     
     final MERoleMaster roleMaster;
     final MERoleLconn roleLconn;
@@ -59,14 +54,12 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
     public MasterElectionWorkflow(PartitionGroup pg,
             List<PartitionGroupServer> masterHints, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg, context.getBean(PartitionGroupImo.class));
+        super(cascading, pg, context.getBean(ClusterComponentContainer.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
-        this.pgDao = context.getBean(PartitionGroupDao.class);
-        this.workflowLogDao = context.getBean(WorkflowLogDao.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
+        this.workflowLogger = context.getBean(WorkflowLogger.class);
         
         this.roleMaster = context.getBean(MERoleMaster.class);
         this.roleLconn = context.getBean(MERoleLconn.class);
@@ -77,18 +70,17 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
     @Override
     protected void _execute() throws MgmtSmrCommandException {
         final List<PartitionGroupServer> joinedPgsList = pg
-                .getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
-                        Integer.valueOf(pg.getName())));
+                .getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
 
         final PartitionGroupServer master = pg.getMaster(joinedPgsList);
         final int d = pg.getD(joinedPgsList);
         
-        if (master != null || pg.getData().getQuorum() - d < 0) {
+        if (master != null || pg.getQuorum() - d < 0) {
             return;
         }
 
         for (PartitionGroupServer pgs : joinedPgsList) {
-            Color color = pgs.getData().getColor();
+            Color color = pgs.getColor();
             if (color == GREEN || color == BLUE) {
                 roleLconn.roleLconn(pgs, jobID);
             }
@@ -97,7 +89,7 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
         List<PartitionGroupServer> greens = new ArrayList<PartitionGroupServer>();
         List<PartitionGroupServer> blues = new ArrayList<PartitionGroupServer>();
         for (PartitionGroupServer pgs : joinedPgsList) {
-            switch (pgs.getData().getColor()) {
+            switch (pgs.getColor()) {
             case BLUE:
                 blues.add(pgs);
                 break;
@@ -113,7 +105,7 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
         if (greens.size() != 0) {
             Logger.error("{} numGreen is {}", pg, greens.size());
             for (PartitionGroupServer pgs : joinedPgsList) {
-                Logger.error("{} {}", pgs, pgs.getData());
+                Logger.error("{} {}", pgs, pgs.persistentDataToString());
             }
             return;
         }
@@ -146,7 +138,7 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
             newMasterLog = logs.get(newMaster);
         }
 
-        int newQ = pg.getData().getQuorum() - d;
+        int newQ = pg.getQuorum() - d;
         roleMaster.roleMaster(newMaster, pg, newMasterLog, joinedPgsList, newQ, jobID);
     }
 

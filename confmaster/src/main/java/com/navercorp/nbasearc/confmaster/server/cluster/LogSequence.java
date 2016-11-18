@@ -59,11 +59,11 @@ public class LogSequence {
 
             Logger.info(
                     "Get log sequence success. {}, role: {}, reply: \"{}\"",
-                    new Object[]{pgs, pgs.getData().getRole(), reply});
+                    new Object[]{pgs, pgs.getRole(), reply});
         } catch (IOException e) {
             Logger.info(
                     "Get log sequence fail. {}, role: {}",
-                    new Object[]{pgs, pgs.getData().getRole()});
+                    new Object[]{pgs, pgs.getRole()});
             throw e;
         }
     }

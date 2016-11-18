@@ -29,7 +29,7 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
-import com.navercorp.nbasearc.confmaster.server.cluster.PGSComponentMock;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentMock;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
@@ -56,7 +56,7 @@ public class PGSLeaveCommandTest extends BasicSetting {
     
     @Test
     public void pgsJoinLeave() throws Exception {
-        PGSComponentMock mockup[] = new PGSComponentMock[2]; 
+        ClusterComponentMock mockup[] = new ClusterComponentMock[2]; 
         createCluster();
         createPm();
         createPg();
@@ -65,7 +65,7 @@ public class PGSLeaveCommandTest extends BasicSetting {
             createPgs(i);
     
             // Mock up watchers
-            mockup[i] = new PGSComponentMock(getPgs(i), getRs(i));
+            mockup[i] = new ClusterComponentMock(getPgs(i), getRs(i));
             
             // PGS Join
             joinLeave.pgsJoin(getPgs(i), getRs(i), mockup[i]);

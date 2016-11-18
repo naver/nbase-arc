@@ -16,96 +16,87 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
-import static com.navercorp.nbasearc.confmaster.Constant.ALL;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_GATEWAY_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_PHYSICAL_MACHINE_CLUSTER_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST;
-import static com.navercorp.nbasearc.confmaster.Constant.HB_MONITOR_YES;
-import static com.navercorp.nbasearc.confmaster.Constant.LOG_TYPE_COMMAND;
-import static com.navercorp.nbasearc.confmaster.Constant.S2C_OK;
-import static com.navercorp.nbasearc.confmaster.Constant.SERVER_STATE_FAILURE;
-import static com.navercorp.nbasearc.confmaster.Constant.SEVERITY_MODERATE;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
+import static com.navercorp.nbasearc.confmaster.Constant.*;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.READ;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.WRITE;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
+import org.apache.zookeeper.Op;
+import org.apache.zookeeper.OpResult;
+import org.apache.zookeeper.ZooDefs;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZNodeDoesNotExistException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.dao.GatewayDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkNotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockPMList;
-import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachineCluster;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineImo;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockPMList;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
+import com.navercorp.nbasearc.confmaster.server.mapping.ClusterHint;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 @Service
 public class GatewayService {
 
     @Autowired
-    private ClusterImo clusterImo;
-    @Autowired
-    private GatewayImo gwImo;
-    @Autowired
-    private PhysicalMachineImo pmImo;
-    @Autowired
-    private PhysicalMachineClusterImo pmClusterImo;
+    private ClusterComponentContainer container;
     
     @Autowired
-    private GatewayDao gwDao;
+    private GatewayLookup gwInfoNotifier;
     @Autowired
-    private ZkNotificationDao notificationDao;
+    private WorkflowLogger workflowLogger;
+    
     @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
+    private ApplicationContext context;
+    
+    @Autowired
+    private ZooKeeperHolder zk;
+    
+    private MemoryObjectMapper mapper = new MemoryObjectMapper();
 
     @CommandMapping(
             name="gw_add",
             usage="gw_add <cluster_name> <gwid> <pm_name> <pm_ip> <port>",
-            requiredState=ConfMaster.RUNNING)
-    public String gwAdd(String clusterName, String gwId, String pmName,
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String gwAdd(@ClusterHint String clusterName, String gwId, String pmName,
             String pmIp, Integer port) throws MgmtZooKeeperException,
             NoNodeException {
         // In Memory
-        List<Gateway> gwList = gwImo.getList(clusterName);
-        Cluster cluster = clusterImo.get(clusterName);
+        List<Gateway> gwList = container.getGwList(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (null == cluster) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
 
-        if (null == pmImo.get(pmName)) {
+        if (null == container.getPm(pmName)) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST
                             + PhysicalMachine.fullName(pmName));
         }
-
-        // Do not check... if pmCluster is null than it will make it 
-        PhysicalMachineCluster pmCluster = pmClusterImo.get(clusterName, pmName);
         
         // Prepare
-        GatewayData data = new GatewayData();
-
         for (Gateway gw : gwList) {
             if (gw.getName().equals(gwId)) {
                 throw new IllegalArgumentException(
@@ -113,33 +104,114 @@ public class GatewayService {
             }
         }
 
-        data.initialize(pmName, pmIp, port, SERVER_STATE_FAILURE, HB_MONITOR_YES);
+        Gateway gw = new Gateway(context, clusterName, gwId, pmName, pmIp, port, 0);
+        createGwZooKeeperZnode(cluster, gw);
 
-        // DB
-        gwDao.createGw(gwId, data, clusterName, pmName, pmCluster);
-        
-        // In Memory
-        Gateway gw = gwImo.load(gwId, clusterName);
-        
-        // Physical Machine Cluster info
-        PhysicalMachineCluster clusterInPm = pmClusterImo.get(clusterName, pmName); 
-        if (null == clusterInPm) {
-            pmClusterImo.load(clusterName, pmName);
-        } else {
-            clusterInPm.getData().addGwId(Integer.valueOf(gwId));
-        }
-        
-        // Update gateway affinity
-        notificationDao.updateGatewayAffinity(cluster);
-
-        // TODO
-        workflowLogDao.log(0, SEVERITY_MODERATE, 
+        workflowLogger.log(0, SEVERITY_MODERATE, 
                 "GWAddCommand", LOG_TYPE_COMMAND, 
                 clusterName, "Add gateway success. " + gw, 
                 String.format("{\"cluster_name\":\"%s\",\"gw_id\":\"%s\",\"host\":\"%s\",\"pm_ip\":\"%s\",\"port\":%d}", 
                         clusterName, gwId, pmName, pmIp, port));
 
         return S2C_OK;
+    }
+    
+    protected void createGwZooKeeperZnode(Cluster cluster, Gateway gw) throws MgmtZooKeeperException,
+            NoNodeException {
+        // DB
+        // Do not check... if pmCluster is null than it will make it 
+        PhysicalMachineCluster pmCluster = container.getPmc(gw.getPmName(), cluster.getName());
+        PhysicalMachineCluster cim = null;
+        
+        // Prepare
+        List<Op> ops = new ArrayList<Op>();
+        ops.add(Op.create(gw.getPath(), gw.persistentDataToBytes(),
+                ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+
+        if (null != pmCluster) {
+        	PhysicalMachineCluster.PmClusterData cimDataClon = pmCluster.clonePersistentData();
+            cimDataClon.addGwId(Integer.valueOf(gw.getName()));
+            ops.add(Op.setData(pmCluster.getPath(),
+                    mapper.writeValueAsBytes(cimDataClon), -1));
+        } else {
+			cim = new PhysicalMachineCluster(cluster.getName(), gw.getPmName());
+			cim.addGwId(Integer.valueOf(gw.getName()));
+			ops.add(Op.create(cim.getPath(), cim.persistentDataToBytes(),
+					ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+		}
+        
+        List<OpResult> results = zk.multi(ops);
+        zk.handleResultsOfMulti(results);
+
+        // In memory
+        container.put(gw.getPath(), gw);
+
+        zk.registerChangedEventWatcher(gw.getPath());
+        zk.registerChildEventWatcher(gw.getPath());
+        
+        // Physical Machine Cluster info
+        PhysicalMachineCluster clusterInPm = container.getPmc(gw.getPmName(), cluster.getName()); 
+        if (null == clusterInPm) {
+            container.put(cim.getPath(), cim);
+        } else {
+            clusterInPm.addGwId(Integer.valueOf(gw.getName()));
+        }
+        
+        // Update gateway affinity
+        gwInfoNotifier.updateGatewayAffinity(cluster);
+    }
+    
+    protected void deleteGwObject(String pmName, String clusterName, String gwId)
+            throws MgmtZNodeDoesNotExistException, MgmtZooKeeperException {
+        PhysicalMachineCluster pmCluster = container.getPmc(pmName, clusterName);
+        if (null == pmCluster) {
+            throw new IllegalArgumentException(
+                    EXCEPTIONMSG_PHYSICAL_MACHINE_CLUSTER_DOES_NOT_EXIST
+                            + PhysicalMachineCluster.fullName(pmName,
+                                    clusterName));
+        }
+        
+        // DB
+        String path = PathUtil.gwPath(gwId, clusterName);
+
+        List<Op> ops = new ArrayList<Op>();
+        List<String> children = zk.getChildren(path);
+
+        for (String childName : children) {
+            StringBuilder builder = new StringBuilder(path);
+            builder.append("/").append(childName);
+            String childPath = builder.toString();
+
+            ops.add(Op.delete(childPath, -1));
+        }
+
+        ops.add(Op.delete(path, -1));
+
+        PhysicalMachineCluster.PmClusterData pmClusterDataClone = pmCluster.clonePersistentData();
+        pmClusterDataClone.deleteGwId(Integer.valueOf(gwId));
+        byte cimDataOfBytes[] = mapper.writeValueAsBytes(pmClusterDataClone);
+        ops.add(Op.setData(pmCluster.getPath(), cimDataOfBytes, -1));
+
+        if (pmClusterDataClone.getPgsIdList().isEmpty()
+                && pmClusterDataClone.getGwIdList().isEmpty()) {
+            ops.add(Op.delete(pmCluster.getPath(), -1));
+        }
+
+        if (gwInfoNotifier.isGatewayExist(clusterName, gwId)) {
+            gwInfoNotifier.addDeleteGatewayOp(ops, clusterName, gwId);
+        }
+        
+        List<OpResult> results = zk.multi(ops);
+        zk.handleResultsOfMulti(results);
+
+        // In Memory
+        container.delete(PathUtil.gwPath(gwId, clusterName));
+        
+        // Delete from pm-cluster
+        pmCluster.deleteGwId(gwId);
+        if (pmCluster.isEmpty()) {
+            container.delete(PathUtil.pmClusterPath(clusterName, pmName));
+        }
     }
     
     @LockMapping(name="gw_add")
@@ -152,16 +224,17 @@ public class GatewayService {
     @CommandMapping(
             name="gw_affinity_sync",
             usage="gw_affinity_sync <cluster_name>",
-            requiredState=ConfMaster.RUNNING)
-    public String gwAffinitySync(String clusterName) throws MgmtZooKeeperException {
-        Cluster cluster = clusterImo.get(clusterName);
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String gwAffinitySync(@ClusterHint String clusterName) throws MgmtZooKeeperException {
+        Cluster cluster = container.getCluster(clusterName);
         if (cluster == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
         
-        return notificationDao.updateGatewayAffinity(cluster);
+        return gwInfoNotifier.updateGatewayAffinity(cluster);
     }
     
     @LockMapping(name="gw_affinity_sync")
@@ -172,51 +245,33 @@ public class GatewayService {
     @CommandMapping(
             name="gw_del",
             usage="gw_del <cluster_name> <gwid>",
-            requiredState=ConfMaster.RUNNING)
-    public String gwDel(String clusterName, String gwId)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String gwDel(@ClusterHint String clusterName, String gwId)
             throws MgmtZNodeDoesNotExistException, ConfMasterException,
             MgmtZooKeeperException {
         // Check
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (null == cluster) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
         
-        Gateway gw = gwImo.get(gwId, clusterName);
+        Gateway gw = container.getGw(clusterName, gwId);
         if (null == gw) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_GATEWAY_DOES_NOT_EXIST
                             + Gateway.fullName(clusterName, gwId));
         }
 
-        String pmName = gw.getData().getPmName();
-        PhysicalMachineCluster pmCluster = pmClusterImo.get(clusterName, pmName);
-        if (null == pmCluster) {
-            throw new IllegalArgumentException(
-                    EXCEPTIONMSG_PHYSICAL_MACHINE_CLUSTER_DOES_NOT_EXIST
-                            + PhysicalMachineCluster.fullName(pmName,
-                                    clusterName));
-        }
-        
-        // DB
-        gwDao.deleteGw(gwId, clusterName, pmCluster);
-
-        // In Memory
-        gwImo.delete(gwId, clusterName);
+        deleteGwObject(gw.getPmName(), clusterName, gwId);
         
         // Update gateway affinity
-        notificationDao.updateGatewayAffinity(cluster);
-        
-        // Delete from pm-cluster
-        pmCluster.getData().deleteGwId(gwId);
-        if (pmCluster.isEmpty()) {
-            pmClusterImo.delete(PathUtil.pmClusterPath(clusterName, pmName));
-        }
+        gwInfoNotifier.updateGatewayAffinity(cluster);
 
         // Log
-        workflowLogDao.log(0, SEVERITY_MODERATE, 
+        workflowLogger.log(0, SEVERITY_MODERATE, 
                 "GWDelCommand", LOG_TYPE_COMMAND, 
                 clusterName, "Delete gateway success. " + gw, 
                 String.format("{\"cluster_name\":\"%s\",\"gw_id\":\"%s\"}", clusterName, gwId));
@@ -229,18 +284,19 @@ public class GatewayService {
             String clusterName, String gwid) {
         lockHelper.root(READ).cluster(READ, clusterName).gwList(WRITE).gw(WRITE, gwid);
         HierarchicalLockPMList lockPMList = lockHelper.pmList(READ);
-        Gateway gw = gwImo.get(gwid, clusterName);
-        lockPMList.pm(WRITE, gw.getData().getPmName());
+        Gateway gw = container.getGw(clusterName, gwid);
+        lockPMList.pm(WRITE, gw.getPmName());
     }
     
     @CommandMapping(
             name="gw_info",
             usage="gw_info <cluster_name> <gw_id>\r\n" +
                     "get information of a Gateway",
-            requiredState=ConfMaster.READY)
-    public String gwInfo(String clusterName, String gwid)
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String gwInfo(@ClusterHint String clusterName, String gwid)
             throws KeeperException, InterruptedException, IOException {
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (null == cluster) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
         }
@@ -255,14 +311,14 @@ public class GatewayService {
     private String allGatewaysInfo(Cluster cluster) throws KeeperException,
             InterruptedException, IOException {
         // In Memory
-        List<Gateway> gwList = gwImo.getList(cluster.getName());
+        List<Gateway> gwList = container.getGwList(cluster.getName());
         
         // Prepare 
         StringBuffer sb = new StringBuffer();
         sb.append("{\"gw_list\":[");
 
         for (Gateway gw : gwList) {
-            sb.append(gw.getData().toString());
+            sb.append(gw.persistentDataToString());
             sb.append(",");
         }
         
@@ -276,13 +332,13 @@ public class GatewayService {
     }
     
     private String gatewayInfo(Cluster cluster, String gwid) {
-        Gateway gw = gwImo.get(gwid, cluster.getName());
+        Gateway gw = container.getGw(cluster.getName(), gwid);
         if (null == gw) {
             return "-ERR gw does not exist.";
         }
 
         try {
-            return gw.getData().toString();
+            return gw.persistentDataToString();
         } catch (RuntimeException e) {
             return "-ERR internal data of pgs is not correct.";
         }
@@ -297,15 +353,16 @@ public class GatewayService {
             name="gw_ls",
             usage="gw_ls <cluster_name>\r\n" +
                     "show a list of Gateways",
-            requiredState=ConfMaster.READY)
-    public String gwLs(String clusterName) {
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String gwLs(@ClusterHint String clusterName) {
         // Check
-        if (null == clusterImo.get(clusterName)) {
+        if (null == container.getCluster(clusterName)) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
         }
 
         // In Memory
-        List<Gateway> gwList = gwImo.getList(clusterName);
+        List<Gateway> gwList = container.getGwList(clusterName);
         
         // Prepare
         StringBuilder reply = new StringBuilder();

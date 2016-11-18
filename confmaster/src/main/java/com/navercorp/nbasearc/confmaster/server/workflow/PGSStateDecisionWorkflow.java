@@ -27,31 +27,27 @@ import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
 
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.NotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.OpinionDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion.OpinionData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.UsedOpinionSet;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.FailureDetectorImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class PGSStateDecisionWorkflow {
     private final long jobID = JobIDGenerator.getInstance().getID();
-
+    
     private Cluster cluster;
     private PartitionGroup pg;
     private PartitionGroupServer pgs;
@@ -59,19 +55,16 @@ public class PGSStateDecisionWorkflow {
     private int majority;
 
     private final ApplicationContext context;
+    private final ConfMaster confmaster;
     private final WorkflowExecutor wfExecutor;
 
     private final String path;
 
-    private final PartitionGroupServerDao pgsDao;
-    private final NotificationDao notificationDao;
-    private final WorkflowLogDao workflowLogDao;
-    private final FailureDetectorImo fdImo;
-    private final ClusterImo clusterImo;
-    private final PartitionGroupImo pgImo;
-    private final PartitionGroupServerImo pgsImo;
-
-    private final OpinionDao opinionDao;
+    private final ZooKeeperHolder zk;
+    private final GatewayLookup gwInfoNotifier;
+    private final WorkflowLogger workflowLogger;
+    private final ClusterComponentContainer container;
+    private final Opinion opinion;
 
     protected PGSStateDecisionWorkflow(HeartbeatTarget target,
             ApplicationContext context) {
@@ -79,33 +72,29 @@ public class PGSStateDecisionWorkflow {
         this.path = target.getPath();
 
         this.context = context;
+        this.confmaster = context.getBean(ConfMaster.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
 
-        this.pgsDao = context.getBean(PartitionGroupServerDao.class);
-        this.notificationDao = context.getBean(NotificationDao.class);
-        this.workflowLogDao = context.getBean(WorkflowLogDao.class);
-        this.fdImo = context.getBean(FailureDetectorImo.class);
-        this.clusterImo = context.getBean(ClusterImo.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
-        this.pgImo = context.getBean(PartitionGroupImo.class);
-
-        this.opinionDao = context.getBean(OpinionDao.class);
+        this.zk = context.getBean(ZooKeeperHolder.class);
+        this.gwInfoNotifier = context.getBean(GatewayLookup.class);
+        this.workflowLogger = context.getBean(WorkflowLogger.class);
+        this.container = context.getBean(ClusterComponentContainer.class);
+        this.opinion = context.getBean(Opinion.class);
     }
 
     public String execute(ThreadPool executor) throws NoNodeException,
             MgmtZooKeeperException, IOException, BeansException,
             MgmtDuplicatedReservedCallException {
-        pgs = pgsImo.getByPath(target.getPath());
+        pgs = (PartitionGroupServer) container.get(target.getPath());
         if (pgs == null) {
             Logger.error("{} does not exists.", target);
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST
                             + target.getFullName());
         }
-        pg = pgImo.get(Integer.toString(pgs.getData().getPgId()),
-                target.getClusterName());
-        cluster = clusterImo.get(target.getClusterName());
-        majority = fdImo.get().getMajority();
+        pg = container.getPg(target.getClusterName(), Integer.toString(pgs.getPgId()));
+        cluster = container.getCluster(target.getClusterName());
+        majority = confmaster.getMajority();
 
         Logger.info("start reconfiguration. {}", target);
 
@@ -129,19 +118,17 @@ public class PGSStateDecisionWorkflow {
             return null;
         }
         
-        String oldRole = pgs.getData().getRole();
-        PartitionGroupServerData pgsM = PartitionGroupServerData.builder()
-                .from(pgs.getData()).withRole(makeDecisionResult.newView)
-                .withStateTimestamp(gatherOpinionsResult.maxStateTimestamp)
-                .build();
-
-        pgsDao.updatePgs(pgs.getPath(), pgsM);
-        pgs.setData(pgsM);
+        String oldRole = pgs.getRole();
+        PartitionGroupServer.PartitionGroupServerData pgsM = pgs.clonePersistentData();
+        pgsM.setRole(makeDecisionResult.newView);
+        pgsM.stateTimestamp = gatherOpinionsResult.maxStateTimestamp;
+        zk.setData(pgs.getPath(), pgsM.toBytes(), -1);
+        pgs.setPersistentData(pgsM);
 
         wfExecutor.perform(ROLE_ADJUSTMENT, pg, pg.nextWfEpoch(), context);
 
         if (makeDecisionResult.newView.equals(Constant.PGS_ROLE_NONE)) {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                             Constant.SEVERITY_MAJOR,
                             "PGSStateDecisionWorkflow",
                             Constant.LOG_TYPE_WORKFLOW,
@@ -152,7 +139,7 @@ public class PGSStateDecisionWorkflow {
                                     target.getNodeType(), target.getName(),
                                     oldRole, makeDecisionResult.newView));
         } else {
-            workflowLogDao.log(jobID,
+            workflowLogger.log(jobID,
                             Constant.SEVERITY_MODERATE,
                             "PGSStateDecisionWorkflow",
                             Constant.LOG_TYPE_WORKFLOW,
@@ -164,7 +151,7 @@ public class PGSStateDecisionWorkflow {
                                     oldRole, makeDecisionResult.newView));
         }
 
-        notificationDao.updateGatewayAffinity(cluster);
+        gwInfoNotifier.updateGatewayAffinity(cluster);
 
         return null;
     }
@@ -190,7 +177,7 @@ public class PGSStateDecisionWorkflow {
     private GatherOpinionsResult gatherOpinions() throws NoNodeException,
             MgmtZooKeeperException {
         List<OpinionData> opinions;
-        opinions = opinionDao.getOpinions(path);
+        opinions = opinion.getOpinions(path);
         if (0 == opinions.size()) {
             Logger.info("majority check fail. "
                     + "total: 0, available: 0, majority: " + majority);
@@ -330,30 +317,30 @@ public class PGSStateDecisionWorkflow {
                 Logger.info(
                         "timestamp validation success. role: {}->{}, timestamp: zk{} active{}->hb{}",
                         new Object[] { oldView, newView,
-                                pgs.getData().getStateTimestamp(),
+                                pgs.getStateTimestamp(),
                                 ats, maximumStateTimestamp });
             } else {
                 validStateTimestamp = false;
                 Logger.info(
                         "timestamp validation fail. role: {}->{}, timestamp: zk{} active{}->hb{}",
                         new Object[] { oldView, newView,
-                                pgs.getData().getStateTimestamp(),
+                                pgs.getStateTimestamp(),
                                 ats, maximumStateTimestamp });
             }
         } else {
-            if (maximumStateTimestamp < pgs.getData().getStateTimestamp()) {
+            if (maximumStateTimestamp < pgs.getStateTimestamp()) {
                 validStateTimestamp = false;
                 Logger.info(
                         "timestamp validation fail. role: {}->{}, timestamp: zk{}->hb{}",
                         new Object[] { oldView, newView,
-                                pgs.getData().getStateTimestamp(),
+                                pgs.getStateTimestamp(),
                                 maximumStateTimestamp });
             } else {
                 validStateTimestamp = true;
                 Logger.info(
                         "timestamp validation success. role: {}->{}, timestamp: zk{}->hb{}",
                         new Object[] { oldView, newView,
-                                pgs.getData().getStateTimestamp(),
+                                pgs.getStateTimestamp(),
                                 maximumStateTimestamp });
             }
         }

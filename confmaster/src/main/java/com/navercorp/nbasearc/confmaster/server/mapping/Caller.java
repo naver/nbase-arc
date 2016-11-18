@@ -16,6 +16,8 @@
 
 package com.navercorp.nbasearc.confmaster.server.mapping;
 
+import static com.navercorp.nbasearc.confmaster.Constant.CLUSTER_OFF;
+import static com.navercorp.nbasearc.confmaster.Constant.CLUSTER_ON;
 import static com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType.NULLABLE;
 import static com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType.STRING_VARG;
 
@@ -26,6 +28,11 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import com.navercorp.nbasearc.confmaster.heartbeat.HBResult;
+import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType;
 
 public class Caller {
@@ -35,6 +42,9 @@ public class Caller {
     private Object service;
     private ArityType arityType;
     private Map<Class<?>, ArgType> argTypes;
+    
+    private int paramIdxClusterHint = -1;
+    private Class<?> clusterHint;
 
     public Caller(Object service, Method method, ArityType arityType) {
         this.service = service;
@@ -43,7 +53,7 @@ public class Caller {
         this.arityType = arityType;
         this.argTypes = getArgTypes(method);
     }
-
+    
     public Object invoke(Object... args) throws IllegalArgumentException,
             IllegalAccessException, InvocationTargetException {
         return method.invoke(service, args);
@@ -83,6 +93,48 @@ public class Caller {
         return paramTypes;
     }
     
+    public String getClusterName(Object []args, int offset) {
+        int idx = offset + paramIdxClusterHint;
+        if (clusterHint == String.class) {
+            return (String)args[idx];
+        } else if (clusterHint == PartitionGroup.class) {
+            return ((PartitionGroup)args[idx]).getClusterName();
+        } else if (clusterHint == HeartbeatTarget.class) {
+            return ((HeartbeatTarget)args[idx]).getClusterName();
+        } else if (clusterHint == PartitionGroupServer.class) {
+            return ((PartitionGroupServer)args[idx]).getClusterName();
+        } else if (clusterHint == Gateway.class) {
+            return ((Gateway)args[idx]).getClusterName();
+        } else if (clusterHint == HBResult.class) {
+            return ((HBResult)args[idx]).getTarget().getClusterName();
+        }
+        
+        return null;
+    }
+    
+    protected void checkRequiredMode(int requiredMode) {
+        if (requiredMode == 0) {
+            return;
+        }
+
+        if ((requiredMode & (CLUSTER_ON | CLUSTER_OFF)) != 0) {
+            boolean hasClusterHint = false;
+            for (Annotation[] paramAnns : method.getParameterAnnotations()) {
+                for (Annotation paramAnn : paramAnns) {
+                    if (ClusterHint.class.isInstance(paramAnn)) {
+                        hasClusterHint = true;
+                    }
+                }
+            }
+
+            if (hasClusterHint == false) {
+                throw new RuntimeException(
+                        "@ParamClusterHint must be annotated to a parameter in "
+                                + method.getName());
+            }
+        }
+    }
+    
     private Map<Class<?>, ArgType> getArgTypes(Method method) {
         Class<?>[] paramTypes = method.getParameterTypes();
         Annotation[][] paramAnns = method.getParameterAnnotations();
@@ -91,18 +143,27 @@ public class Caller {
         if (paramTypes.length > 0) {
             for (int i = 0; i < paramTypes.length; i++) {
                 for (Annotation paramAnn : paramAnns[i]) {
-                    if (!Param.class.isInstance(paramAnn)) {
-                        continue;
+                    if (Param.class.isInstance(paramAnn)) {
+                        Param commandParam = (Param) paramAnn;
+                        validParamAnn(commandParam, paramTypes[i], paramTypes.length, i);
+                        argTypes.put(paramTypes[i], commandParam.type());
+                    } else if (ClusterHint.class.isInstance(paramAnn)) {
+                        validParamClusterHintAnn();
+                        paramIdxClusterHint = i;    // method(command_name, arg1, arg2, ...)
+                        clusterHint = paramTypes[i];
                     }
-                    
-                    Param commandParam = (Param) paramAnn;
-                    validParamAnn(commandParam, paramTypes[i], paramTypes.length, i);
-                    argTypes.put(paramTypes[i], commandParam.type());
                 }
             }
         }
 
         return argTypes;
+    }
+    
+    private void validParamClusterHintAnn() {
+        if (paramIdxClusterHint != -1) {
+            throw new RuntimeException(
+                    "@ParamClusterHint must be used just once in " + method.getName());
+        }
     }
 
     private void validParamAnn(Param commandParam, Class<?> paramType,

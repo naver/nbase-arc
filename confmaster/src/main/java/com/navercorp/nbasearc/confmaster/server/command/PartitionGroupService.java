@@ -18,8 +18,8 @@ package com.navercorp.nbasearc.confmaster.server.command;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 import static com.navercorp.nbasearc.confmaster.Constant.Color.GREEN;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.READ;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.WRITE;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,26 +37,21 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperExcept
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkNotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockPGSList;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.RedisServerImo;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockPGSList;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
+import com.navercorp.nbasearc.confmaster.server.mapping.ClusterHint;
 import com.navercorp.nbasearc.confmaster.server.workflow.BlueJoinWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.DecreaseQuorumWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.IncreaseQuorumWorkflow;
@@ -66,6 +61,7 @@ import com.navercorp.nbasearc.confmaster.server.workflow.QuorumAdjustmentWorkflo
 import com.navercorp.nbasearc.confmaster.server.workflow.RoleAdjustmentWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.RoleChangeWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 import com.navercorp.nbasearc.confmaster.server.workflow.YellowJoinWorkflow;
 
 @Service
@@ -79,22 +75,15 @@ public class PartitionGroupService {
     private ApplicationContext context;
 
     @Autowired
-    private ClusterImo clusterImo;
-    @Autowired
-    private PartitionGroupImo pgImo;
-    @Autowired
-    private PartitionGroupServerImo pgsImo;
-    @Autowired
-    private RedisServerImo rsImo;
-    @Autowired
-    private GatewayImo gwImo;
+    private ClusterComponentContainer container;
 
     @Autowired
-    private PartitionGroupDao pgDao;
+    private GatewayLookup gwInfoNotifier;
     @Autowired
-    private ZkNotificationDao notificationDao;
+    private WorkflowLogger workflowLogger;
+    
     @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
+    private ZooKeeperHolder zk;
     
     @Autowired
     private WorkflowExecutor wfExecutor;
@@ -102,21 +91,26 @@ public class PartitionGroupService {
     @CommandMapping(name="pg_add",
             usage="pg_add <cluster_name> <pgid>\r\n" +
                     "add a single partition group",
-            requiredState=ConfMaster.RUNNING)
-    public String pgAdd(String clusterName, String pgId)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgAdd(@ClusterHint String clusterName, String pgId)
             throws MgmtCommandWrongArgumentException, NodeExistsException,
             MgmtZooKeeperException, NoNodeException {
         // Check
-        if (null != pgImo.get(pgId, clusterName)) {
+        if (null != container.getPg(clusterName, pgId)) {
             return "-ERR duplicated pgid";
         }
         
         // In Memory
-        Cluster cluster = clusterImo.get(clusterName);
-        List<Gateway> gwList = gwImo.getList(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        List<Gateway> gwList = container.getGwList(clusterName);
 
         // Prepare        
-        String reply = cluster.isGatewaysAlive(gwImo);
+        String reply = cluster.isGatewaysAlive();
         if (null != reply) {
             Logger.error(reply);
             return reply;
@@ -129,14 +123,8 @@ public class PartitionGroupService {
             return reply;
         }
 
-        PartitionGroupData data = 
-            PartitionGroupData.builder().from(new PartitionGroupData()).build();
-        
-        // DB
-        pgDao.createPg(pgId, clusterName, data);
-        
-        // In Memory
-        PartitionGroup pg = pgImo.load(pgId, clusterName);
+        PartitionGroup pg = new PartitionGroup(context, clusterName, pgId);  
+		createPgObject(pg);
 
         String cmd = String.format("pg_add %s", pgId);
         reply = broadcast.request(clusterName, gwList, cmd, GW_RESPONSE_OK, executor);
@@ -146,13 +134,31 @@ public class PartitionGroupService {
         }
 
         // Log
-        workflowLogDao.log(0, SEVERITY_MODERATE, 
+        workflowLogger.log(0, SEVERITY_MODERATE, 
                 "PGAddCommand", LOG_TYPE_COMMAND, 
                 clusterName, "Add pg success. " + pg, 
                 String.format("{\"cluster_name\":\"%s\",\"pg_id\":\"%s\"}", 
                         clusterName, pgId));
         
         return S2C_OK;
+    }
+    
+    protected void createPgObject(PartitionGroup pg) throws NodeExistsException,
+            MgmtZooKeeperException, NoNodeException {
+        // DB
+    	zk.createPersistentZNode(pg.getPath(), pg.persistentDataToBytes());
+    	
+    	// In memory
+    	container.put(pg.getPath(), pg);
+    }
+    
+    protected void deletePgObject(String clusterName, String pgId)
+            throws MgmtZooKeeperException {
+        // DB
+    	zk.deleteZNode(PathUtil.pgPath(pgId, clusterName), -1);
+
+        // In Memory
+        container.delete(PathUtil.pgPath(pgId, clusterName));
     }
 
     @LockMapping(name="pg_add")
@@ -164,27 +170,32 @@ public class PartitionGroupService {
     @CommandMapping(name="pg_del",
             usage="pg_del <cluster_name> <pgid>\r\n" +
                     "delete a single partition group",
-            requiredState=ConfMaster.RUNNING)
-    public String pgDel(String clusterName, String pgId)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgDel(@ClusterHint String clusterName, String pgId)
             throws MgmtZooKeeperException {
         // Check
-        PartitionGroup pg = pgImo.get(pgId, clusterName); 
+        Cluster cluster = container.getCluster(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        PartitionGroup pg = container.getPg(clusterName, pgId); 
         if (null == pg) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST
                             + PartitionGroup.fullName(clusterName, pgId));
         }
 
-        if (!pg.getData().getPgsIdList().isEmpty()) {
+        if (!pg.getPgsIdList().isEmpty()) {
             throw new IllegalArgumentException(EXCEPTIONMSG_PG_NOT_EMPTY
                     + PartitionGroup.fullName(clusterName, pgId));
         }
-
-        // In Memory
-        Cluster cluster = clusterImo.get(clusterName);
-        List<Gateway> gwList = gwImo.getList(clusterName);
         
-        String reply = cluster.isGatewaysAlive(gwImo);
+        List<Gateway> gwList = container.getGwList(clusterName);
+        
+        // In Memory
+        String reply = cluster.isGatewaysAlive();
         if (null != reply) {
             Logger.error(reply);
             return reply;
@@ -198,12 +209,8 @@ public class PartitionGroupService {
             return reply;
         }
         
-        // DB
-        pgDao.deletePg(pgId, clusterName);
+        deletePgObject(clusterName, pgId);
         
-        // In Memory
-        pgImo.delete(PathUtil.pgPath(pgId, clusterName));
-
         String cmd = String.format("pg_del %s", pgId);
         reply = broadcast.request(clusterName, gwList, cmd, GW_RESPONSE_OK, executor);
         if (null != reply) {
@@ -212,7 +219,7 @@ public class PartitionGroupService {
         }
         
         // Logging
-        workflowLogDao.log(0, SEVERITY_MODERATE, 
+        workflowLogger.log(0, SEVERITY_MODERATE, 
                 "PGDelCommand", LOG_TYPE_COMMAND, 
                 clusterName, "Delte pg success. " + pg, 
                 String.format("{\"cluster_name\":\"%s\",\"pg_id\":\"%s\"}", 
@@ -230,22 +237,23 @@ public class PartitionGroupService {
     @CommandMapping(name="pg_info",
             usage="pg_info <cluster_name> <pg_id>\r\n" +
                     "get information of a Partition Group",
-            requiredState=ConfMaster.READY)
-    public String pgInfo(String clusterName, String pgid) {
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String pgInfo(@ClusterHint String clusterName, String pgid) {
         // Check
-        if (null == clusterImo.get(clusterName)) {
+        if (null == container.getCluster(clusterName)) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
         }
         
         // In Memory
-        PartitionGroup pg = pgImo.get(pgid, clusterName);
+        PartitionGroup pg = container.getPg(clusterName, pgid);
         if (null == pg) {
             return "-ERR pgs does not exist.";
         }
 
         // Do
         try {
-            return pg.getData().toString();
+            return pg.info();
         } catch (RuntimeException e) {
             return "-ERR internal data of pgs is not correct.";
         }
@@ -258,12 +266,13 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_ls",
             usage="pg_ls <cluster_name>",
-            requiredState=ConfMaster.READY)
-    public String pgLs(String clusterName) throws KeeperException,
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String pgLs(@ClusterHint String clusterName) throws KeeperException,
             InterruptedException {
         // In Memory
-        List<PartitionGroup> pgList = pgImo.getList(clusterName);
-        Cluster cluster = clusterImo.get(clusterName);
+        List<PartitionGroup> pgList = container.getPgList(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (null == cluster) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
         }
@@ -290,58 +299,58 @@ public class PartitionGroupService {
 
     @CommandMapping(name="role_change",
             usage="role_change <cluster_name> <pgs_id>",
-            requiredState=ConfMaster.RUNNING)
-    public String roleChange(String clusterName, String pgsid)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String roleChange(@ClusterHint String clusterName, String pgsid)
             throws KeeperException, InterruptedException {
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (cluster == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
 
-        PartitionGroupServer masterCandidate = pgsImo.get(pgsid, clusterName);
+        PartitionGroupServer masterCandidate = container.getPgs(clusterName, pgsid);
         if (masterCandidate == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_PARTITION_GROUP_SERVER_DOES_NOT_EXIST
                             + PartitionGroupServer.fullName(clusterName, pgsid));
         }
         
-        PartitionGroup pg = pgImo.get(String.valueOf(masterCandidate.getData().getPgId()), clusterName);
+        PartitionGroup pg = container.getPg(clusterName, String.valueOf(masterCandidate.getPgId()));
         if (pg == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST
                             + PartitionGroup.fullName(clusterName,
-                                    String.valueOf(masterCandidate.getData().getPgId())));
+                                    String.valueOf(masterCandidate.getPgId())));
         }
         
         List<PartitionGroupServer> joinedPgsList = 
-                pg.getJoinedPgsList(pgsImo.getList(clusterName, Integer.valueOf(pg.getName())));
+                pg.getJoinedPgsList(container.getPgsList(clusterName, pg.getName()));
         
         if (pg.getSlaves(joinedPgsList).size() == 0) {
             return "-ERR pg doesn't have any slave. " + pg;
         }
 
-        if (pg.getData().getQuorum() - pg.getD(joinedPgsList) <= 0) {
+        if (pg.getQuorum() - pg.getD(joinedPgsList) <= 0) {
             return "-ERR not enough available pgs. PG.Q: "
-                    + pg.getData().getQuorum() + ", D: "
+                    + pg.getQuorum() + ", D: "
                     + pg.getD(joinedPgsList);
         }
         
-        if (!masterCandidate.getData().getRole().equals(PGS_ROLE_SLAVE) 
-                || masterCandidate.getData().getColor() != GREEN) {
+        if (!masterCandidate.getRole().equals(PGS_ROLE_SLAVE) 
+                || masterCandidate.getColor() != GREEN) {
             return "-ERR the candidate is not a slave and green.";
         }
 
-        // TODO : Check redis replication
         for (PartitionGroupServer pgs : joinedPgsList) {
-			if (pgs.getData().getColor() != GREEN 
-					|| (!pgs.getData().getRole().equals(PGS_ROLE_MASTER)
-							&& !pgs.getData().getRole().equals(PGS_ROLE_SLAVE))) {
+			if (pgs.getColor() != GREEN 
+					|| (!pgs.getRole().equals(PGS_ROLE_MASTER)
+							&& !pgs.getRole().equals(PGS_ROLE_SLAVE))) {
         		continue;
         	}
         	
-            RedisServer r = rsImo.get(pgs.getName(), pgs.getClusterName());
+            RedisServer r = container.getRs(pgs.getClusterName(), pgs.getName());
             try {
                 if (null == r) {
                     return "-ERR check redis replication ping fail, redis object doesn't exist, " + pgs;
@@ -360,8 +369,8 @@ public class PartitionGroupService {
         List<PartitionGroupServer> masterHints = new ArrayList<PartitionGroupServer>();
         masterHints.add(masterCandidate);
         for (PartitionGroupServer pgs : joinedPgsList) {
-            if (pgs.getData().getColor() == GREEN
-                    && pgs.getData().getRole().equals(PGS_ROLE_SLAVE)
+            if (pgs.getColor() == GREEN
+                    && pgs.getRole().equals(PGS_ROLE_SLAVE)
                     && pgs != masterCandidate) {
                 masterHints.add(pgs);
             }
@@ -376,7 +385,7 @@ public class PartitionGroupService {
             }
         } finally {
             try {
-                notificationDao.updateGatewayAffinity(cluster);
+                gwInfoNotifier.updateGatewayAffinity(cluster);
             } catch (MgmtZooKeeperException e) {
                 String msg = "-ERR failed to update gateway affinity. cluster: " + clusterName;
                 Logger.error(msg, e);
@@ -391,17 +400,23 @@ public class PartitionGroupService {
             String clusterName, String pgsid) {
         HierarchicalLockPGSList lock = lockHelper.root(READ)
                 .cluster(READ, clusterName).pgList(READ).pgsList(READ);
-        PartitionGroupServer pgs = pgsImo.get(pgsid, clusterName);
-        lock.pg(WRITE, String.valueOf(pgs.getData().getPgId())).pgs(WRITE,
+        PartitionGroupServer pgs = container.getPgs(clusterName, pgsid);
+        lock.pg(WRITE, String.valueOf(pgs.getPgId())).pgs(WRITE,
                 ALL_IN_PG).gwList(READ);
     }
 
     @CommandMapping(name="pg_iq",
             usage="pg_iq <cluster_name> <pg_id>",
-            requiredState=ConfMaster.RUNNING)
-    public String pgIq(String clusterName, String pgId) throws Exception {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgIq(@ClusterHint String clusterName, String pgId) throws Exception {
         // In Memory
-        PartitionGroup pg = pgImo.get(pgId, clusterName);
+        Cluster cluster = container.getCluster(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        PartitionGroup pg = container.getPg(clusterName, pgId);
         if (null == pg) {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
         }
@@ -424,10 +439,16 @@ public class PartitionGroupService {
 
     @CommandMapping(name="pg_dq",
             usage="pg_dq <cluster_name> <pg_id>",
-            requiredState=ConfMaster.RUNNING)
-    public String pgDq(String clusterName, String pgId) throws Exception {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String pgDq(@ClusterHint String clusterName, String pgId) throws Exception {
         // In Memory
-        PartitionGroup pg = pgImo.get(pgId, clusterName);
+        Cluster cluster = container.getCluster(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        PartitionGroup pg = container.getPg(clusterName, pgId);
         if (null == pg) {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
         }
@@ -454,18 +475,19 @@ public class PartitionGroupService {
     @CommandMapping(name = "op_wf", 
             usage = "op_wf <cluster_name> <pg_id> <wf> <cascading> forced\r\n" 
                     + "wf: RA, QA, ME, YJ, BJ, MG",
-            requiredState=ConfMaster.RUNNING)
-    public String opWf(String clusterName, String pgId, String wf, boolean cascading, String mode) throws Exception {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String opWf(@ClusterHint String clusterName, String pgId, String wf, boolean cascading, String mode) throws Exception {
         if (!mode.equals(FORCED)) {
             return EXCEPTIONMSG_NOT_FORCED_MODE;
         }
         
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (cluster == null) {
             return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
         }
-        
-        PartitionGroup pg = pgImo.get(pgId, clusterName);
+
+        PartitionGroup pg = container.getPg(clusterName, pgId);
         if (pg == null) {
             return EXCEPTIONMSG_PARTITION_GROUP_DOES_NOT_EXIST;
         }

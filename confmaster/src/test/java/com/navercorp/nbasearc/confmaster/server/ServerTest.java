@@ -51,6 +51,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
 import com.navercorp.nbasearc.confmaster.server.ClusterContollerServer;
@@ -68,7 +69,10 @@ public class ServerTest extends BasicSetting {
     
     @Autowired
     private Config config;
-     
+
+    @Autowired
+    private ConfMaster confMaster;
+    
     @BeforeClass
     public static void beforeClass() throws Exception {
         BasicSetting.beforeClass();
@@ -101,6 +105,7 @@ public class ServerTest extends BasicSetting {
     
     @Test
     public void requestResponse() throws Exception {
+        confMaster.setState(ConfMaster.RUNNING);
         List<Future<String>> futures = new ArrayList<Future<String>>(MAX_EXECUTOR);
         for (int i = 0; i < MAX_EXECUTOR; i++) {
             Future<String> future = executor.submit(new Callable<String>() {

@@ -19,35 +19,64 @@ package com.navercorp.nbasearc.confmaster.server.cluster;
 import static org.junit.Assert.assertEquals;
 
 import org.codehaus.jackson.map.ObjectMapper;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.BasicSetting;
+import com.navercorp.nbasearc.confmaster.ConfMaster;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 
 @RunWith(SpringJUnit4ClassRunner.class)
 @ContextConfiguration("classpath:applicationContext-test.xml")
-public class SortedLogSeqSetTest {
-
+public class SortedLogSeqSetTest extends BasicSetting {
+    
+    @Autowired
+    ConfMaster confMaster;
+    
     @Autowired
     ApplicationContext context;
 
-    final String clusterName = "test_cluster";
     final ObjectMapper mapper = new ObjectMapper();
-    final PartitionGroupServerData data = PartitionGroupServerData.builder()
-            .build();
+    final PartitionGroupServerData data = new PartitionGroupServerData(String.valueOf(pgName), pmName, pmData.ip, 10000, 10009);
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        LeaderState.setLeader();
+        BasicSetting.beforeClass();
+    }
+    
+    @Before
+    public void before() throws Exception {
+        super.before();
+        MockitoAnnotations.initMocks(this);
+        confMaster.setState(ConfMaster.RUNNING);
+    }
+    
+    @After
+    public void after() throws Exception {
+        super.after();
+    }
     
     @Test
     public void sortLogSequence() throws Exception {
+        createCluster();
+        createPm();
+        createPg();
+        
         final int MAX = 3;
         final byte[] raw = mapper.writeValueAsBytes(data);
         PartitionGroupServer []objs = new PartitionGroupServer[MAX];
         for (int i = 0; i < MAX; i++) {
-            objs[i] = new PartitionGroupServer(context, String.valueOf(i),
-                    String.valueOf(i), clusterName, raw);
+            objs[i] = new PartitionGroupServer(context, raw, clusterName, String.valueOf(i), 0);
         }
         
         // Sort descending order
@@ -131,13 +160,16 @@ public class SortedLogSeqSetTest {
     
     @Test
     public void rankLogSequence() throws Exception {
+        createCluster();
+        createPm();
+        createPg();
+        
         final int MAX = 100;
-        byte []raw = mapper.writeValueAsBytes(data);
 
         PartitionGroupServer []objs = new PartitionGroupServer[MAX];
         for (int i = 0; i < MAX; i++) {
-            objs[i] = new PartitionGroupServer(context, String.valueOf(i),
-                    String.valueOf(i), clusterName, raw);
+            objs[i] = new PartitionGroupServer(context, clusterName, String.valueOf(i),
+                    String.valueOf(i), "test01.arc", "192.168.0.1", 10000, 10009, 0);
         }
         
         _rankLogSequence(10, objs, 

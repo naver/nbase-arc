@@ -35,7 +35,7 @@ public class BJRoleSlaveFI extends BJRoleSlave {
              {
         if (count > 0) {
             if (successFail) {
-                pgs.roleSlave(pg, logSeq, master, BLUE, jobID, workflowLogDao);
+                pgs.roleSlave(pg, logSeq, master, BLUE, jobID, workflowLogger);
                 count--;
                 throw new MgmtSmrCommandException(
                         "[FI] BJ role slave success fail. " + master);

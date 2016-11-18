@@ -17,43 +17,44 @@
 package com.navercorp.nbasearc.confmaster.server.command;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.READ;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.WRITE;
 
 import java.util.List;
 
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Service;
 
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.Constant;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.dao.PhysicalMachineDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.znode.PhysicalMachineData;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachineCluster;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineImo;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 @Service
 public class PhysicalMachineService {
 
+	@Autowired
+	private ApplicationContext context;
+	
     @Autowired
-    private PhysicalMachineImo pmImo;
-    @Autowired
-    private PhysicalMachineClusterImo pmClusterImo;
+    private ClusterComponentContainer container;
 
     @Autowired
-    private PhysicalMachineDao pmDao;
+    private WorkflowLogger workflowLogger;
+    
     @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
+    private ZooKeeperHolder zk;
  
     @CommandMapping(name="pm_add",
             usage="pm_add <pm_name> <pm_ip>\r\n" +
@@ -62,27 +63,30 @@ public class PhysicalMachineService {
     public String pmAdd(String pmName, String pmIp)
             throws MgmtZooKeeperException, NodeExistsException, NoNodeException {
         // Check
-        if (pmDao.pmExist(pmName)) {
+        if (container.getPm(pmName) != null) {
             return EXCEPTIONMSG_DUPLICATED_PM;
         }
 
         // Prepare
-        PhysicalMachineData data = new PhysicalMachineData();
-        data.setIp(pmIp);
-
-        // DB
-        pmDao.createPm(pmName, data);
-
-        // In Memory
-        PhysicalMachine pm = pmImo.load(pmName);
+        PhysicalMachine pm = new PhysicalMachine(pmName, pmIp);
+        createPmZooKeeperZnode(pm);
         
         // Log
-        workflowLogDao.log(0, Constant.SEVERITY_MODERATE, 
+        workflowLogger.log(0, Constant.SEVERITY_MODERATE, 
                 "PMAddCommand", Constant.LOG_TYPE_COMMAND, 
                 "", "Add pm success. " + pm, 
                 String.format("{\"pm_name\":\"%s\",\"pm_ip\":\"%s\"}", pmName, pmIp));
         
         return S2C_OK;
+    }
+    
+    protected void createPmZooKeeperZnode(PhysicalMachine pm) throws NodeExistsException,
+            MgmtZooKeeperException, NoNodeException {
+        // DB
+        zk.createPersistentZNode(pm.getPath(), pm.persistentDataToBytes());
+
+        // In Memory
+        container.put(pm.getPath(), pm);
     }
 
     @LockMapping(name="pm_add")
@@ -96,15 +100,14 @@ public class PhysicalMachineService {
             requiredState=ConfMaster.RUNNING)
     public String pmDel(String pmName) throws MgmtZooKeeperException {
         // Check
-        PhysicalMachine pm = pmImo.get(pmName);
+        PhysicalMachine pm = container.getPm(pmName);
         if (pm == null) {
             return EXCEPTIONMSG_PHYSICAL_MACHINE_DOES_NOT_EXIST;
         }
         
         // In Memory
-        List<PhysicalMachineCluster> clusterList = pmClusterImo.getList(pmName);
+        List<PhysicalMachineCluster> clusterList = container.getPmcList(pmName);
         
-        // TODO : validation class
         // Prepare
         StringBuilder err = new StringBuilder();
         for (PhysicalMachineCluster cluster : clusterList) {
@@ -114,16 +117,16 @@ public class PhysicalMachineService {
                 }
                 
                 err.append(cluster.getName()).append("(");
-                if (!cluster.getData().getGwIdList().isEmpty()) {
+                if (!cluster.getGwIdList().isEmpty()) {
                     err.append("gw:").append(
-                            cluster.getData().getGwIdList().toString());
+                            cluster.getGwIdList().toString());
                 }
-                if (!cluster.getData().getPgsIdList().isEmpty()) {
+                if (!cluster.getPgsIdList().isEmpty()) {
                     if (err.length() != 0) {
                         err.append(", ");
                     }
                     err.append("pgs:").append(
-                            cluster.getData().getPgsIdList().toString());
+                            cluster.getPgsIdList().toString());
                 }
                 err.append(") ");
             }
@@ -134,13 +137,13 @@ public class PhysicalMachineService {
         }
         
         // DB
-        pmDao.deletePm(pmName);
+        zk.deleteZNode(pm.getPath(), -1);
         
         // In Memory
-        pmImo.delete(PathUtil.pmPath(pmName));
+        container.delete(PathUtil.pmPath(pmName));
 
         // Log
-        workflowLogDao.log(0, Constant.SEVERITY_MODERATE, 
+        workflowLogger.log(0, Constant.SEVERITY_MODERATE, 
                 "PMDelCommand", Constant.LOG_TYPE_COMMAND, 
                 "", "Delete pm success. " + pm, 
                 String.format("{\"pm_name\":\"%s\"}", pmName));
@@ -159,7 +162,7 @@ public class PhysicalMachineService {
             requiredState=ConfMaster.READY)
     public String pmInfo(String pmName) {
         // In Memory
-        PhysicalMachine pm = pmImo.get(pmName);
+        PhysicalMachine pm = container.getPm(pmName);
         
         // Check
         if (pm == null) {
@@ -170,10 +173,9 @@ public class PhysicalMachineService {
         StringBuilder reply = new StringBuilder();
         
         reply.append("{\"pm_info\":");
-        reply.append(pm.getData().toString());
-        
+        reply.append(pm.persistentDataToString());
         reply.append(", \"cluster_list\":");        
-        reply.append(pm.getClusterListString(pmClusterImo));
+        reply.append(pm.getClusterListString(container));
         reply.append("}");
         
         return reply.toString();
@@ -190,7 +192,7 @@ public class PhysicalMachineService {
             requiredState=ConfMaster.READY)
     public String pmLs() {
         // In Memory
-        List<PhysicalMachine> pmList = pmImo.getAll();
+        List<PhysicalMachine> pmList = container.getAllPm();
 
         // Do
         StringBuilder reply = new StringBuilder();

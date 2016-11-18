@@ -33,11 +33,9 @@
 
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.config"/>
-	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.repository"/>
-	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.repository.dao"/>
-	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.repository.znode.ver1_2"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.heartbeat"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server"/>
+	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.cluster"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.command"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.leaderelection"/>
 	<context:component-scan base-package="com.navercorp.nbasearc.confmaster.server.manager"/>

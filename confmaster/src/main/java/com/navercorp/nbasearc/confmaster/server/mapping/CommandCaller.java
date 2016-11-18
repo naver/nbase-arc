@@ -21,20 +21,26 @@ import java.util.Arrays;
 
 public class CommandCaller extends Caller {
 
+    private CommandMapping command;
+    
     public CommandCaller(Object service, Method method, ArityType arityType) {
         super(service, method, arityType);
+        command = getMethod().getAnnotation(CommandMapping.class);
+        checkRequiredMode(command.requiredMode());
     }
 
     public String getUsage() {
-        CommandMapping command = getMethod().getAnnotation(CommandMapping.class);
         return command.usage();
     }
     
     public int getRequiredState() {
-        CommandMapping command = getMethod().getAnnotation(CommandMapping.class);
         return command.requiredState();
     }
-
+    
+    public int getRequiredMode() {
+        return command.requiredMode();
+    }
+    
     @Override
     public String toString() {
         return "CommandCaller[name:" + getMethod().getName() + ", args:"

@@ -28,13 +28,11 @@ import org.springframework.context.ApplicationContext;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandException;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.dao.WorkflowLogDao;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.LogSequence;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
 
 public class BlueJoinWorkflow extends CascadingWorkflow {
     private final long jobID = JobIDGenerator.getInstance().getID();
@@ -42,8 +40,7 @@ public class BlueJoinWorkflow extends CascadingWorkflow {
     final ApplicationContext context;
     final Config config;
     final WorkflowExecutor wfExecutor;
-    final WorkflowLogDao workflowLogDao;
-    final PartitionGroupServerImo pgsImo;
+    final WorkflowLogger workflowLogger;
 
     final BJRoleSlave roleSlave;
     
@@ -52,29 +49,27 @@ public class BlueJoinWorkflow extends CascadingWorkflow {
     
     public BlueJoinWorkflow(PartitionGroup pg, boolean cascading,
             ApplicationContext context) {
-        super(cascading, pg, context.getBean(PartitionGroupImo.class));
+        super(cascading, pg, context.getBean(ClusterComponentContainer.class));
         
         this.context = context;
         this.config = context.getBean(Config.class);
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
-        this.workflowLogDao = context.getBean(WorkflowLogDao.class);
-        this.pgsImo = context.getBean(PartitionGroupServerImo.class);
+        this.workflowLogger = context.getBean(WorkflowLogger.class);
         
         this.roleSlave = context.getBean(BJRoleSlave.class);
     }
 
     @Override
     protected void _execute() throws MgmtSmrCommandException {
-        joinedPgsList = pg.getJoinedPgsList(pgsImo.getList(pg.getClusterName(),
-                Integer.valueOf(pg.getName())));
+        joinedPgsList = pg.getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
         master = pg.getMaster(joinedPgsList);
         if (master == null) {
             return;
         }
 
         for (PartitionGroupServer pgs : joinedPgsList) {
-            if (pgs.getData().getColor() == BLUE
-                    && pgs.getData().getRole().equals(PGS_ROLE_LCONN)) {
+            if (pgs.getColor() == BLUE
+                    && pgs.getRole().equals(PGS_ROLE_LCONN)) {
                 LogSequence logSeq = pgs.getLogSeq();
                 roleSlave.roleSlave(pgs, pg, logSeq, master, jobID);
             }

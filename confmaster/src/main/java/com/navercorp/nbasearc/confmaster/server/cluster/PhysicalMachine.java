@@ -16,38 +16,59 @@
 
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.codehaus.jackson.type.TypeReference;
+import org.codehaus.jackson.annotate.JsonAutoDetect;
+import org.codehaus.jackson.annotate.JsonIgnore;
+import org.codehaus.jackson.annotate.JsonIgnoreProperties;
+import org.codehaus.jackson.annotate.JsonProperty;
+import org.codehaus.jackson.annotate.JsonPropertyOrder;
+import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
 import org.springframework.context.ApplicationContext;
 
-import com.navercorp.nbasearc.confmaster.repository.znode.NodeType;
-import com.navercorp.nbasearc.confmaster.repository.znode.PhysicalMachineData;
-import com.navercorp.nbasearc.confmaster.repository.znode.ZNode;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 
-public class PhysicalMachine extends ZNode<PhysicalMachineData> {
+public class PhysicalMachine implements Comparable<PhysicalMachine>, ClusterComponent {
+
+    private final MemoryObjectMapper mapper = new MemoryObjectMapper();
+    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     
-    public PhysicalMachine(ApplicationContext context, String path,
-            String name, byte[] data) {
-        super(context);
-        
-        setTypeRef(new TypeReference<PhysicalMachineData>(){});
-        setPath(path);
-        setName(name);
-        setNodeType(NodeType.PM);
-        setData(data);
+    private String path;
+    private String name;
+    private PhysicalMachineData persistentData;
+    
+    public PhysicalMachine(String pmName, String pmIp) {
+    	persistentData = new PhysicalMachineData(pmIp);
+    	init(pmName);
     }
 
-    public String getClusterListString(PhysicalMachineClusterImo pmClusterImo) {
-        List<PhysicalMachineCluster> clusterList = pmClusterImo.getList(getName());
+    public PhysicalMachine(byte[] d, String pmName) {
+    	persistentData = mapper.readValue(d, PhysicalMachineData.class);
+    	init(pmName);
+    }
+
+    public PhysicalMachine(ApplicationContext context2, PhysicalMachineData d, String pmName) {
+        persistentData = d;
+        init(pmName);
+    }
+
+    public void init(String pmName) {
+    	path = PathUtil.pmPath(pmName);
+    	name = pmName;
+    }
+
+    public String getClusterListString(ClusterComponentContainer container) {
+        List<PhysicalMachineCluster> clusterList = container.getPmcList(name);
         StringBuilder ret = new StringBuilder();
         
         ret.append("[");
         
         for (PhysicalMachineCluster cluster : clusterList) {
             ret.append("{\"").append(cluster.getName()).append("\":");
-            ret.append(cluster.getData().toString()).append("}, ");
+            ret.append(cluster.persistentDataToString()).append("}, ");
         }
 
         if (!clusterList.isEmpty()) {
@@ -67,5 +88,151 @@ public class PhysicalMachine extends ZNode<PhysicalMachineData> {
     public static String fullName(String pmName) { 
         return "pm:" + pmName;
     }
+    
+    public String getPath() {
+        return path;
+    }
 
+    @Override
+    public String getName() {
+        return name;
+    }
+
+    @Override
+    public int compareTo(PhysicalMachine o) {
+        return name.compareTo(o.name);
+    }
+
+    @Override
+    public void release() {
+    }
+
+    public byte[] persistentDataToBytes() {
+        return persistentData.toBytes();
+    }
+    
+    public String persistentDataToString() {
+        return persistentData.toString();
+    }
+    
+    public Lock readLock() {
+        return lock.readLock();
+    }
+
+    public Lock writeLock() {
+        return lock.writeLock();
+    }
+
+    public void setPersistentData(byte[] d) {
+        persistentData = mapper.readValue(d, PhysicalMachineData.class);
+    }
+
+	@JsonAutoDetect(
+	        fieldVisibility=Visibility.ANY, 
+	        getterVisibility=Visibility.NONE, 
+	        setterVisibility=Visibility.NONE)
+	@JsonIgnoreProperties(ignoreUnknown=true)
+	@JsonPropertyOrder({"ip"})
+	public static class PhysicalMachineData {
+	
+	    @JsonProperty("ip")
+	    public String ip;
+	
+	    @JsonIgnore
+	    private final MemoryObjectMapper mapper = new MemoryObjectMapper();
+	
+	    public PhysicalMachineData() {}
+	    
+	    public PhysicalMachineData(String ip) {
+	        this.ip = ip;
+	    }
+	
+	    @Override
+	    public boolean equals(Object obj) {
+	        if (obj == null) {
+	            return false;
+	        }
+	        if (obj == this) {
+	            return true;
+	        }
+	        if (!(obj instanceof PhysicalMachineData)) {
+	            return false;
+	        }
+	
+	        PhysicalMachineData rhs = (PhysicalMachineData) obj;
+	        if (!ip.equals(rhs.ip)) {
+	            return false;
+	        }
+	        return true;
+	    }
+	    
+	    @Override
+	    public int hashCode() {
+	        assert false : "hashCode not designed";
+	        return 42; // any arbitrary constant will do
+	    }
+	
+	    @Override
+	    public String toString() {
+            return mapper.writeValueAsString(this);
+	    }
+	    
+	    public byte[] toBytes() {
+	    	return mapper.writeValueAsBytes(this);
+	    }
+	
+	    public static class ClusterInPm {
+	
+	        private String name;
+	
+	        private List<Integer> pgsList = new ArrayList<Integer>();
+	        private List<Integer> gwList = new ArrayList<Integer>();
+	
+	        public void addPgs(Integer id) {
+	            pgsList.add(id);
+	        }
+	
+	        public void deletePgs(Integer id) {
+	            pgsList.remove(id);
+	        }
+	
+	        public void addGw(Integer id) {
+	            gwList.add(id);
+	        }
+	
+	        public void deleteGw(Integer id) {
+	            gwList.remove(id);
+	        }
+	
+	        public List<Integer> getPgs_list() {
+	            return pgsList;
+	        }
+	
+	        public void setPgs_list(List<Integer> pgsList) {
+	            this.pgsList = pgsList;
+	        }
+	
+	        public List<Integer> getGw_list() {
+	            return gwList;
+	        }
+	
+	        public void setGw_list(List<Integer> gwList) {
+	            this.gwList = gwList;
+	        }
+	
+	        public String getName() {
+	            return name;
+	        }
+	
+	        public void setName(String name) {
+	            this.name = name;
+	        }
+	
+	    }
+	
+	}
+
+	public String getIp() {
+		return persistentData.ip;
+	}
 }

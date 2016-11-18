@@ -43,18 +43,20 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
-import com.navercorp.nbasearc.confmaster.heartbeat.HBRefData;
+import com.navercorp.nbasearc.confmaster.heartbeat.HBState;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
-import com.navercorp.nbasearc.confmaster.repository.znode.GatewayData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterBackupSchedule;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.cluster.Gateway.GatewayData;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentMock;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -91,13 +93,17 @@ public class CommandTest extends BasicSetting {
     
     @Test
     public void appData() throws Exception {
+    	MemoryObjectMapper mapper = new MemoryObjectMapper(); 
+    	
         // Set
         int backupScheduleId = 1;
         JobResult result = doCommand("appdata_set " + clusterName + " backup " + backupScheduleId + 
                 " 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json");
         assertEquals("check appdata_set result.", ok, result.getMessages().get(0));
-        ClusterBackupSchedule backupSchedule = 
-                clusterBackupScheduleDao.loadClusterBackupSchedule(clusterName);
+        
+        final String path = PathUtil.clusterBackupSchedulePath(clusterName);
+		ClusterBackupSchedule backupSchedule = mapper.readValue(
+				zk.getData(path, null), ClusterBackupSchedule.class); 
         assertFalse("check appdata after appdata_set", backupSchedule.getBackupSchedules().isEmpty());
         
         // Usage
@@ -133,7 +139,9 @@ public class CommandTest extends BasicSetting {
         // Del
         result = doCommand("appdata_del " + clusterName + " backup " + backupScheduleId);
         assertEquals("check appdata_del resutl.", ok, result.getMessages().get(0));
-        backupSchedule = clusterBackupScheduleDao.loadClusterBackupSchedule(clusterName);
+		backupSchedule = mapper.readValue(
+				zk.getData(PathUtil.clusterBackupSchedulePath(clusterName), null),
+				ClusterBackupSchedule.class);
         assertTrue("check appdata after appdata_del", backupSchedule.getBackupSchedules().isEmpty());
         
         // Usage
@@ -175,7 +183,7 @@ public class CommandTest extends BasicSetting {
         pmAdd("pm_add_01.test", "127.0.0.121");
         pmAdd("pm_add_02.test", "127.0.0.122");
         pmDel("pm_add_01.test");
-        PhysicalMachine pm = pmImo.get("pm_add_02.test");
+        PhysicalMachine pm = container.getPm("pm_add_02.test");
         assertNotNull("check pm after deleting another pm.", pm);
         
         // Del
@@ -293,7 +301,7 @@ public class CommandTest extends BasicSetting {
     
     @Test
     public void clusterInfo() throws Exception {
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         assertNotNull(cluster);
         
         JobResult result = doCommand("cluster_info " + clusterName);
@@ -435,15 +443,15 @@ public class CommandTest extends BasicSetting {
     @Test
     public void gwInfo() throws Exception {
         String command = "";
-        for (String s : new String[]{"gw_add", clusterName, "10", pmName, pmData.getIp(), "6000"}) {
+        for (String s : new String[]{"gw_add", clusterName, "10", pmName, pmData.ip, "6000"}) {
             command += s + " ";
         }
         JobResult result = doCommand(command.trim());
         assertEquals("check result of gw_add", ok, result.getMessages().get(0));
         
         result = doCommand("gw_info " + clusterName + " 10");
-        GatewayData gwData = new GatewayData();
-        gwData.initialize(pmName, pmData.getIp(), 6000, SERVER_STATE_FAILURE, HB_MONITOR_YES);
+        
+        GatewayData gwData = new GatewayData(pmName, pmData.ip, 6000);
         assertEquals("check result of gw_info", gwData.toString(), result.getMessages().get(0));
         
         // Usage
@@ -463,7 +471,7 @@ public class CommandTest extends BasicSetting {
     @Test
     public void gwList() throws Exception {
         String command = "";
-        for (String s : new String[]{"gw_add", clusterName, "10", pmName, pmData.getIp(), "6000"}) {
+        for (String s : new String[]{"gw_add", clusterName, "10", pmName, pmData.ip, "6000"}) {
             command += s + " ";
         }
         JobResult result = doCommand(command.trim());
@@ -486,19 +494,21 @@ public class CommandTest extends BasicSetting {
         
         // Create GW
         String command = "";
-        for (String s : new String[]{"gw_add", clusterName, "10", pmName, pmData.getIp(), "6000"}) {
+        for (String s : new String[]{"gw_add", clusterName, "10", pmName, pmData.ip, "6000"}) {
             command += s + " ";
         }
         result = doCommand(command.trim());
         assertEquals("check result of gw_add", ok, result.getMessages().get(0));
 
         // Mock GW
-        final Gateway gateway = gwImo.get("10", clusterName);
+        final Gateway gateway = container.getGw(clusterName, "10");
         assertNotNull(gateway);
-        gateway.getData().setState(SERVER_STATE_NORMAL);
+        GatewayData d = gateway.clonePersistentData();
+        d.state = SERVER_STATE_NORMAL;
+        gateway.setPersistentData(d);
         
         BlockingSocketImpl sock = mock(BlockingSocketImpl.class);
-        gateway.setServerConnection(sock);
+        ClusterComponentMock.setConnectionForCommand(gateway, sock);
         when(sock.execute(anyString())).thenReturn(S2C_OK);
         when(sock.execute(GW_PING)).thenReturn(GW_PONG);
         
@@ -506,16 +516,14 @@ public class CommandTest extends BasicSetting {
         final int id = 0;
         final HBSessionHandler handler = mock(HBSessionHandler.class);
         doNothing().when(handler).handleResult(anyString(), anyString());
-        getPgs(id).getHbc().setHandler(handler);
+        ClusterComponentMock.getHeartbeatSession(getPgs(id)).setHandler(handler);
 
-        PartitionGroupServerData pgsModified = 
-            PartitionGroupServerData.builder().from(getPgs(id).getData())
-                .withRole(PGS_ROLE_MASTER)
-                .withState(SERVER_STATE_NORMAL).build();
-        getPgs(id).setData(pgsModified);
+        PartitionGroupServerData pgsModified = getPgs(id).clonePersistentData();
+        pgsModified.setRole(PGS_ROLE_MASTER);
+        getPgs(id).setPersistentData(pgsModified);
 
         sock = mock(BlockingSocketImpl.class);
-        getPgs(id).setServerConnection(sock);
+        ClusterComponentMock.setConnectionForCommand(getPgs(id), sock);
         when(sock.execute(anyString())).thenReturn(S2C_OK);
         when(sock.execute("ping")).thenReturn("+OK 1 1400000000");
         when(sock.execute("migrate info")).thenReturn("+OK log:1000 mig:1000 buf:1000 sent:1000 acked:1000");
@@ -531,10 +539,10 @@ public class CommandTest extends BasicSetting {
         pgAdd(pgId, clusterName);
         
         // Check master gen map
-        PartitionGroup pg = pgImo.get(pgId, clusterName);
-        assertTrue(pg.getData().getMasterGenMap().isEmpty());
-        assertEquals(new Integer(0), pg.getData().getCopy());
-        assertEquals(new Integer(0), pg.getData().getCopy());
+        PartitionGroup pg = container.getPg(clusterName, pgId);
+        assertTrue(pg.getMasterGenMap().isEmpty());
+        assertEquals(0, pg.getCopy());
+        assertEquals(0, pg.getCopy());
         
         // Usage
         JobResult result = doCommand("pg_add");
@@ -582,10 +590,8 @@ public class CommandTest extends BasicSetting {
 
         result = doCommand("pg_info " + clusterName + " 10");
         
-        PartitionGroupData pgInfo = 
-            PartitionGroupData.builder().from(new PartitionGroupData()).build();
-        
-        assertEquals("check result of pg_info", pgInfo.toString(), result.getMessages().get(0));
+        assertEquals("check result of pg_info", container.getPg(clusterName, "10")
+                .info(), result.getMessages().get(0));
         
         // Usage
         result = doCommand("pg_info");
@@ -618,15 +624,13 @@ public class CommandTest extends BasicSetting {
     public void pgsInfoAll() throws Exception {
         JobResult result = doCommand("pgs_info_all " + clusterName + " 0");
         
-        PartitionGroupServerData pgsData = new PartitionGroupServerData();
-        pgsData.initialize(0, pmName, pmData.getIp(), 8109, 8100, 8103,
-                SERVER_STATE_FAILURE, PGS_ROLE_NONE, Color.RED, -1, HB_MONITOR_NO);
-        HBRefData hbcRefData = new HBRefData();
+        PartitionGroupServerData pgsData = new PartitionGroupServerData("0", pmName, pmData.ip, 8100, 8109);
+        HBState hbcRefData = new HBState();
         hbcRefData.setLastState(pgsData.getRole());
-        hbcRefData.setLastStateTimestamp(pgsData.getStateTimestamp());
+        hbcRefData.setLastStateTimestamp(pgsData.stateTimestamp);
         hbcRefData.setSubmitMyOpinion(false);
-        hbcRefData.setZkData(pgsData.getRole(), pgsData.getStateTimestamp(), 0);
-        String pgsInfoAll = "{\"MGMT\":" + pgsData + ",\"HBC\":" + hbcRefData + "}";
+        hbcRefData.setZkData(pgsData.getRole(), pgsData.stateTimestamp, 0);
+        String pgsInfoAll = "{\"MGMT\":" + pgsData.toString() + ",\"HBC\":" + hbcRefData + "}";
         assertEquals("check result of pgs_info_all", pgsInfoAll, result.getMessages().get(0));
 
         // Usage
@@ -645,9 +649,7 @@ public class CommandTest extends BasicSetting {
     @Test
     public void pgsInfo() throws Exception {
         JobResult result = doCommand("pgs_info " + clusterName + " 0");
-        PartitionGroupServerData pgsData = new PartitionGroupServerData();
-        pgsData.initialize(0, pmName, pmData.getIp(), 8109, 8100, 8103,
-                SERVER_STATE_FAILURE, PGS_ROLE_NONE, Color.RED, -1, HB_MONITOR_NO);
+        PartitionGroupServerData pgsData = new PartitionGroupServerData("0", pmName, pmData.ip, 8100, 8109);
         assertEquals("check result of pgs_info", pgsData.toString(), result.getMessages().get(0));
 
         // Usage
@@ -672,10 +674,10 @@ public class CommandTest extends BasicSetting {
         // Mock Heartbeat Session Handler
         final HBSessionHandler handler = mock(HBSessionHandler.class);
         doNothing().when(handler).handleResult(anyString(), anyString());
-        getPgs(id).getHbc().setHandler(handler);
+        ClusterComponentMock.getHeartbeatSession(getPgs(id)).setHandler(handler);
 
         BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
-        getPgs(id).setServerConnection(msock);
+        ClusterComponentMock.setConnectionForCommand(getPgs(id), msock);
         when(msock.execute(anyString())).thenReturn(S2C_OK);
         
         JobResult result = doCommand("pgs_lconn " + clusterName + " " + id);
@@ -709,10 +711,10 @@ public class CommandTest extends BasicSetting {
         // Mock Heartbeat Session Handler
         final HBSessionHandler handler = mock(HBSessionHandler.class);
         doNothing().when(handler).handleResult(anyString(), anyString());
-        getPgs(id).getHbc().setHandler(handler);
+        ClusterComponentMock.getHeartbeatSession(getPgs(id)).setHandler(handler);
 
         BlockingSocketImpl msock = mock(BlockingSocketImpl.class);
-        getPgs(id).setServerConnection(msock);
+        ClusterComponentMock.setConnectionForCommand(getPgs(id), msock);
         when(msock.execute(anyString())).thenReturn(S2C_OK);
         when(msock.execute("getseq log")).thenReturn(
                 "+OK log min:0 commit:0 max:0 be_sent:0");
@@ -730,8 +732,8 @@ public class CommandTest extends BasicSetting {
     @Test
     public void pmInfo() throws Exception {
         JobResult result = doCommand("pm_info " + pmName);
-        PhysicalMachine pm = pmImo.get(pmName);
-        String pmInfo = "{\"pm_info\":" + pmData + ", \"cluster_list\":" + pm.getClusterListString(pmClusterImo) + "}";
+        PhysicalMachine pm = container.getPm(pmName);
+        String pmInfo = "{\"pm_info\":" + pmData + ", \"cluster_list\":" + pm.getClusterListString(container) + "}";
         assertEquals("check result of pm_info", pmInfo, result.getMessages().get(0));
         
         // Usage
@@ -863,6 +865,44 @@ public class CommandTest extends BasicSetting {
         result = doCommand("op_wf " + clusterName + " " + pgName + " AA false not-forced");
         assertEquals(
                 "{\"state\":\"error\",\"msg\":\"-ERR not in forced mode.\"}\r\n",
+                formatReply(result, null));
+    }
+    
+    @Test
+    public void clusterDump() throws Exception {
+    }
+
+    @Test
+    public void clusterDumpAndLoad() throws Exception {
+        final String cname = "test_cluster_1";
+        final ObjectMapper mapper = new ObjectMapper();
+        
+        JobResult result = doCommand("cluster_dump " + clusterName);
+        String dump = result.getMessages().get(0);
+        System.out.println(dump);
+        mapper.readTree(dump);
+        
+        dump = dump.replace(clusterName, cname).replace(pmName, "test02.arc");
+
+        // Usage
+        result = doCommand("cluster_dump");
+        assertEquals("cluster_dump <cluster_name>\r\n",
+                formatReply(result, null));
+        
+        result = doCommand("cluster_load " + dump);
+        assertEquals(ok, result.getMessages().get(0));
+        
+        // Check
+        assertNotNull(container.getCluster(cname));
+        assertNotNull(container.getPg(cname, "0"));
+        assertNotNull(container.getPgs(cname, "0"));
+        assertNotNull(container.getPgs(cname, "1"));
+        assertNotNull(container.getPgs(cname, "2"));
+        assertNotNull(container.getPm("test02.arc"));        
+
+        // Usage
+        result = doCommand("cluster_load");
+        assertEquals("cluster_load <dump>\r\n",
                 formatReply(result, null));
     }
     

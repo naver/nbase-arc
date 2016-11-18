@@ -34,8 +34,10 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandExcep
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtWorkflowWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.WorkflowCaller;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType;
@@ -50,6 +52,7 @@ public class WorkflowTemplate implements Callable<Object> {
     private final Map<String, LockCaller> lockMethods;
     
     private final DefaultConversionService cs = new DefaultConversionService();
+    private final ClusterComponentContainer container;
     
     public WorkflowTemplate(String workflow, Object[] args, 
             ApplicationContext context, Map<String, WorkflowCaller> workflowMethods, 
@@ -59,6 +62,7 @@ public class WorkflowTemplate implements Callable<Object> {
         this.context = context;
         this.workflowMethods = workflowMethods;
         this.lockMethods = lockMethods;
+        this.container = context.getBean(ClusterComponentContainer.class); 
     }
     
     @Override
@@ -70,6 +74,9 @@ public class WorkflowTemplate implements Callable<Object> {
             checkPrivilege();
             validRequest();
             lock(lockHelper);
+            if (checkMode(args) == false) {
+                return null;
+            }
             execute(); 
         } catch (Exception e) {
             boolean perror = false;
@@ -168,6 +175,21 @@ public class WorkflowTemplate implements Callable<Object> {
         }
         
         lock.invoke(params);
+    }
+
+    private boolean checkMode(Object[] args) {
+        final WorkflowCaller caller = workflowMethods.get(workflow);
+        final int requiredMode = caller.getRequiredMode();
+        if (requiredMode == 0) {
+            return true;
+        }
+
+        Cluster cluster = container.getCluster(caller.getClusterName(args, 0));
+        if ((requiredMode & cluster.getMode()) != 0) {
+            return true;
+        }
+
+        return false;
     }
     
     private String execute() throws IllegalArgumentException,

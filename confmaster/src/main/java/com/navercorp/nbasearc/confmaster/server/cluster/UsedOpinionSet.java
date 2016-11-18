@@ -20,7 +20,7 @@ import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
 
-import com.navercorp.nbasearc.confmaster.repository.znode.OpinionData;
+import com.navercorp.nbasearc.confmaster.server.cluster.Opinion.OpinionData;
 
 public class UsedOpinionSet {
     

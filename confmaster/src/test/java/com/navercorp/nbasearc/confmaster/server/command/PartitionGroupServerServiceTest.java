@@ -34,8 +34,9 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
-import com.navercorp.nbasearc.confmaster.repository.dao.PartitionGroupServerDao;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolderFI;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -43,13 +44,13 @@ import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 public class PartitionGroupServerServiceTest extends BasicSetting {
 
     @Autowired
-    private PartitionGroupServerDao dao;
+    private ZooKeeperHolder zk;
 
     @Autowired
-    private PhysicalMachineClusterImo pmClusterImo;
+    ConfMaster confMaster;
     
     @Autowired
-    ConfMaster confMaster;
+    PartitionGroupServerService pgsSvc;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -84,7 +85,7 @@ public class PartitionGroupServerServiceTest extends BasicSetting {
         // Delete pgs
         for (int id = 0; id < MAX_PGS; id++) {
             // Mock up
-            ZooKeeperHolderFI zfi = (ZooKeeperHolderFI) zookeeper;
+            ZooKeeperHolderFI zfi = (ZooKeeperHolderFI) zk;
             zfi.setDeleteChildErr(new HashSet<Integer>(Arrays.asList(1, 3)));
             zfi.setMultiErr(new HashSet<Integer>(Arrays.asList(1)));
 
@@ -106,8 +107,8 @@ public class PartitionGroupServerServiceTest extends BasicSetting {
     public boolean delPgsAndCheckRetry(String pgsId) throws Exception {
         try {
             // DB
-            int retryCnt = dao.deletePgs(pgsId, clusterName, getPg(),
-                    pmClusterImo.get(clusterName, pmName));
+			int retryCnt = pgsSvc.deletePgsZooKeeperNZnodes(pgsId, clusterName,
+					getPg(), container.getPmc(pmName, clusterName));
 
             if (retryCnt > 1) {
                 return true;
@@ -121,7 +122,7 @@ public class PartitionGroupServerServiceTest extends BasicSetting {
 
     public boolean checkPgsDeleted(String pgsId) throws MgmtZooKeeperException {
         try {
-            dao.loadPgs(pgsId, clusterName, null, null);
+        	zk.getData(PathUtil.pgsPath(pgsId, clusterName), null);
         } catch (NoNodeException e) {
             return true;
         }

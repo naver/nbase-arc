@@ -17,22 +17,33 @@
 package com.navercorp.nbasearc.confmaster.server.command;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.READ;
-import static com.navercorp.nbasearc.confmaster.repository.lock.LockType.WRITE;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.READ;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.WRITE;
 import static com.navercorp.nbasearc.confmaster.server.mapping.ArityType.GREATER;
 import static com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType.STRING_VARG;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
 import org.apache.zookeeper.KeeperException.NodeExistsException;
 import org.apache.zookeeper.Op;
 import org.apache.zookeeper.OpResult;
+import org.apache.zookeeper.ZooDefs;
+import org.codehaus.jackson.JsonNode;
+import org.codehaus.jackson.JsonParseException;
+import org.codehaus.jackson.map.JsonMappingException;
+import org.codehaus.jackson.node.ArrayNode;
+import org.codehaus.jackson.node.JsonNodeFactory;
+import org.codehaus.jackson.node.ObjectNode;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 
@@ -46,33 +57,33 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperExcept
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
-import com.navercorp.nbasearc.confmaster.repository.PathUtil;
-import com.navercorp.nbasearc.confmaster.repository.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.repository.dao.ClusterBackupScheduleDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.ClusterDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.NotificationDao;
-import com.navercorp.nbasearc.confmaster.repository.dao.zookeeper.ZkWorkflowLogDao;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockHelper;
-import com.navercorp.nbasearc.confmaster.repository.lock.HierarchicalLockPMList;
-import com.navercorp.nbasearc.confmaster.repository.znode.ClusterBackupScheduleData;
-import com.navercorp.nbasearc.confmaster.repository.znode.ClusterData;
+import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster.ClusterData;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterBackupSchedule;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.Gateway.GatewayData;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
+import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup.PartitionGroupData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
+import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine.PhysicalMachineData;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachineCluster;
-import com.navercorp.nbasearc.confmaster.server.imo.ClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.GatewayImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupServerImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineClusterImo;
-import com.navercorp.nbasearc.confmaster.server.imo.PhysicalMachineImo;
+import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer.RedisServerData;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockPMList;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param;
+import com.navercorp.nbasearc.confmaster.server.mapping.ClusterHint;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 /* 
  * All services of commands throws Exception upward 
@@ -81,8 +92,11 @@ import com.navercorp.nbasearc.confmaster.server.mapping.Param;
 @Service
 public class ClusterService {
     
+	@Autowired
+	private ApplicationContext context;
+	
     @Autowired
-    private ZooKeeperHolder zookeeper;
+    private ZooKeeperHolder zk;
 
     @Autowired
     private ThreadPool executor;
@@ -91,29 +105,25 @@ public class ClusterService {
     private Config config;
 
     @Autowired
-    private ClusterImo clusterImo;
-    @Autowired
-    private PhysicalMachineImo pmImo;
-    @Autowired
-    private PartitionGroupImo pgImo;
-    @Autowired
-    private PartitionGroupServerImo pgsImo;
-    @Autowired
-    private GatewayImo gwImo;
-    @Autowired
-    private PhysicalMachineClusterImo clusterInPmImo;
+    private ClusterComponentContainer container;
 
     @Autowired
-    private ClusterDao clusterDao;
+    private GatewayLookup gwInfoNoti;
     @Autowired
-    private ClusterBackupScheduleDao clusterBackupScheduleDao;
+    private WorkflowLogger workflowLogger;
+    
     @Autowired
-    private NotificationDao notificationDao;
+    private PhysicalMachineService pmService;
     @Autowired
-    private ZkWorkflowLogDao workflowLogDao;
+    private PartitionGroupService pgService;
+    @Autowired
+    private PartitionGroupServerService pgsService;
+    @Autowired
+    private GatewayService gwService;
+
+    MemoryObjectMapper mapper = new MemoryObjectMapper();
     
     @CommandMapping(
-            
             name="cluster_add",
             usage="cluster_add <cluster_name> <quorum policy>\r\n" +
                     "Ex) cluster_add cluster1 0:1\r\n" +
@@ -123,22 +133,17 @@ public class ClusterService {
             throws MgmtCommandWrongArgumentException,
             MgmtZNodeAlreayExistsException, MgmtZooKeeperException,
             NoNodeException {
-        if (clusterImo.get(clusterName) != null) {
+        if (container.getCluster(clusterName) != null) {
             return EXCEPTIONMSG_DUPLICATED_CLUSTER;
         }
         
-        Integer keyspaceSize = KEY_SPACE_SIZE;
-
         // Prapare
-        ClusterData data = new ClusterData();
         List<Integer> quorumPolicyAsList = new ArrayList<Integer>();
-        List<Integer> pnPgMap = new ArrayList<Integer>(keyspaceSize);
-
-        data.setKeySpaceSize(keyspaceSize);
-        for (int i = 0; i < keyspaceSize; i++) {
+        List<Integer> pnPgMap = new ArrayList<Integer>(KEY_SPACE_SIZE);
+        
+        for (int i = 0; i < KEY_SPACE_SIZE; i++) {
             pnPgMap.add(-1);
         }
-        data.setPnPgMap(pnPgMap);
         for (String item : quorumPolicy.split(":")) {
             try {
                 quorumPolicyAsList.add(Integer.parseInt(item));
@@ -147,23 +152,84 @@ public class ClusterService {
                 return "-ERR Invalid quorum policy";
             }
         }
-        data.setQuorumPolicy(quorumPolicyAsList);
-        data.setPhase(CLUSTER_PHASE_INIT);
-        
-        // DB
-        clusterDao.createCluster(clusterName, data);
-        
-        // In Memory
-        Cluster cluster = clusterImo.load(clusterName);
+        Cluster cluster = new Cluster(context, clusterName, quorumPolicyAsList, pnPgMap, CLUSTER_ON);
+        createClusterZooKeeperZnodes(clusterName, cluster);
         
         // Log
-        workflowLogDao.log(0, SEVERITY_MODERATE, 
+        workflowLogger.log(0, SEVERITY_MODERATE, 
                 "ClusterAddCommand", LOG_TYPE_COMMAND, 
                 clusterName, "Add cluster success. " + cluster, 
                 String.format("{\"cluster_name\":\"%s\",\"key_space_size\":\"%s\",\"quorum_policy\":\"%s\"}", 
-                        clusterName, keyspaceSize, quorumPolicy));
+                        clusterName, KEY_SPACE_SIZE, quorumPolicy));
         
         return S2C_OK;
+    }
+    
+	protected void createClusterZooKeeperZnodes(String name, Cluster cluster)
+			throws MgmtZNodeAlreayExistsException, MgmtZooKeeperException,
+			NoNodeException {
+		// DB
+		String path = PathUtil.clusterPath(name);
+
+		List<Op> ops = new ArrayList<Op>();
+		ops.add(Op.create(path, cluster.persistentDataToBytes(),
+				ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+		ops.add(Op.create(PathUtil.pgRootPath(name), ZERO_BYTE,
+				ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+		ops.add(Op.create(PathUtil.pgsRootPath(name), ZERO_BYTE,
+				ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+		ops.add(Op.create(PathUtil.gwRootPath(name), ZERO_BYTE,
+				ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+		ops.add(Op.create(PathUtil.rsRootPath(name), ZERO_BYTE,
+				ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+		gwInfoNoti.addCreateClusterOp(ops, name);
+
+		List<OpResult> results = zk.multi(ops);
+		zk.handleResultsOfMulti(results);
+
+		// In memory
+		container.put(cluster.getPath(), cluster);
+	}
+    
+    protected void deleteClusterobject(String clusterName)
+            throws MgmtZNodeDoesNotExistException, MgmtZooKeeperException {        
+        List<PhysicalMachine> pmList = container.getAllPm();
+        for (PhysicalMachine pm : pmList) {
+            PhysicalMachineCluster clusterInPm = container.getPmc(pm.getName(), clusterName);
+            if (null == clusterInPm) {
+                continue;
+            }
+
+            if (!clusterInPm.getGwIdList().isEmpty()) {
+                throw new IllegalArgumentException(EXCEPTIONMSG_CLUSTER_HAS_GW
+                        + Cluster.fullName(clusterName));
+            }
+            if (!clusterInPm.getPgsIdList().isEmpty()) {
+                throw new IllegalArgumentException(EXCEPTIONMSG_CLUSTER_HAS_PGS
+                        + Cluster.fullName(clusterName));
+            }
+        }
+        
+        // DB
+        String path = PathUtil.clusterPath(clusterName);
+
+        List<Op> ops = new ArrayList<Op>();
+        ops.add(Op.delete(PathUtil.pgRootPath(clusterName), -1));
+        ops.add(Op.delete(PathUtil.pgsRootPath(clusterName), -1));
+        ops.add(Op.delete(PathUtil.gwRootPath(clusterName), -1));
+        ops.add(Op.delete(PathUtil.rsRootPath(clusterName), -1));
+
+        if (zk.isExists(PathUtil.clusterBackupSchedulePath(clusterName))) {
+            ops.add(Op.delete(PathUtil.clusterBackupSchedulePath(clusterName), -1));
+        }
+        ops.add(Op.delete(path, -1));
+        gwInfoNoti.addDeleteClusterOp(ops, clusterName);
+
+        List<OpResult> results = zk.multi(ops);
+        zk.handleResultsOfMulti(results);
+
+        // In Memory
+        container.delete(PathUtil.clusterPath(clusterName));
     }
 
     @LockMapping(name="cluster_add")
@@ -185,48 +251,28 @@ public class ClusterService {
             usage="cluster_del <cluster_name>\r\n" +
                     "Ex) cluster_del cluster1\r\n" +
                     "delete a new cluster",
-            requiredState=ConfMaster.RUNNING)
-    public String clusterDel(String clusterName)
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String clusterDel(@ClusterHint String clusterName)
             throws MgmtZNodeDoesNotExistException, MgmtZooKeeperException {
         // Check
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (null == cluster) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
-        
-        if (!pgImo.getList(clusterName).isEmpty()) {
+
+        // Check
+        if (!container.getPgList(clusterName).isEmpty()) {
             throw new IllegalArgumentException(EXCEPTIONMSG_CLUSTER_HAS_PG
                     + Cluster.fullName(clusterName));
         }
         
-        List<PhysicalMachine> pmList = pmImo.getAll();
-        for (PhysicalMachine pm : pmList) {
-            PhysicalMachineCluster clusterInPm = 
-                    clusterInPmImo.get(clusterName, pm.getName());
-            if (null == clusterInPm) {
-                continue;
-            }
-
-            if (!clusterInPm.getData().getGwIdList().isEmpty()) {
-                throw new IllegalArgumentException(EXCEPTIONMSG_CLUSTER_HAS_GW
-                        + Cluster.fullName(clusterName));
-            }
-            if (!clusterInPm.getData().getPgsIdList().isEmpty()) {
-                throw new IllegalArgumentException(EXCEPTIONMSG_CLUSTER_HAS_PGS
-                        + Cluster.fullName(clusterName));
-            }
-        }
-        
-        // DB
-        clusterDao.deleteCluster(clusterName);
-
-        // In Memory
-        clusterImo.delete(PathUtil.clusterPath(clusterName));
+        deleteClusterobject(clusterName);
         
         // Log
-        workflowLogDao.log(0, SEVERITY_MODERATE, 
+        workflowLogger.log(0, SEVERITY_MODERATE, 
                 "ClusterDelCommand", LOG_TYPE_COMMAND, 
                 clusterName, "Delete cluster success. " + cluster, 
                 String.format("{\"cluster_name\":\"%s\"}", clusterName));
@@ -238,10 +284,9 @@ public class ClusterService {
     public void clusterDelLock(HierarchicalLockHelper lockHelper, String clusterName) {
         lockHelper.root(WRITE);
         HierarchicalLockPMList lockPMList = lockHelper.pmList(READ);
-        List<PhysicalMachine> pmList = pmImo.getAll();
+        List<PhysicalMachine> pmList = container.getAllPm();
         for (PhysicalMachine pm : pmList) {
-            PhysicalMachineCluster clusterInPm = 
-                    clusterInPmImo.get(clusterName, pm.getName());
+            PhysicalMachineCluster clusterInPm = container.getPmc(pm.getName(), clusterName);
             if (clusterInPm != null) {
                 lockPMList.pm(READ, pm.getName());
             }
@@ -251,11 +296,12 @@ public class ClusterService {
     @CommandMapping(
             name="cluster_info",
             usage="cluster_info <cluster_name>",
-            requiredState=ConfMaster.READY)
-    public String clusterInfo(String clusterName) throws InterruptedException,
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String clusterInfo(@ClusterHint String clusterName) throws InterruptedException,
             KeeperException, IOException {
         // Check
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (null == cluster) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
@@ -263,25 +309,27 @@ public class ClusterService {
         }
         
         // In Memory
-        List<PartitionGroup> pgList = pgImo.getList(clusterName);
-        List<Gateway> gwList = gwImo.getList(clusterName);
+        List<PartitionGroup> pgList = container.getPgList(clusterName);
+        List<Gateway> gwList = container.getGwList(clusterName);
         
         // Prepare
         StringBuilder sb = new StringBuilder();
 
         sb.append("{\"cluster_info\":{");
-        sb.append("\"Key_Space_Size\":").append(cluster.getData().getKeySpaceSize()).append("");
-        sb.append(",\"Quorum_Policy\":\"").append(cluster.getData().getQuorumPolicy()).append("\"");
-        sb.append(",\"PN_PG_Map\":\"").append(cluster.getData().pNPgMapToRLS()).append("\"");
-        sb.append(",\"Phase\":\"").append(cluster.getData().getPhase()).append("\"}, ");
+        sb.append("\"Key_Space_Size\":").append(cluster.getKeySpaceSize()).append("");
+        sb.append(",\"Quorum_Policy\":\"").append(cluster.getQuorumPolicy()).append("\"");
+        sb.append(",\"PN_PG_Map\":\"").append(cluster.pNPgMapToRLS()).append("\"");
+        sb.append(",\"Mode\":\"").append(cluster.getMode()).append("\"}, ");
         
         sb.append("\"pg_list\":[");
+        long wf = 0;
         for (PartitionGroup pg : pgList) {
+            wf += pg.getWfCnt();
             sb.append("{\"pg_id\":\"").append(pg.getName()).append("\", \"pg_data\":");
             try {
-                sb.append(pg.getData().toString()).append("}, ");
+                sb.append(pg.persistentDataToString()).append("}, ");
             } catch (RuntimeException e) {
-                Logger.error("Convert to json fail. {} {}", cluster, cluster.getData());
+                Logger.error("Convert to json fail. {} {}", cluster, cluster.persistentDataToString());
                 throw e;
             }
         }
@@ -296,10 +344,12 @@ public class ClusterService {
             sb.append(gw.getName()).append(", ");
         }
         if (!gwList.isEmpty()) {
-            sb.delete(sb.length() - 2, sb.length()).append("]}");
+            sb.delete(sb.length() - 2, sb.length()).append("]");
         } else {
-            sb.append("]}");
+            sb.append("]");
         }
+        
+        sb.append(",\"wf\":").append(wf).append("}");
         
         return sb.toString();
     }
@@ -315,9 +365,9 @@ public class ClusterService {
             name="cluster_ls",
             usage="cluster_ls",
             requiredState=ConfMaster.READY)
-    public String execute() {
+    public String clusterLs() {
         // In Memory
-        List<Cluster> clusters = clusterImo.getAll();
+        List<Cluster> clusters = container.getAllCluster();
         
         // Prepare
         StringBuilder reply = new StringBuilder();
@@ -346,13 +396,14 @@ public class ClusterService {
     @CommandMapping(
             name="get_cluster_info",
             usage="get_cluster_info <cluster_name>",
-            requiredState=ConfMaster.READY)
-    public String getClusterInfo(String clusterName)
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String getClusterInfo(@ClusterHint String clusterName)
             throws InterruptedException, KeeperException {
         // In Memory
-        Cluster cluster = clusterImo.get(clusterName);
-        List<PartitionGroup> pgList = pgImo.getList(clusterName);
-        List<PartitionGroupServer> pgsList = pgsImo.getList(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
+        List<PartitionGroup> pgList = container.getPgList(clusterName);
+        List<PartitionGroupServer> pgsList = container.getPgsList(clusterName);
         
         // Prepare
         StringBuilder sb = new StringBuilder();
@@ -360,10 +411,10 @@ public class ClusterService {
         int slotStart;
         
         /* cluster slot size */
-        sb.append(cluster.getData().getKeySpaceSize()).append("\r\n");
+        sb.append(cluster.getKeySpaceSize()).append("\r\n");
 
         /* slot pg mapping(Run Length Encoding) */
-        slotMap = cluster.getData().getPbPgMap();
+        slotMap = cluster.getPnPgMap();
         slotStart = 0;
         for (int i = 1; i < slotMap.size(); i++) {
             if (!slotMap.get(slotStart).equals(slotMap.get(i))) {
@@ -375,13 +426,13 @@ public class ClusterService {
 
         /* pg pgs mapping */
         for (PartitionGroup pg : pgList) {
-            List<Integer> pgPgsList = pg.getData().getPgsIdList();
+            List<Integer> pgPgsList = pg.getPgsIdList();
             Collections.sort(pgPgsList);
             
             sb.append(pg.getName()).append(" ");
             for (Integer pgsid : pgPgsList) {
-                PartitionGroupServer pgs = pgsImo.get(String.valueOf(pgsid), clusterName);
-                if (pgs.getData().getHb().equals(HB_MONITOR_YES)) {
+                PartitionGroupServer pgs = container.getPgs(clusterName, String.valueOf(pgsid));
+                if (pgs.getHeartbeat().equals(HB_MONITOR_YES)) {
                     sb.append(pgsid).append(" ");
                 }
             }
@@ -391,13 +442,13 @@ public class ClusterService {
 
         /* pgs info */
         for (PartitionGroupServer pgs : pgsList) {
-            if (pgs.getData().getHb().equals(HB_MONITOR_YES)) {
+            if (pgs.getHeartbeat().equals(HB_MONITOR_YES)) {
                 sb.append(
                     String.format(
                         "%s:%s:%d:%d ", 
-                        pgs.getName(), pgs.getData().getPmIp(), 
-                        pgs.getData().getSmrBasePort(), 
-                        pgs.getData().getRedisPort()));
+                        pgs.getName(), pgs.getPmIp(), 
+                        pgs.getSmrBasePort(), 
+                        pgs.getRedisPort()));
             }
         }
         sb.deleteCharAt(sb.length()-1);
@@ -418,8 +469,9 @@ public class ClusterService {
             arityType=GREATER,
             usage="appdata_set <cluster_name> backup <backup_id> <daemon_id> <period> <base_time> <holding period(day)> <net_limit(MB/s)> <output_format> [<service url>]\r\n" +
                     "Ex) appdata_set c1 backup 1 1 0 2 * * * * 02:00:00 3 70 base32hex rsync -az {FILE_PATH} 192.168.0.1::TEST/{MACHINE_NAME}-{CLUSTER_NAME}-{DATE}.json",
-            requiredState=ConfMaster.RUNNING)
-    public String clusterBackupScheduleSet(String clusterName, String type,
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String clusterBackupScheduleSet(@ClusterHint String clusterName, String type,
             Integer backupID, Integer daemonID, String minute, String hour,
             String day, String month, String dayOfWeek, String year,
             String baseTime, Integer holdingPeriod, Integer netLimit,
@@ -466,8 +518,8 @@ public class ClusterService {
         // In order to verify cron expression.
         new CronTrigger(cronExpression);
 
-        ClusterBackupScheduleData arg;
-        arg = new ClusterBackupScheduleData();
+        ClusterBackupSchedule.ClusterBackupScheduleData arg;
+        arg = new ClusterBackupSchedule.ClusterBackupScheduleData();
         arg.setCluster_name(clusterName);
         arg.setType(type);
         arg.setBackup_id(backupID);
@@ -479,29 +531,32 @@ public class ClusterService {
         arg.setOutput_format(outputFormat);
         arg.setService_url(serviceURL);
         
-        Cluster cluster = clusterImo.get(arg.getCluster_name());
+        Cluster cluster = container.getCluster(arg.getCluster_name());
         if (cluster == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
 
-        ClusterBackupSchedule data;
         try {
+        	String path = PathUtil.clusterBackupSchedulePath(clusterName);
             try {
-                data = clusterBackupScheduleDao.loadClusterBackupSchedule(arg.getCluster_name());
+				ClusterBackupSchedule data = mapper.readValue(
+					zk.getData(path, null), 
+					ClusterBackupSchedule.class);
                 
                 if (!data.existBackupJob(arg.getBackup_id())) {
                     data.addBackupSchedule(arg);
                 } else {
                     data.updateBackupSchedule(arg);
                 }
-                clusterBackupScheduleDao.setAppData(arg.getCluster_name(), data);
+                
+                zk.setData(path, mapper.writeValueAsBytes(data), -1);
             } catch (KeeperException.NoNodeException e) {
                 // Create znode for BACKUP_PROP
-                data =  new ClusterBackupSchedule();
+            	ClusterBackupSchedule data =  new ClusterBackupSchedule();
                 data.addBackupSchedule(arg);
-                clusterBackupScheduleDao.createAppData(arg.getCluster_name(), data);
+                zk.createPersistentZNode(path, mapper.writeValueAsBytes(data));
             }
         } catch (ConfMasterException e) {
             String logMsg = "-ERR " + e.getMessage();
@@ -510,7 +565,6 @@ public class ClusterService {
         }
 
         return S2C_OK;
-            
     }
 
     @LockMapping(name="appdata_set")
@@ -522,11 +576,12 @@ public class ClusterService {
     @CommandMapping(
             name="appdata_get",
             usage="appdata_get <cluster_name> backup <backup_id>",
-            requiredState=ConfMaster.READY)
-    public String clusterBackupScheduleGet(String clusterName, String type,
+            requiredState=ConfMaster.READY,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String clusterBackupScheduleGet(@ClusterHint String clusterName, String type,
             String backupID) throws MgmtZooKeeperException,
             ConfMasterException, NodeExistsException {
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (cluster == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
@@ -534,8 +589,10 @@ public class ClusterService {
         }
         
         ClusterBackupSchedule data = null;
+        String path = PathUtil.clusterBackupSchedulePath(clusterName);
         try {
-            data = clusterBackupScheduleDao.loadClusterBackupSchedule(clusterName);
+			data = mapper.readValue(zk.getData(path, null),
+					ClusterBackupSchedule.class);
             
             if (type.equals(APPDATA_TYPE_BACKUP)) {
                 return handleBackupData(data, backupID);
@@ -543,8 +600,7 @@ public class ClusterService {
                 return "-ERR '" + type + "' is unsupported type";
             }
         } catch (KeeperException.NoNodeException e) {
-            data =  new ClusterBackupSchedule();
-            clusterBackupScheduleDao.createAppData(clusterName, data);
+            zk.createPersistentZNode(path, mapper.writeValueAsBytes(new ClusterBackupSchedule()));
             return "-ERR backup '" + backupID + "' is not exist.";
         }
     }
@@ -559,7 +615,7 @@ public class ClusterService {
                 return "-ERR backup '" + backupID + "' is not exist.";
             }
             
-            ClusterBackupScheduleData backupData = data.getBackupSchedule(id);
+            ClusterBackupSchedule.ClusterBackupScheduleData backupData = data.getBackupSchedule(id);
             return backupData.toString();
         }
     }
@@ -573,25 +629,29 @@ public class ClusterService {
             name="appdata_del",
             usage="appdata_del <cluster_name> backup <backup_id>\r\n" +
                     "Ex) appdata_del c1 backup 1",
-            requiredState=ConfMaster.RUNNING)
-    public String clusterBackupScheduleDel(String clusterName, String type,
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String clusterBackupScheduleDel(@ClusterHint String clusterName, String type,
             int backupID) throws NoNodeException, MgmtZooKeeperException,
             ConfMasterException {
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         if (cluster == null) {
             throw new IllegalArgumentException(
                     EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
                             + Cluster.fullName(clusterName));
         }
 
-        ClusterBackupSchedule data = clusterBackupScheduleDao
-                .loadClusterBackupSchedule(clusterName);
+        String path = PathUtil.clusterBackupSchedulePath(clusterName);
+        
+		ClusterBackupSchedule data = mapper.readValue(
+				zk.getData(path, null), ClusterBackupSchedule.class);
         if (data == null) {
             return "-ERR  backup properties does not exists.";
         }
         
         data.deleteBackupSchedule(backupID);
-        clusterBackupScheduleDao.setAppData(clusterName, data);
+        
+        zk.setData(path, mapper.writeValueAsBytes(data), -1);
         
         return S2C_OK;
     }
@@ -605,19 +665,25 @@ public class ClusterService {
     @CommandMapping(
             name="mig2pc",
             usage="mig2pc <cluster_name> <src_pgid> <dest_pgid> <range_from> <range_to>",
-            requiredState=ConfMaster.RUNNING)
-    public String mig2pc(String clusterName, String srcPgId, String destPgId,
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String mig2pc(@ClusterHint String clusterName, String srcPgId, String destPgId,
             Integer rangeFrom, Integer rangeTo) {
         // In Memory
-        Cluster cluster = clusterImo.get(clusterName);
-        List<PartitionGroupServer> pgsList = pgsImo.getList(
-                clusterName, Integer.valueOf(srcPgId));
-        List<Gateway> gwList = gwImo.getList(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
+        if (null == cluster) {
+            Logger.error(EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST + ", cluster:"
+                    + clusterName);
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        List<PartitionGroupServer> pgsList = container.getPgsList(clusterName, srcPgId);
+        List<Gateway> gwList = container.getGwList(clusterName);
         
         /* master pgs of source */
         PartitionGroupServer srcMaster = null;
         for (PartitionGroupServer pgs : pgsList) {
-            if (pgs.getData().getRole().equals(PGS_ROLE_MASTER)) {
+            if (pgs.getRole().equals(PGS_ROLE_MASTER)) {
                 srcMaster = pgs;
                 break;
             }
@@ -630,14 +696,7 @@ public class ClusterService {
             return "-ERR Migration error, source master is not exist";
         }
         
-        if (null == cluster) {
-            Logger
-                    .error(EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
-                            + ", cluster:" + clusterName);
-            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
-        }
-        
-        List<Integer> slotMap = cluster.getData().getPbPgMap();
+        List<Integer> slotMap = cluster.getPnPgMap();
         for (int slot = rangeFrom; slot <= rangeTo; slot++) {
             int owner_pgId = slotMap.get(slot);
             try {
@@ -657,7 +716,7 @@ public class ClusterService {
         }
 
         /* gateway ping check, before sending delay command */
-        String ret = cluster.isGatewaysAlive(gwImo);
+        String ret = cluster.isGatewaysAlive();
         if (null != ret) {
             return ret;
         }
@@ -805,8 +864,8 @@ public class ClusterService {
         String arguments = String
                 .format("{\"src_pg_id\":%s,\"dest_pg_id\":%s,\"range_from\":%d,\"range_to\":%d}",
                         srcPgId, destPgId, rangeFrom, rangeTo);
-        // TODO
-        workflowLogDao.log(0, severity, "Mig2PCCommand",
+        
+        workflowLogger.log(0, severity, "Mig2PCCommand",
                 LOG_TYPE_COMMAND, clusterName, msg, arguments);
     }
     
@@ -814,10 +873,16 @@ public class ClusterService {
             name="slot_set_pg",
             usage="slot_set_pg <cluster_name> <pg_range_inclusive> <pgid>\r\n" +
                     "Ex) slot_set_pg cluster1 0:8191 1",
-            requiredState=ConfMaster.RUNNING)
-    public String slotSetPg(String clusterName, String range, Integer pgid) {
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String slotSetPg(@ClusterHint String clusterName, String range, Integer pgid) {
         Integer rangeStart = Integer.parseInt(range.split(":")[0]);
         Integer rangeEnd = Integer.parseInt(range.split(":")[1]);
+
+        Cluster cluster = container.getCluster(clusterName);
+        if (null == cluster) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
         
         try {
             String ret = slotSetPgImpl(0, clusterName, pgid, rangeStart, rangeEnd);
@@ -838,13 +903,13 @@ public class ClusterService {
     private String slotSetPgImpl(long jobID, String clusterName, Integer pgid,
             Integer rangeStart, Integer rangeEnd) throws MgmtZooKeeperException {
         // In Memory
-        Cluster cluster = clusterImo.get(clusterName);
+        Cluster cluster = container.getCluster(clusterName);
         
         List<Integer> slotMap;
         int slotMapSize;
         
-        slotMapSize = cluster.getData().getKeySpaceSize();
-        slotMap = cluster.getData().getPbPgMap();
+        slotMapSize = cluster.getKeySpaceSize();
+        slotMap = cluster.getPnPgMap();
 
         if (rangeStart < 0 || rangeEnd < rangeStart || rangeEnd >= slotMapSize) {
             return "-ERR bad pg range:" + rangeStart + ":" + rangeEnd + " (try to slot_set_pg)";
@@ -854,29 +919,29 @@ public class ClusterService {
             slotMap.set(i, pgid);
         }
         
-        cluster.getData().setPnPgMap(slotMap);
+        Cluster.ClusterData clusterM = cluster.clonePersistentData();
+        clusterM.setPnPgMap(slotMap);
 
         List<Op> ops = new ArrayList<Op>();
             
-        ops.add(zookeeper.createReflectMemoryIntoZkOperation(cluster, -1));
-        ops.add(notificationDao.createGatewayAffinityUpdateOperation(cluster));
+		ops.add(Op.setData(cluster.getPath(), clusterM.toBytes(), -1));
+        ops.add(gwInfoNoti.createGatewayAffinityUpdateOperation(cluster));
 
         List<OpResult> results = null;
         try {
-            results = zookeeper.multi(ops);
-            OpResult.SetDataResult resultSetData = (OpResult.SetDataResult)results.get(0);
-            cluster.setStat(resultSetData.getStat());
+            results = zk.multi(ops);
+            cluster.setPersistentData(clusterM);
         } catch (MgmtZooKeeperException e) {
             Logger.error("Execute slot_set_pg fail. cluster: {}, pg: {}, range: {}-{}", 
                     new Object[]{clusterName, pgid, rangeStart, rangeEnd}, e);
             throw e;
         } finally {
-            zookeeper.handleResultsOfMulti(results);
+            zk.handleResultsOfMulti(results);
         }
         
         String message = "Set slot success. cluster:" + clusterName + "/pg:"
                 + pgid + ", range: " + rangeStart + "~" + rangeEnd;
-        workflowLogDao.log(jobID, SEVERITY_MODERATE, 
+        workflowLogger.log(jobID, SEVERITY_MODERATE, 
                 "SlotSetPg", LOG_TYPE_COMMAND, 
                 clusterName, message, 
                 String.format("{\"cluster_name\":\"%s\",\"pg_id\":\"%s\",\"range_start\":%d,\"range_end\":%d}", 
@@ -890,6 +955,280 @@ public class ClusterService {
             String clusterName, String range, Integer pgid) {
         lockHelper.root(READ).cluster(READ, clusterName).pgList(READ)
                 .pgsList(READ).pg(WRITE, String.valueOf(pgid)).gwList(READ);
+    }
+    
+    @CommandMapping(
+            name="cluster_on",
+            usage="cluster_on <cluster_name>\r\n",
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_OFF)
+    public String clusterOn(@ClusterHint String clusterName) {
+        // In Memory
+        Cluster cluster = container.getCluster(clusterName);
+        if (cluster == null) {
+            throw new IllegalArgumentException(
+                    EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
+                            + Cluster.fullName(clusterName));
+        }
+        
+        Logger.info("cluster_on {}", Cluster.fullName(clusterName));
+        
+        // Do
+        Cluster.ClusterData clusterM = cluster.clonePersistentData();
+        clusterM.mode = CLUSTER_ON;
+        try {
+        	zk.setData(cluster.getPath(),  clusterM.toBytes(), -1);
+        } catch (MgmtZooKeeperException e) {
+            return "-ERR Failed to cluster_on. zookeeper error. " + e.getMessage();
+        }
+        cluster.setPersistentData(clusterM);
+        
+        cluster.propagateModeToHeartbeatSession();
+        
+        return S2C_OK;
+    }
+    
+    @LockMapping(name="cluster_on")
+    public void clusterOnLock(HierarchicalLockHelper lockHelper,
+            String clusterName) {
+        lockHelper.root(READ).cluster(WRITE, clusterName);
+    }
+    
+    @CommandMapping(
+            name="cluster_off",
+            usage="cluster_off <cluster_name>\r\n",
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON)
+    public String clusterOff(@ClusterHint String clusterName) {
+        // In Memory
+        Cluster cluster = container.getCluster(clusterName);
+        if (cluster == null) {
+            throw new IllegalArgumentException(
+                    EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST
+                            + Cluster.fullName(clusterName));
+        }
+        
+        Logger.info("cluster_off {}", Cluster.fullName(clusterName));
+        
+        // Do
+        Cluster.ClusterData clusterM = cluster.clonePersistentData();
+        clusterM.mode = CLUSTER_OFF;
+        try {
+        	zk.setData(cluster.getPath(), clusterM.toBytes(), -1);
+        } catch (MgmtZooKeeperException e) {
+            return "-ERR Failed to cluster_off. zookeeper error. " + e.getMessage();
+        }
+        cluster.setPersistentData(clusterM);
+
+        cluster.propagateModeToHeartbeatSession();
+        
+        return S2C_OK;
+    }
+    
+    @LockMapping(name="cluster_off")
+    public void clusterOffLock(HierarchicalLockHelper lockHelper,
+            String clusterName) {
+        lockHelper.root(READ).cluster(WRITE, clusterName);
+    }
+    
+    @CommandMapping(
+            name="cluster_purge",
+            usage="cluster_purge <cluster_name>\r\n",
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_OFF)
+    public String clusterPurge(@ClusterHint String clusterName)
+            throws MgmtZooKeeperException, MgmtZNodeDoesNotExistException {
+        Cluster cluster = container.getCluster(clusterName);
+        if (cluster == null) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        // PGS
+        for (PartitionGroupServer pgs : container.getPgsList(clusterName)) {
+            pgsService.deletePgsObject(clusterName, pgs);
+        }
+        
+        // PG
+        for (PartitionGroup pg : container.getPgList(clusterName)) {
+            pgService.deletePgObject(clusterName, pg.getName());
+        }
+        
+        // GW
+        for (Gateway gw : container.getGwList(clusterName)) {
+            gwService.deleteGwObject(gw.getPmName(), clusterName, gw.getName());
+        }
+        
+        // Cluster
+        this.deleteClusterobject(clusterName);
+        
+        return S2C_OK;
+    }
+    
+    @LockMapping(name="cluster_purge")
+    public void clusterPurgeLock(HierarchicalLockHelper lockHelper,
+            String clusterName) {
+        lockHelper.root(READ).cluster(WRITE, clusterName);
+    }
+
+    @CommandMapping(
+            name="cluster_dump",
+            usage="cluster_dump <cluster_name>",
+            requiredState=ConfMaster.RUNNING,
+            requiredMode=CLUSTER_ON|CLUSTER_OFF)
+    public String clusterDump(@ClusterHint String clusterName) throws IOException {
+        Set<String> pmList = new HashSet<String>();
+                
+        // Cluster
+        Cluster cluster = container.getCluster(clusterName);
+        if (cluster == null) {
+            return EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
+        }
+        
+        ObjectNode cdj = JsonNodeFactory.instance.objectNode(); 
+        cdj.put("clusterName", clusterName);
+        cdj.put("clusterData", cluster.persistentDataToString());
+
+        // PG
+        ArrayNode pgl = cdj.putArray("pgList");
+        for (PartitionGroup pg : container.getPgList(clusterName)) {
+            PartitionGroupData pgd = pg.clonePersistentData();
+            pgd.cleanPgsId();
+            
+            ObjectNode pgj = JsonNodeFactory.instance.objectNode();
+            pgj.put("pgId", pg.getName());
+            pgj.put("pgData", pgd.toString()); 
+            pgl.add(pgj);
+        }
+        
+        // PGS
+        ArrayNode pgsl = cdj.putArray("pgsList");
+        for (PartitionGroupServer pgs : container.getPgsList(clusterName)) {
+            RedisServer rs = container.getRs(clusterName, pgs.getName());
+            ObjectNode pgsj = JsonNodeFactory.instance.objectNode();
+            pgsj.put("pgsId", pgs.getName());
+            pgsj.put("pgsData", pgs.persistentDataToString()); 
+            pgsj.put("rsData", rs.persistentDataToString());
+            pgsl.add(pgsj);
+            pmList.add(pgs.getPmName());
+        }
+
+        // GW
+        ArrayNode gwl = cdj.putArray("gwList");
+        for (Gateway gw : container.getGwList(clusterName)) {
+            ObjectNode gwj = JsonNodeFactory.instance.objectNode();
+            gwj.put("gwId", gw.getName());
+            gwj.put("gwData", gw.persistentDataToString()); 
+            gwl.add(gwj);
+            pmList.add(gw.getPmName());
+        }
+
+        // PM
+        ArrayNode pml = cdj.putArray("pmList");
+        for (String pmName : pmList) {
+            ObjectNode pmj = JsonNodeFactory.instance.objectNode();
+            pmj.put("pmName", pmName);
+            pmj.put("pmData", container.getPm(pmName).persistentDataToString());
+            pml.add(pmj);
+        }
+        
+        return mapper.writeValueAsString(cdj);
+    }
+    
+    @LockMapping(name="cluster_dump")
+    public void clusterDumpLock(HierarchicalLockHelper lockHelper,
+            String clusterName) {
+        lockHelper.root(READ).cluster(READ, clusterName);
+    }
+    
+    @CommandMapping(
+            name="cluster_load",
+            usage="cluster_load <dump>",
+            requiredState=ConfMaster.RUNNING)
+    public String clusterLoad(String data) throws NodeExistsException,
+            NoNodeException, MgmtZooKeeperException,
+            MgmtZNodeAlreayExistsException, MgmtZNodeDoesNotExistException, JsonParseException, JsonMappingException, IOException {
+        JsonNode cdj = mapper.readTree(data);
+
+        // Cluster
+        String clusterName = cdj.get("clusterName").getValueAsText();
+        if (container.getCluster(clusterName) != null) {
+            return EXCEPTIONMSG_DUPLICATED_CLUSTER;
+        }
+        ClusterData clusterData = mapper.readValue(
+                cdj.get("clusterData").getValueAsText(), ClusterData.class);
+
+        Cluster cluster = new Cluster(context, clusterData, clusterName);
+        createClusterZooKeeperZnodes(clusterName, cluster);
+        
+        // PM
+        JsonNode pmjs = cdj.get("pmList");
+        for (JsonNode pmj : pmjs) {
+            String pmName = pmj.get("pmName").getValueAsText();
+            if (container.getPm(pmName) == null) {
+                PhysicalMachineData pmData = mapper.readValue(
+                        pmj.get("pmData").getValueAsText(),
+                        PhysicalMachineData.class);
+                PhysicalMachine pm = new PhysicalMachine(context, pmData, pmName); 
+                pmService.createPmZooKeeperZnode(pm);
+            }
+        }
+
+        // PG
+        JsonNode pgjs = cdj.get("pgList");
+        for (JsonNode pgj : pgjs) {
+            String pgId = pgj.get("pgId").getValueAsText();
+            PartitionGroupData pgData = mapper.readValue(pgj.get("pgData")
+                    .getValueAsText(), PartitionGroupData.class);
+            PartitionGroup pg = new PartitionGroup(context, pgId, clusterName, pgData); 
+            pgService.createPgObject(pg);
+        }
+
+        // PGS
+        JsonNode pgsjs = cdj.get("pgsList");
+        for (JsonNode pgsj : pgsjs) {
+            String pgsId = pgsj.get("pgsId").getValueAsText();
+            
+            PartitionGroupServerData pgsData = mapper.readValue(
+                    pgsj.get("pgsData").getValueAsText(),
+                    PartitionGroupServerData.class);
+            PartitionGroupServer pgs = new PartitionGroupServer(context, pgsData, clusterName, pgsId, 0);
+            
+            RedisServerData rsData = mapper.readValue(pgsj.get("rsData")
+                    .getValueAsText(), RedisServerData.class); 
+            RedisServer rs = new RedisServer(context, rsData, clusterName, pgsId, pgsData.pgId, 0);
+            
+            PartitionGroup pg = container.getPg(clusterName, String.valueOf(pgsData.pgId));
+            pgsService.createPgsObject(cluster, pg, pgs, rs);
+        }
+        
+        // GW
+        List<Op> gwLookupAndaffinityOps = new ArrayList<Op>();
+        JsonNode gwjs = cdj.get("gwList");
+        for (JsonNode gwj : gwjs) {
+            String gwId = gwj.get("gwId").getValueAsText();
+            GatewayData gwData = mapper.readValue(gwj.get("gwData")
+                    .getValueAsText(), GatewayData.class);
+            Gateway gw = new Gateway(context, clusterName, gwId, gwData, 0);
+            gwService.createGwZooKeeperZnode(cluster, gw);
+
+            // GW lookup
+            gwInfoNoti.addCreateGatewayOp(gwLookupAndaffinityOps,
+                    gw.getClusterName(), gwId, gw.getPmIp(),
+                    gw.getPort());
+        }
+        
+        // Affinity
+        gwLookupAndaffinityOps.add(gwInfoNoti.createGatewayAffinityUpdateOperation(cluster));
+        zk.handleResultsOfMulti(zk.multi(gwLookupAndaffinityOps));
+
+        return S2C_OK;
+    }
+    
+    @LockMapping(name="cluster_load")
+    public void clusterLoadLock(HierarchicalLockHelper lockHelper,
+            String clusterName) {
+        lockHelper.pmList(WRITE);
+        lockHelper.root(WRITE);
     }
     
 }

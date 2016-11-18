@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 
 import org.junit.Test;
 
-import com.navercorp.nbasearc.confmaster.repository.znode.PartitionGroupData;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup.PartitionGroupData;
 
 public class PartitionGroupTest {
 
@@ -29,34 +29,32 @@ public class PartitionGroupTest {
         final int mgenHistorySize = 5;
         
         PartitionGroupData d = new PartitionGroupData();
-        d = PartitionGroupData.builder().from(d).addMasterGen(0L)
-                .addMasterGen(100L).addMasterGen(200L).build();
+        d.addMasterGen(0L);
+        d.addMasterGen(100L);
+        d.addMasterGen(200L);
         assertEquals(2, d.currentGen());
         assertEquals(3, d.getMasterGenMap().size());
 
         // Clean
-        d = PartitionGroupData.builder().from(d)
-                .cleanMGen(mgenHistorySize).build();
+        d.cleanMGen(mgenHistorySize);
         assertEquals(2, d.currentGen());
         assertEquals(Long.valueOf(200L), d.currentSeq());
         assertEquals(3, d.getMasterGenMap().size());
 
         // Add masterGen
-        d = PartitionGroupData.builder().from(d).addMasterGen(300L).build();
+        d.addMasterGen(300L);
         assertEquals(3, d.currentGen());
         assertEquals(Long.valueOf(300L), d.currentSeq());
         assertEquals(4, d.getMasterGenMap().size());
 
-        d = PartitionGroupData.builder().from(d)
-                .cleanMGen(mgenHistorySize).build();
+        d.cleanMGen(mgenHistorySize);
         assertEquals(3, d.currentGen());
         assertEquals(Long.valueOf(300L), d.currentSeq());
         assertEquals(4, d.getMasterGenMap().size());
         
-        d = PartitionGroupData.builder().from(d).addMasterGen(400L)
-                .addMasterGen(500L).build();
-        d = PartitionGroupData.builder().from(d)
-                .cleanMGen(mgenHistorySize).build();
+        d.addMasterGen(400L);
+        d.addMasterGen(500L);
+        d.cleanMGen(mgenHistorySize);
         assertEquals(mgenHistorySize, d.getMasterGenMap().size());
         assertEquals(5, d.currentGen());
         assertEquals(100L, mgenHistorySize, d.getMasterGenMap().get(1));

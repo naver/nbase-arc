@@ -20,23 +20,23 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSmrCommandExcep
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtSetquorumException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
-import com.navercorp.nbasearc.confmaster.server.imo.PartitionGroupImo;
 
 public abstract class CascadingWorkflow {
     final boolean cascading;
     final PartitionGroup pg;
-    final PartitionGroupImo pgImo;
+    final ClusterComponentContainer container;
     
     CascadingWorkflow(boolean cascading, PartitionGroup pg,
-            PartitionGroupImo pgImo) {
+            ClusterComponentContainer container) {
         this.cascading = cascading;
         this.pg = pg;
-        this.pgImo = pgImo;
+        this.container = container;
     }
     
     public void execute() throws Exception {
-        if (pgImo.get(pg.getName(), pg.getClusterName()) == null) {
+        if (container.getPg(pg.getClusterName(), pg.getName()) == null) {
             Logger.info("pg does not exist. exit workflow. {}", pg);
             return;
         }
