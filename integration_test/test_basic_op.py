@@ -52,7 +52,7 @@ class TestBasicOp(unittest.TestCase):
     def test_basic_op(self):
         util.print_frame()
         f = open("%s/test_basicop_output_redis" % constant.logdir, 'w')
-        p = util.exec_proc_async("../redis-2.8.8",
+        p = util.exec_proc_async("../redis-%s" % constant.REDISVER,
                             "./runtest --accurate",
                             True, None, f, None)
 
@@ -63,7 +63,7 @@ class TestBasicOp(unittest.TestCase):
     def test_basic_op_smr(self):
         util.print_frame()
         f = open("%s/test_basicop_output_smr" % constant.logdir, 'w')
-        p = util.exec_proc_async("../redis-2.8.8",
+        p = util.exec_proc_async("../redis-%s" % constant.REDISVER,
                             "./runtest_smr --accurate",
                             True, None, f, None)
 
@@ -75,7 +75,7 @@ class TestBasicOp(unittest.TestCase):
         util.print_frame()
         ip, port = util.get_rand_gateway(self.cluster)
         f = open("%s/test_basicop_output_gw" % constant.logdir, 'w')
-        p = util.exec_proc_async("../redis-2.8.8",
+        p = util.exec_proc_async("../redis-%s" % constant.REDISVER,
                             "./runtest_gw --accurate --gw-port "+str(port),
                             True, None, f, None)
 
