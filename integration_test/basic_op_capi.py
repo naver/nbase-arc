@@ -105,7 +105,7 @@ local_proxy_query_timeout_millis 10000
         capi_server = self.run_capi_server(arch)
 
         f = open("%s/test_basicop_output_capi%d" % (constant.logdir, arch), 'w')
-        p = util.exec_proc_async("../redis-2.8.8",
+        p = util.exec_proc_async("../redis-%s" % constant.REDISVER,
                             "./runtest_gw --accurate --gw-port 6200",
                             True, None, f, None)
 
