@@ -150,7 +150,7 @@ public class WorkflowExecutor {
             objects[i] = args[i];
         }
         WorkflowTemplate wf = new WorkflowTemplate(
-                workflow, objects, context, workflowMethods, lockMethods);        
+                workflow, objects, context, workflowMethods, lockMethods);
         ExecutionContext<Object> c = 
                 new ExecutionContext<Object>(wf, getContextType(workflow), executor);
         return executor.perform(c);

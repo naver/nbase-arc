@@ -69,6 +69,7 @@ public class Constant {
     public static final String EXCEPTIONMSG_NO_AVAILABLE_PGS = "-ERR there will be no available pgs.";
     public static final String EXCEPTIONMSG_INVALID_QUORUM = "-ERR invalid quorum.";
     
+    public static final String EXCEPTIONMSG_RUNNING_WORKFLOWS = "-ERR there are running workflows."; 
     public static final String EXCEPTIONMSG_NOT_SUPPORTED_WF = "-ERR not supported workflow.";
     public static final String EXCEPTIONMSG_NOT_FORCED_MODE = "-ERR not in forced mode.";
 

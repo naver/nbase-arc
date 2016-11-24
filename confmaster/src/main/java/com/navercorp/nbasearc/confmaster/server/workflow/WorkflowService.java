@@ -376,11 +376,9 @@ public class WorkflowService {
         }
 
         Logger.setMsgDecorator(new EpochMsgDecorator(epoch));
-        wf.pg.incWfCnt();
         try {
             wf.execute();
         } finally {
-            wf.pg.decWfCnt();
             Logger.setMsgDecorator(null);
         }
     }

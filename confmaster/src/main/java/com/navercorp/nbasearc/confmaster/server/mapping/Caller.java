@@ -29,8 +29,10 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.navercorp.nbasearc.confmaster.heartbeat.HBResult;
+import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
+import com.navercorp.nbasearc.confmaster.server.cluster.NodeType;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType;
@@ -110,6 +112,37 @@ public class Caller {
         }
         
         return null;
+    }
+    
+    public PartitionGroup getPartitionGroup(Object[] args, int offset, ClusterComponentContainer container) {
+        if (paramIdxClusterHint == -1) {
+            return null;
+        }
+
+        final int idx = offset + paramIdxClusterHint;
+        if (clusterHint == PartitionGroup.class) {
+            return (PartitionGroup) args[idx];
+        } else if (clusterHint == PartitionGroupServer.class) {
+            PartitionGroupServer pgs = (PartitionGroupServer) args[idx];
+            return container.getPg(pgs.getClusterName(), String.valueOf(pgs.getPgId()));
+        } else if (clusterHint == HeartbeatTarget.class) {
+            return getPgFromHeartbeatTarget((HeartbeatTarget) args[idx], container);
+        } else if (clusterHint == HBResult.class) {
+            return getPgFromHeartbeatTarget(((HBResult) args[idx]).getTarget(), container);
+        }
+
+        return null;
+    }
+
+    private PartitionGroup getPgFromHeartbeatTarget(HeartbeatTarget hbt, ClusterComponentContainer container) {
+        if (hbt.getNodeType() != NodeType.PGS) {
+            return null;
+        }
+        PartitionGroupServer pgs = (PartitionGroupServer) container.get(hbt.getPath());
+        if (pgs == null) {
+            return null;
+        }
+        return container.getPg(pgs.getClusterName(), String.valueOf(pgs.getPgId()));
     }
     
     protected void checkRequiredMode(int requiredMode) {
