@@ -1842,7 +1842,9 @@ class TestConfMaster(unittest.TestCase):
         init_cons = dict((s['id'], util.connection_count(s)) for s in self.cluster['servers'])
 
         # cluster off
-        ret = util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+        ret = util.await(30, True)(
+                lambda ret: ret == True,
+                lambda : util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name']))
         self.assertTrue(ret, 'Failed to cluster_off')
 
         # check workflows
@@ -1886,7 +1888,9 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ret, 'pgs_leave fail.')
 
         # cluster off
-        ret = util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+        ret = util.await(30, True)(
+                lambda ret: ret == True,
+                lambda : util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name']))
         self.assertTrue(ret, 'Failed to cluster_off')
 
         # check whether heartbeat connections are closed
@@ -1943,7 +1947,9 @@ class TestConfMaster(unittest.TestCase):
     def cluster_on_off_interleaved_fail(self):
         for s in self.cluster['servers']:
             # cluster off
-            ret = util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+            ret = util.await(30, True)(
+                    lambda ret: ret == True,
+                    lambda : util.cluster_off(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name']))
             self.assertTrue(ret, 'Failed to cluster_off')
 
             # shutdown pgs

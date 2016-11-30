@@ -36,6 +36,7 @@ import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtWorkflowWrongAr
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockCaller;
@@ -54,15 +55,19 @@ public class WorkflowTemplate implements Callable<Object> {
     private final DefaultConversionService cs = new DefaultConversionService();
     private final ClusterComponentContainer container;
     
+    private boolean doneIncreasingPgWfCnt = false;
+    private PartitionGroup pg;
+    
     public WorkflowTemplate(String workflow, Object[] args, 
             ApplicationContext context, Map<String, WorkflowCaller> workflowMethods, 
             Map<String, LockCaller> lockMethods) {
-        this.workflow  = workflow;
+        this.workflow = workflow;
         this.args = args;
         this.context = context;
         this.workflowMethods = workflowMethods;
         this.lockMethods = lockMethods;
-        this.container = context.getBean(ClusterComponentContainer.class); 
+        this.container = context.getBean(ClusterComponentContainer.class);
+        increaseWorkflowCountOfPg();
     }
     
     @Override
@@ -94,6 +99,8 @@ public class WorkflowTemplate implements Callable<Object> {
                 Logger.flush(DEBUG);
             }
         } finally {
+            decreaseWorkflowCountOfPg();
+        	
             // Release lock
             try {
                 releaseLock(lockHelper);
@@ -229,9 +236,34 @@ public class WorkflowTemplate implements Callable<Object> {
         
         return params;
     }
-    
+
     private void releaseLock(HierarchicalLockHelper lockHelper) {
         lockHelper.releaseAllLock();
     }
-    
+
+    private void increaseWorkflowCountOfPg() {
+        final WorkflowCaller caller = workflowMethods.get(workflow);
+        final int requiredMode = caller.getRequiredMode();
+        if (requiredMode == 0) {
+            return;
+        }
+
+        pg = caller.getPartitionGroup(args, 0, container);
+        if (pg == null) {
+            return;
+        }
+        pg.incWfCnt();
+        doneIncreasingPgWfCnt = true;
+    }
+
+    private void decreaseWorkflowCountOfPg() {
+        try {
+            if (doneIncreasingPgWfCnt) {
+                pg.decWfCnt();
+            }
+        } catch (Exception e) {
+            Logger.error("Failed to decrease workflow count of PG.", e);
+        }
+    }
+
 }

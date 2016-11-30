@@ -16,7 +16,10 @@
 
 package com.navercorp.nbasearc.confmaster.server.command;
 
+import static com.jayway.awaitility.Awaitility.await;
 import static com.navercorp.nbasearc.confmaster.Constant.*;
+import static com.navercorp.nbasearc.confmaster.Constant.Color.GREEN;
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.*;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.doNothing;
@@ -28,6 +31,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.type.TypeReference;
@@ -43,6 +47,10 @@ import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import com.navercorp.nbasearc.confmaster.BasicSetting;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
+import com.navercorp.nbasearc.confmaster.BasicSetting.MasterFinder;
+import com.navercorp.nbasearc.confmaster.BasicSetting.QuorumValidator;
+import com.navercorp.nbasearc.confmaster.BasicSetting.RoleColorValidator;
+import com.navercorp.nbasearc.confmaster.BasicSetting.SlaveFinder;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBState;
 import com.navercorp.nbasearc.confmaster.heartbeat.HBSessionHandler;
 import com.navercorp.nbasearc.confmaster.io.BlockingSocketImpl;
@@ -57,6 +65,8 @@ import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentMock;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer.PartitionGroupServerData;
+import com.navercorp.nbasearc.confmaster.server.mimic.IInjector;
+import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
 
 @RunWith(SpringJUnit4ClassRunner.class)
@@ -920,6 +930,133 @@ public class CommandTest extends BasicSetting {
         for (Thread thread : threads) {
             thread.join();
         }
+    }
+
+    @Test
+    public void clusterOff() throws Exception {
+        MimicSMR[] mimics = new MimicSMR[MAX_PGS];
+        PartitionGroup pg = getPg();
+
+        // Create master
+        mockPgs(0);
+        joinPgs(0);
+        PartitionGroupServer p0 = getPgs(0);
+        mimics[0] = mimic(p0);
+        mimics[0].init();
+        mockHeartbeatResult(p0, PGS_ROLE_LCONN, mimics[0].execute(PGS_PING));
+
+        MasterFinder masterCond = new MasterFinder(getPgsList());
+        await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
+        assertEquals(p0, masterCond.getMaster());
+        assertEquals(SERVER_STATE_NORMAL, p0.getState());
+        assertEquals(HB_MONITOR_YES, p0.getHeartbeat());
+        assertEquals(1, p0.getMasterGen());
+        assertEquals(0, pg.currentGen());
+        QuorumValidator quorumValidator = new QuorumValidator(mimics[0], 0);
+        await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // Create slave
+        for (int i = 1; i < 3; i++) {
+            mockPgs(i);
+            joinPgs(i);
+            PartitionGroupServer slave = getPgs(i);
+            mimics[i] = mimic(slave);
+            mimics[i].init();
+            mockHeartbeatResult(slave, PGS_ROLE_LCONN, mimics[i].execute(PGS_PING));
+
+            RoleColorValidator slaveCond = new RoleColorValidator(slave, PGS_ROLE_SLAVE, GREEN);
+            await("test for role slave.").atMost(assertionTimeout, SECONDS).until(slaveCond);
+            assertEquals(SERVER_STATE_NORMAL, slave.getState());
+            assertEquals(HB_MONITOR_YES, slave.getHeartbeat());
+            assertEquals(1, slave.getMasterGen());
+            assertEquals(0, pg.currentGen());
+
+            quorumValidator = new QuorumValidator(mimics[0], i);
+            await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+            // Master must not be changed
+            assertEquals(p0, masterCond.getMaster());
+            assertEquals(GREEN, p0.getColor());
+            assertEquals(PGS_ROLE_MASTER, p0.getRole());
+            assertEquals(SERVER_STATE_NORMAL, p0.getState());
+            assertEquals(HB_MONITOR_YES, p0.getHeartbeat());
+            assertEquals(1, p0.getMasterGen());
+            assertEquals(0, pg.currentGen());
+        }
+
+        // inject fault
+        for (int i = 1; i < 3; i++) {
+            mimics[i].setInjector(new IInjector<String, String>() {
+                @Override
+                public String inject(String rqst) {
+                    if (rqst.contains("role slave")) {
+                        return "-ERR fault injection";
+                    }
+                    return null;
+                }
+            });
+        }
+
+        // pgs_leave
+        Future<JobResult> future = commandExecutor.perform("pgs_leave " + p0.getClusterName() + " " + p0.getName(), null);
+        assertEquals(S2C_OK, future.get().getMessages().get(0));
+
+        future = commandExecutor.perform("pgs_lconn " + p0.getClusterName() + " " + p0.getName(), null);
+        assertEquals(S2C_OK, future.get().getMessages().get(0));
+
+        // cluster_off (fail)
+        future = commandExecutor.perform("cluster_off " + clusterName, null);
+        assertEquals(EXCEPTIONMSG_RUNNING_WORKFLOWS, future.get().getMessages().get(0));
+
+        // remove fault
+        for (int i = 1; i < 3; i++) {
+            mimics[i].setInjector(null);
+        }
+
+        // cluster_off (success)
+        await("cluster_off").atMost(30, SECONDS).until(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                Future<JobResult> future = commandExecutor.perform("cluster_off " + clusterName, null);
+                return S2C_OK.equals(future.get().getMessages().get(0));
+            }
+        });
+
+        // cluster_on (success)
+        future = commandExecutor.perform("cluster_on " + clusterName, null);
+        assertEquals(S2C_OK, future.get().getMessages().get(0));
+
+        masterCond = new MasterFinder(getPgsList());
+        await("test for role master.").atMost(assertionTimeout, SECONDS).until(masterCond);
+        PartitionGroupServer m = masterCond.getMaster();
+        assertEquals(2, m.getMasterGen());
+        assertEquals(1, pg.currentGen());
+
+        // check state of slave
+        SlaveFinder slaveCond = new SlaveFinder(getPgsList());
+        await("test for role slave.").atMost(assertionTimeout, SECONDS).until(slaveCond);
+        PartitionGroupServer slave = slaveCond.getSlaves().iterator().next();
+        assertEquals(SERVER_STATE_NORMAL, slave.getState());
+        assertEquals(HB_MONITOR_YES, slave.getHeartbeat());
+        assertEquals(2, slave.getMasterGen());
+        assertEquals(1, pg.currentGen());
+
+        quorumValidator = new QuorumValidator(mimics[Integer.valueOf(m.getName())], 1);
+        await("quorum validation.").atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // pgs_join
+        mimics[0].init();
+        future = commandExecutor.perform("pgs_join " + p0.getClusterName() + " " + p0.getName(), null);
+        assertEquals(S2C_OK, future.get().getMessages().get(0));
+        mockHeartbeatResult(p0, PGS_ROLE_LCONN, mimics[0].execute(PGS_PING));
+
+        // check state of pgs0
+        RoleColorValidator slaveValidator = new RoleColorValidator(p0, PGS_ROLE_SLAVE, GREEN);
+        await("test for role slave.").atMost(assertionTimeout, SECONDS).until(slaveValidator);
+        assertEquals(SERVER_STATE_NORMAL, p0.getState());
+        assertEquals(HB_MONITOR_YES, p0.getHeartbeat());
+        assertEquals(2, p0.getMasterGen());
+        assertEquals(1, pg.currentGen());
     }
 
     class Checker<T> implements Callable<Boolean> {

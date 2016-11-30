@@ -1010,6 +1010,16 @@ public class ClusterService {
         
         Logger.info("cluster_off {}", Cluster.fullName(clusterName));
         
+        List<PartitionGroup> pgList = container.getPgList(clusterName);
+        int wf = 0;
+        for (PartitionGroup pg : pgList) {
+        	wf += pg.getWfCnt();
+        }
+        
+        if (wf > 0) {
+        	return EXCEPTIONMSG_RUNNING_WORKFLOWS; 
+        }
+        
         // Do
         Cluster.ClusterData clusterM = cluster.clonePersistentData();
         clusterM.mode = CLUSTER_OFF;
