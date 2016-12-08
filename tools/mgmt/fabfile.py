@@ -421,7 +421,7 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
 
             if active_role == 'L':
                 target_is_lconn = True
-                show_info.show_pgs_list(cluster_name, pg_id, True)
+                show_info.show_pgs_list(cluster_name, pg_id, True, skip_warn=True)
                 print green('PGS state became LCONN')
                 break 
             else:
@@ -437,7 +437,7 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
             for id, data in pgs_list.items():
                 if data['smr_role'] == 'M':
                     master_election = True
-                    show_info.show_pgs_list(cluster_name, pg_id, True)
+                    show_info.show_pgs_list(cluster_name, pg_id, True, skip_warn=True)
                     print green('New master has been eleected.')
                     break 
 
