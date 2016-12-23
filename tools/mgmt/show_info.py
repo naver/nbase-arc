@@ -246,17 +246,17 @@ def pgs_view_style(pgs):
 
     return bold, color_function, abnormal
 
-def print_pgs_with_pg(cluster_json, pg_id, pgs_list):
+def print_pgs_with_pg(cluster_json, pg_id, pgs_list, skip_warn=False):
     # get specific pg info
     pg = cm.pg_info(cluster_json['data']['cluster_name'], pg_id, cluster_json)
 
     begin = True
-    pause = False
+    warn = False
     for pgs in sorted(pgs_list, key=lambda x: int(x['pgs_id'])):
         bold, color_function, abnormal = pgs_view_style(pgs)
 
         if abnormal:
-            pause = True
+            warn = True
 
         if begin:
             prefix_pg = PG_FORMAT[:-1] % pg
@@ -266,7 +266,7 @@ def print_pgs_with_pg(cluster_json, pg_id, pgs_list):
 
         print yellow(prefix_pg[:-1]), color_function(PGS_FORMAT % pgs, bold)
 
-    if pause:        
+    if not skip_warn and warn:        
         prompt("Press <Enter> to continue...")
 
 def menu_show_pg_list(cluster_name):
@@ -369,7 +369,7 @@ Args:
 Returns:
     False if there is an error, otherwise show_pgs_list() returns True.
 """
-def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None, memlog=False):
+def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None, memlog=False, skip_warn=False):
     # Check cluster
     if cluster_json == None:
         cluster_json = cm.cluster_info(cluster_name)
@@ -387,7 +387,7 @@ def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None, memlog=F
 
     # Print
     print yellow(PG_PGS_HEADER)
-    print_pgs_with_pg(cluster_json, pg_id, pgs_list)
+    print_pgs_with_pg(cluster_json, pg_id, pgs_list, skip_warn=skip_warn)
     print yellow(PG_PGS_PARTITION)
     print ''
 
