@@ -117,6 +117,11 @@ def rr_assert_equal (l1, r2):
     assert str(l1) == str(r2)
 
 def rr_assert_substring(subs, r):
+    if re.search(subs, r) == None:
+        print("\n==ASSERT_SUBSTRING===")
+        print(str(subs))
+        print(str(r))
+        print("==================")
     assert re.search(subs, r) != None
 
 def rr_toint(r):

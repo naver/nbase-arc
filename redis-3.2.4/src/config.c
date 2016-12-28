@@ -188,7 +188,7 @@ void loadServerConfigFromString(char *config) {
 #ifdef NBASE_ARC
         if (!arc_config_cmp_load(argc, argv, &err)) {
 	    if (err != NULL) goto loaderr;
-	}
+	} else
 #endif
         /* Execute config directives */
         if (!strcasecmp(argv[0],"timeout") && argc == 2) {

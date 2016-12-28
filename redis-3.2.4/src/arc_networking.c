@@ -586,6 +586,8 @@ read_query_from_client (aeEventLoop * el, int fd, void *privdata, int mask)
       freeClient (c);
       return;
     }
+
+  server.stat_net_input_bytes += nread;
   if (nread)
     {
       sdsIncrLen (c->smr->querybuf, nread);

@@ -86,3 +86,13 @@ uint16_t crc16(const char *buf, int len) {
             crc = (crc<<8) ^ crc16tab[((crc>>8) ^ *buf++)&0x00FF];
     return crc;
 }
+
+#ifdef NBASE_ARC
+uint16_t crc16sd(const char *buf, int len, uint16_t sd) {
+    int counter;
+    uint16_t crc = sd;
+    for (counter = 0; counter < len; counter++)
+            crc = (crc<<8) ^ crc16tab[((crc>>8) ^ *buf++)&0x00FF];
+    return crc;
+}
+#endif

@@ -30,12 +30,12 @@ typedef struct
   int error;
 } patchState;
 
-#define init_patchstate(p) do {    \
-  (p)->tempfile = NULL;            \
-  (p)->rdb = NULL;                 \
-  (p)->fp = NULL;                  \
-  (p)->ario = NULL;                \
-  (p)->error = 0;                  \
+#define init_patchstate(p) do {          \
+  (p)->tempfile = &(p)->tempfile_buf[0]; \
+  (p)->rdb = NULL;                       \
+  (p)->fp = NULL;                        \
+  (p)->ario = NULL;                      \
+  (p)->error = 0;                        \
 } while(0)
 
 // shortener
@@ -137,8 +137,14 @@ load_meta_info (char *filename, int will_need)
 
       if (scan->dt == ARCX_DUMP_DT_AUX)
 	{
-	  arc_rdb_load_aux_fields_hook (scan->d.aux.key, scan->d.aux.val,
-					&now);
+	  ret =
+	    arc_rdb_load_aux_fields_hook (scan->d.aux.key, scan->d.aux.val,
+					  &now);
+	  if (ret == 0)
+	    {
+	      decrRefCount (scan->d.aux.key);
+	      decrRefCount (scan->d.aux.val);
+	    }
 	  aux_in_aux = 1;
 	}
       else if (scan->dt == ARCX_DUMP_DT_KV)
@@ -151,7 +157,14 @@ load_meta_info (char *filename, int will_need)
 	      break;
 	    }
 	  // old version has nbase-arc aux fields in leading data portion
-	  arc_rdb_load_aux_fields_hook (scan->d.kv.key, scan->d.kv.val, &now);
+	  ret =
+	    arc_rdb_load_aux_fields_hook (scan->d.kv.key, scan->d.kv.val,
+					  &now);
+	  if (ret == 0)
+	    {
+	      decrRefCount (scan->d.aux.key);
+	      decrRefCount (scan->d.aux.val);
+	    }
 	  count++;
 	}
     }
@@ -173,7 +186,7 @@ get_rdb_filename_for (sds rdb_dir, long long target_ts)
   dir = opendir (rdb_dir);
   if (dir == NULL)
     {
-      serverLog (LL_WARNING, "Can't not open directory during rdbSave.");
+      serverLog (LL_WARNING, "Can't not open directory.");
       return NULL;
     }
 
@@ -219,7 +232,7 @@ static int
 load_objects_in_keyset (char *filename, robj * keyset)
 {
   dumpScan scan_s, *scan;
-  long long now = arc.smr_ts;
+  long long now = 0;
   redisDb *db = server.db + 0;
   int ret = C_OK;
 
@@ -653,6 +666,7 @@ dump_command (int argc, sds * argv)
   int ret;
   UNUSED (argc);
 
+  arc.cluster_mode = 1;		// use smr log time
   serverLog (LL_NOTICE, "target time:%lld, "
 	     "smrlog dir:%s, "
 	     "rdbfile dir:%s, "
@@ -695,6 +709,7 @@ dump_command (int argc, sds * argv)
     {
       serverLog (LL_NOTICE, "SMR log scan failed:%d", ret);
       smrlog_destroy (smrlog);
+      return C_ERR;
     }
 
   serverLog (LL_NOTICE, "Total SMR Log scanned:%lld", ksarg.count);
@@ -727,6 +742,7 @@ dump_command (int argc, sds * argv)
   smrlog_destroy (smrlog);
 
   /* Save up to date objects */
+  arc.smr_ts = target_ts;
   ret = make_patch_dump (rdbname, outfile, ksarg.keyset);
   if (ret == C_ERR)
     {
@@ -1230,8 +1246,15 @@ dump_iterator_command (int argc, sds * argv)
 
       if (scan->dt == ARCX_DUMP_DT_AUX)
 	{
-	  decrRefCount (scan->d.aux.key);
-	  decrRefCount (scan->d.aux.val);
+	  long long dummy;
+	  ret =
+	    arc_rdb_load_aux_fields_hook (scan->d.aux.key, scan->d.aux.val,
+					  &dummy);
+	  if (ret == 0)
+	    {
+	      decrRefCount (scan->d.aux.key);
+	      decrRefCount (scan->d.aux.val);
+	    }
 	}
       else if (scan->dt == ARCX_DUMP_DT_KV)
 	{
@@ -1278,7 +1301,7 @@ rdb_info_command (int argc, sds * argv)
   dir = opendir (rdb_dir);
   if (dir == NULL)
     {
-      serverLog (LL_WARNING, "Can't not open directory during rdbSave.");
+      serverLog (LL_WARNING, "Can't not open directory.");
       return C_ERR;
     }
 

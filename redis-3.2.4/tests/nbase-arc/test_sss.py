@@ -1,11 +1,13 @@
 import unittest
 import time
 import redis
+import sys
 
+access_port = 6379
 class TestSSS (unittest.TestCase):
 
     def setUp(self):
-        self.conn = redis.RedisClient('localhost', 6379)
+        self.conn = redis.RedisClient('localhost', access_port)
         self.r = self.conn.do_generic_request
         self.assert_equal = redis.rr_assert_equal
         self.assert_subs = redis.rr_assert_substring
@@ -872,4 +874,8 @@ class TestSSS (unittest.TestCase):
         assert(int(self.r('s3lttl', 'ks', 'uuid', 'svc5', 'key', 'val')) <= 8000)
 
 if __name__ == '__main__':
+    if len(sys.argv) == 2:
+        access_port = int(sys.argv.pop())
+    elif len(sys.argv) > 2:
+        raise 'only <port> argument is allowed'
     unittest.main()

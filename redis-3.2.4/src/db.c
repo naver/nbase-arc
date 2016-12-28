@@ -1038,6 +1038,9 @@ void pttlCommand(client *c) {
 void persistCommand(client *c) {
     dictEntry *de;
 
+#ifdef NBASE_ARC
+    expireIfNeeded(c->db,c->argv[1]);
+#endif
     de = dictFind(c->db->dict,c->argv[1]->ptr);
     if (de == NULL) {
         addReply(c,shared.czero);

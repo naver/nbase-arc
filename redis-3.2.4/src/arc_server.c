@@ -255,7 +255,7 @@ init_config (void)
   arc.debug_total_mem_kb = 0LL;
   arc.debug_free_mem_kb = 0LL;
   arc.debug_cached_mem_kb = 0LL;
-  arc.debug_redis_mem_rss_kb;
+  arc.debug_redis_mem_rss_kb = 0LL;
 #endif
 }
 
@@ -790,6 +790,7 @@ trac_ops (void)
   arc.lcon_ops_sec_samples[arc.ops_sec_idx] = ops_sec;
   arc.lcon_ops_sec_last_sample_ops = arc.stat_numcommands_lcon;
 
+  arc.ops_sec_last_sample_time = mstime();
   arc.ops_sec_idx = (arc.ops_sec_idx + 1) % STATS_METRIC_SAMPLES;
 }
 
@@ -1105,6 +1106,81 @@ arc_handle_command_rewrite (client * c)
       return 1;
     }
   return 0;
+}
+
+// used to make short line
+#define _gllorerrr getLongLongFromObjectOrReply
+int
+arc_debug_hook (client * c)
+{
+#if defined(COVERAGE_TEST)
+  long long total, free, cached, redis_rss;
+
+  if (strcasecmp (c->argv[1]->ptr, "memory") || c->argc != 6)
+    {
+      return 0;
+    }
+
+  GOTOIF (err, _gllorerrr (c, c->argv[2], &total, NULL) != C_OK);
+  GOTOIF (err, _gllorerrr (c, c->argv[3], &free, NULL) != C_OK);
+  GOTOIF (err, _gllorerrr (c, c->argv[4], &cached, NULL) != C_OK);
+  GOTOIF (err, _gllorerrr (c, c->argv[5], &redis_rss, NULL) != C_OK);
+  if (total == 0 && free == 0 && cached == 0)
+    {
+      arc.debug_mem_usage_fixed = 0;
+    }
+  else
+    {
+      arc.debug_mem_usage_fixed = 1;
+    }
+
+  if (arc.debug_total_mem_kb != (unsigned long long) total)
+    {
+      arc.debug_total_mem_kb = total;
+      arcx_set_memory_limit_values ();
+    }
+  else
+    {
+      arc.debug_total_mem_kb = total;
+    }
+  arc.debug_free_mem_kb = free;
+  arc.debug_cached_mem_kb = cached;
+  arc.debug_redis_mem_rss_kb = redis_rss;
+  addReply (c, shared.ok);
+  return 1;
+
+err:
+  return 1;
+#else
+  return 0;
+#endif
+}
+
+void
+crc16Command (client * c)
+{
+  robj *o, *new;
+  long long oldhash, newhash;
+  sds val;
+
+  val = c->argv[2]->ptr;
+  o = lookupKeyWrite (c->db, c->argv[1]);
+  if (o != NULL && checkType (c, o, OBJ_STRING))
+    return;
+  if (getLongLongFromObjectOrReply (c, o, &oldhash, NULL) != C_OK)
+    return;
+
+  newhash = crc16sd (val, sdslen (val), oldhash);
+  new = createStringObjectFromLongLong (newhash);
+  if (o)
+    dbOverwrite (c->db, c->argv[1], new);
+  else
+    dbAdd (c->db, c->argv[1], new);
+  signalModifiedKey (c->db, c->argv[1]);
+  server.dirty++;
+  addReply (c, shared.colon);
+  addReply (c, new);
+  addReply (c, shared.crlf);
 }
 
 #endif

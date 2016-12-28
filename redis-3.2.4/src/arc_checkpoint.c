@@ -3,6 +3,7 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <dirent.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -15,6 +16,8 @@ static void send_bulk_to_target (aeEventLoop * el, int fd, void *privdata,
 				 int mask);
 static void mig_start (client * c, int argc, robj ** argv);
 static void mig_end (client * c);
+static int delete_outdated_backups (void);
+static int backup_if_needed (char *filename);
 
 /* ----------------- */
 /* Local definitions */
@@ -203,6 +206,121 @@ mig_end (client * c)
   return;
 }
 
+static int
+delete_outdated_backups (void)
+{
+  DIR *dir;
+  struct dirent *entry;
+  char dumpname[ARC_MAX_RDB_BACKUPS + 1][NAME_MAX + 1];
+  time_t dump_mtime[ARC_MAX_RDB_BACKUPS + 1];
+  int i, max = 0;
+
+  if (arc.num_rdb_backups < 1)
+    {
+      return C_OK;
+    }
+
+  dir = opendir (".");
+  if (dir == NULL)
+    {
+      serverLog (LL_WARNING, "Can't not open directory for rdb.");
+      return C_ERR;
+    }
+
+  /* Maintain filename array sorted by modified time and whose count is same as count of rdb backups.
+   * On each iteration, find dump file which is the oldest in array, and delete the file. */
+  while ((entry = readdir (dir)) != NULL)
+    {
+      if (!strncmp (entry->d_name, "dump", 4)
+	  && !strncmp (entry->d_name + strlen (entry->d_name) - 4, ".rdb", 4))
+	{
+	  struct stat filestat;
+	  time_t temp_mtime;
+	  char temp_fname[NAME_MAX + 1];
+
+	  stat (entry->d_name, &filestat);
+	  if (!S_ISREG (filestat.st_mode))
+	    continue;
+
+	  if (max == 0)
+	    {
+	      dump_mtime[0] = filestat.st_mtime;
+	      strncpy (dumpname[0], entry->d_name, NAME_MAX);
+	      max++;
+	      continue;
+	    }
+
+	  /* Insert new element to array in sorted order.
+	   * And, find the oldest file */
+	  temp_mtime = filestat.st_mtime;
+	  strncpy (temp_fname, entry->d_name, NAME_MAX);
+
+	  for (i = max - 1; i >= 0; i--)
+	    {
+	      if (dump_mtime[i] >= temp_mtime)
+		{
+		  dump_mtime[i + 1] = temp_mtime;
+		  strcpy (dumpname[i + 1], temp_fname);
+		  break;
+		}
+
+	      dump_mtime[i + 1] = dump_mtime[i];
+	      strcpy (dumpname[i + 1], dumpname[i]);
+	      if (i == 0)
+		{
+		  dump_mtime[0] = temp_mtime;
+		  strcpy (dumpname[0], temp_fname);
+		}
+	    }
+
+	  /* After finding the oldest file, 
+	   * delete the file if size of array is more than count of num_rdb_backups */
+	  if (max < arc.num_rdb_backups)
+	    {
+	      max++;
+	    }
+	  else
+	    {
+	      unlink (dumpname[max]);
+	    }
+	}
+    }
+  closedir (dir);
+  return C_OK;
+}
+
+static int
+backup_if_needed (char *filename)
+{
+  char backupfile[256];
+  int off;
+  struct stat filestat;
+
+  if (arc.num_rdb_backups < 1)
+    {
+      return C_OK;
+    }
+
+  if (stat (filename, &filestat) != -1 && S_ISREG (filestat.st_mode))
+    {
+      strcpy (backupfile, "dump-");
+      off =
+	strftime (backupfile + 5, sizeof (backupfile) - 5, "%Y%m%d-%T",
+		  localtime (&filestat.st_mtime));
+      snprintf (backupfile + 5 + off, sizeof (backupfile) - 5 - off,
+		"-%d.rdb", (int) getpid ());
+
+      if (rename (filename, backupfile) == -1)
+	{
+	  serverLog (LL_WARNING, "Error backing up rdb file: %s",
+		     strerror (errno));
+	  return C_ERR;
+	}
+    }
+
+  return C_OK;
+}
+
 /* ---------------------- */
 /* Exported arcx function */
 /* ---------------------- */
@@ -241,7 +359,7 @@ arc_bgsave_done_handler (int ok)
   //  -----------------------------------------------
   if (arc.cluster_mode && arc.checkpoint_slots == NULL)
     {
-      if (!ok)
+      if (ok != C_OK)
 	{
 	  // already logged
 	}
@@ -279,7 +397,7 @@ arc_bgsave_done_handler (int ok)
       return;
     }
 
-  if (!ok)
+  if (ok != C_OK)
     {
       serverLog (LL_WARNING,
 		 "CHECKPOINT failed. background child returned an error");
@@ -309,7 +427,8 @@ arc_bgsave_done_handler (int ok)
 }
 
 int
-arc_rdb_save_rio_with_file (rio * rdb, FILE * fp, int *error)
+arc_rdb_save_rio_with_file (rio * rdb, char *target_filename, FILE * fp,
+			    int *error)
 {
   struct arcRio ario;
   int ret;
@@ -323,13 +442,24 @@ arc_rdb_save_rio_with_file (rio * rdb, FILE * fp, int *error)
       return C_ERR;
     }
 
+  ret = delete_outdated_backups ();
+  if (ret == C_ERR)
+    {
+      return ret;
+    }
+
   // do wrapped call
   rdb->ario = &ario;
   ret = rdbSaveRio (rdb, error);
   rdb->ario = NULL;
 
+
   // teardown
   // do not: close (ario.fd);
+  if (ret == C_OK)
+    {
+      ret = backup_if_needed (target_filename);
+    }
   return ret;
 }
 

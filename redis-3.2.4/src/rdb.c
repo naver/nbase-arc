@@ -896,7 +896,7 @@ int rdbSave(char *filename) {
 
     rioInitWithFile(&rdb,fp);
 #ifdef NBASE_ARC
-    if (arc_rdb_save_rio_with_file(&rdb, fp, &error) == C_ERR) {
+    if (arc_rdb_save_rio_with_file(&rdb, filename, fp, &error) == C_ERR) {
 #else
     if (rdbSaveRio(&rdb,&error) == C_ERR) {
 #endif

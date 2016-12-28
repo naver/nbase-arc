@@ -311,6 +311,7 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     {"migend",migendCommand,1,"aw",0,NULL,0,0,0,0,0},                 \
     {"migconf",migconfCommand,-2,"aw",0,NULL,0,0,0,0,0},              \
     {"migpexpireat",migpexpireatCommand,3,"w",0,NULL,1,1,1,0,0},      \
+    {"crc16",crc16Command,3,"wm",0,NULL,1,1,1,0,0},                   \
     {"bping",bpingCommand,1,"r",0,NULL,0,0,0,0,0},                    \
     {"quit",quitCommand,1,"r",0,NULL,0,0,0,0,0}                       \
 
@@ -340,6 +341,9 @@ extern mstime_t arc_mstime (void);
 extern long long arc_get_instantaneous_metric (long long *samples);
 // return 1 if handled, 0 otherwise
 extern int arc_handle_command_rewrite (client * c);
+// return 1 if handled, 0 otherwise
+extern int arc_debug_hook(client *c);
+extern void crc16Command(client *c);
 
 /* arc_networking.c */
 extern void arc_smrc_create (client * c);
@@ -362,7 +366,7 @@ extern int arc_rio_peek_key (rio * rdb, int rdbtype, robj * key);
 
 /* arc_checkpoint.c */
 extern void arc_bgsave_done_handler (int ok);
-extern int arc_rdb_save_rio_with_file (rio * rdb, FILE * fp, int *error);
+extern int arc_rdb_save_rio_with_file (rio * rdb, char *target_filename, FILE * fp, int *error);
 extern int arc_rdb_save_onwrite (rio * rdb, int *error);
 extern int arc_rdb_save_skip (sds keystr);
 extern int arc_rdb_save_aux_fields (rio * rdb);
@@ -381,6 +385,9 @@ extern void arc_init_bgdel (void);
 extern void arc_incr_ref_count (robj * o);
 extern void arc_decr_ref_count (robj * o);
 extern void arc_bgdel (void *arg1, void *arg2);
+
+/* crc16.c */
+extern uint16_t crc16sd(const char *buf, int len, uint16_t sd);
 
 /* ------------------------- */
 /* Redis commands extensions */

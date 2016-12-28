@@ -272,6 +272,8 @@ void debugCommand(client *c) {
         return;
     }
 
+    if (arc_debug_hook(c) == 1) return;
+
     if (!strcasecmp(c->argv[1]->ptr,"help")) {
         void *blenp = addDeferredMultiBulkLength(c);
         int blen = 0;
