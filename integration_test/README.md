@@ -7,6 +7,7 @@ We only checked these test cases on specific environment. Result of test on diff
 * CentOS 6.3 & CentOS 6.6
 * python 2.7
 * tcl 8.5+ required
+* java 1.7
 
 #### Build nbase-arc with gcov option.
 ```
