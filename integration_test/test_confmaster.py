@@ -794,12 +794,12 @@ class TestConfMaster(unittest.TestCase):
                 util.log('wait... %d' % i)
                 time.sleep(1)
 
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[INITIALIZATION] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[INITIALIZATION] check gateway affinity fail.')
 
             ###################
             # Start C clients #
@@ -844,12 +844,12 @@ class TestConfMaster(unittest.TestCase):
                 util.log('wait... %d' % i)
                 time.sleep(1)
 
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5},{"affinity":"A4096N4096","gw_id":100}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[ADD GATEWAY] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[ADD GATEWAY] check gateway affinity fail.')
 
             #####################################
             # Delete gateway and check affinity #
@@ -862,12 +862,12 @@ class TestConfMaster(unittest.TestCase):
                 util.log('wait... %d' % i)
                 time.sleep(1)
 
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[DELETE GATEWAY] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[DELETE GATEWAY] check gateway affinity fail.')
 
             #########################################
             # Migration - Add PG and check affinity #
@@ -951,7 +951,6 @@ class TestConfMaster(unittest.TestCase):
                 +-------+---------------------+--------+----------------+------+-----------+
             """
 
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = []
             expected_affinity.append(
                 sorted(
@@ -961,10 +960,10 @@ class TestConfMaster(unittest.TestCase):
                 sorted(
                     json.loads('[{"affinity":"A2000R2096N2000R2096","gw_id":0},{"affinity":"A2000R2096N2000R2096","gw_id":1},{"affinity":"A2000R2096N2000R2096","gw_id":2},{"affinity":"N2000A6192","gw_id":3},{"affinity":"N2000A6192","gw_id":4},{"affinity":"N2000A6192","gw_id":5}]'),
                     key=lambda x: int(x['gw_id'])))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity in expected_affinity)
-            self.assertTrue(ok, '[ADD PG] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
-            expected_affinity.remove(real_affinity)
+            ok = util.await(10)(
+                lambda real_affinity : (expected_affinity.remove(real_affinity) or True) if (real_affinity in expected_affinity) else False, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[ADD PG] check gateway affinity fail.')
 
             ##################################
             # Role change and check affinity #
@@ -1008,10 +1007,10 @@ class TestConfMaster(unittest.TestCase):
                 +-------+---------------------+--------+----------------+------+-----------+
             """
 
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity[0])
-            self.assertTrue(ok, '[ROLE CHANGE] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity[0], 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[ROLE CHANGE] check gateway affinity fail.')
 
             ##########################################
             # Master PGS Failover and check affinity #
@@ -1064,12 +1063,12 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail.')
 
             # recovery
             ret = testbase.request_to_start_smr(server)
@@ -1108,12 +1107,12 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[MASTER PGS FAILOVER] check gateway affinity fail.')
 
             #########################################
             # Slave PGS Failover and check affinity #
@@ -1165,14 +1164,13 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N4096A2000N2096","gw_id":3},{"affinity":"N4096A2000N2096","gw_id":4},{"affinity":"N4096A2000N2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
+            ok = util.await(10)(
+                lambda real_affinity : (util.log("real_affinity:%s" % real_affinity) or True) if (real_affinity == expected_affinity) else False, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
             util.log("expected_affinity:%s" % expected_affinity)
-            util.log("real_affinity:%s" % real_affinity)
-            self.assertTrue(ok, '[SLAVE PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            self.assertTrue(ok, '[SLAVE PGS FAILOVER] check gateway affinity fail.')
 
             # recovery
             ret = testbase.request_to_start_smr(server)
@@ -1211,12 +1209,12 @@ class TestConfMaster(unittest.TestCase):
             """
 
             # check affinity
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N2000A2096","gw_id":0},{"affinity":"A4096N2000A2096","gw_id":1},{"affinity":"A4096N2000A2096","gw_id":2},{"affinity":"N2000R2096A2000R2096","gw_id":3},{"affinity":"N2000R2096A2000R2096","gw_id":4},{"affinity":"N2000R2096A2000R2096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[SLAVE PGS FAILOVER] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[SLAVE PGS FAILOVER] check gateway affinity fail.')
 
             ################################
             # Delete PG and check affinity #
@@ -1230,12 +1228,12 @@ class TestConfMaster(unittest.TestCase):
             ret = util.pg_del(cluster, servers, leader_cm, stop_gw=False)
             self.assertTrue(ret, '[DELETE PG] delete pg fail.')
 
-            affinity_data = util.get_gateway_affinity(cluster['cluster_name'])
             expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
-            real_affinity = sorted(json.loads(affinity_data), key=lambda x: int(x['gw_id']))
-            ok = (real_affinity == expected_affinity)
-            self.assertTrue(ok, '[DELETE PG] check gateway affinity fail. affinity_data:"%s"' % affinity_data)
+            ok = util.await(10)(
+                lambda real_affinity : real_affinity == expected_affinity, 
+                lambda : sorted(json.loads(util.get_gateway_affinity(cluster['cluster_name'])), key=lambda x: int(x['gw_id'])))
+            self.assertTrue(ok, '[DELETE PG] check gateway affinity fail.')
 
             ############################
             # Check affinity hit ratio #
