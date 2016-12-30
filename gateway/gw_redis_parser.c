@@ -103,7 +103,7 @@ parseLine (sbuf_pos start, sbuf_pos last, sbuf_pos * ret_next,
   size_t offset;
   int ret;
 
-  ret = sbuf_memchr (start, last, '\r', &newline, &offset);
+  ret = sbuf_strchr (start, last, '\r', &newline, &offset);
   if (ret == ERR)
     {
       return PARSE_INSUFFICIENT_DATA;
@@ -186,7 +186,7 @@ inlineParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
 
   last = stream_last_pos (stream);
 
-  ret = sbuf_memchr (ctx->pos, last, '\n', &newline, &len);
+  ret = sbuf_strchr (ctx->pos, last, '\n', &newline, &len);
   if (ret == ERR)
     {
       if (sbuf_offset_len (ctx->pos, last) > PARSE_INLINE_MAX_SIZE)

@@ -73,7 +73,7 @@ start_server {tags {"protocol"}} {
             set test_time_limit 30
             while 1 {
                 if {[catch {
-                    puts -nonewline $s payload
+                    puts -nonewline $s $payload
                     flush $s
                     incr payload_size [string length $payload]
                 }]} {

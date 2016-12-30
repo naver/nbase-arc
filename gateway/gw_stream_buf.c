@@ -41,7 +41,7 @@ struct sbuf_page
   sbuf_hdr *my_hdr;
   size_t size;
   size_t len;
-  char data[];
+  char data[1];
 };
 
 struct sbuf
@@ -98,6 +98,7 @@ hdr_add_tail_page (sbuf_hdr * hdr)
   page->my_hdr = hdr;
   page->size = hdr->page_size;
   page->len = 0;
+  page->data[0] = '\0';
   hdr->num_page++;
   return page;
 }
@@ -137,6 +138,7 @@ page_append_buf (sbuf_page * page, void *buf, size_t len)
 
   memcpy (page->data + page->len, buf, copy_len);
   page->len += copy_len;
+  page->data[page->len] = '\0';
   return copy_len;
 }
 
@@ -170,8 +172,10 @@ sbuf_mempool_create (size_t page_size)
 
   mp = zmalloc (sizeof (sbuf_mempool));
   mp->mp_sbuf = mempool_create (sizeof (sbuf), MEMPOOL_DEFAULT_POOL_SIZE);
+
+  // The size of sbuf_page includes meta header, data buffer, and a null termination byte
   mp->mp_sbuf_page =
-    mempool_create (offsetof (sbuf_page, data) + page_size,
+    mempool_create (sizeof (sbuf_page) + page_size,
 		    MEMPOOL_DEFAULT_POOL_SIZE);
   return mp;
 }
@@ -487,6 +491,7 @@ stream_append_read (sbuf_hdr * hdr, int fd)
       return nread;
     }
   page->len += nread;
+  page->data[page->len] = '\0';
   if (page_avail_size (page) == 0)
     {
       page = page_get_appendable_next (page);
@@ -749,7 +754,7 @@ sbuf_offset_char (sbuf_pos start, sbuf_pos last, size_t offset,
 }
 
 int
-sbuf_memchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
+sbuf_strchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
 	     size_t * ret_offset)
 {
   sbuf_hdr *hdr;
@@ -777,19 +782,25 @@ sbuf_memchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
       {
 	len -= page->size - last.offset;
       }
-    ptr = memchr (page->data + offset, c, len);
-    if (ptr)
+    ptr = strchrnul (page->data + offset, c);
+    // Make sure ptr doesn't cross the boundary of next buffer.
+    if (*ptr != '\0' && ptr < page->data + offset + len)
       {
 	ret_pos->page = page;
 	ret_pos->offset = ptr - page->data;
 	*ret_offset = pos + ptr - (page->data + offset);
 	return OK;
       }
-    pos += len;
+    // ptr is null terminated if it's inside the page boundary and the pointed value is null.
+    if (ptr < page->data + offset + len)
+      {
+	break;
+      }
     if (page == last.page)
       {
 	break;
       }
+    pos += len;
   }
   return ERR;
 }

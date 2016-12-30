@@ -981,7 +981,13 @@ processMultiBulk (client_t * c)
 static int
 processInline (client_t * c)
 {
-  char *newline = strchr (c->querybuf, '\n');
+  char *newline;
+  int count, argc, j, has_cr, ret;
+  sds *split, *argv, aux;
+  size_t querylen, *argvlen;
+
+  newline = strchr (c->querybuf, '\n');
+  has_cr = 0;
 
   if (newline == NULL)
     {
@@ -992,27 +998,65 @@ processInline (client_t * c)
 	}
       return -1;
     }
+
   if (newline != c->querybuf && *(newline - 1) == '\r')
-    newline--;
-
-  *newline = '\0';
-
-  if (newline - c->querybuf == 4 && !strcasecmp (c->querybuf, "quit"))
     {
-      addReplyStrLen (c, "+OK\r\n", 5);
+      newline--;
+      has_cr = 1;
+    }
+
+  querylen = newline - (c->querybuf);
+  aux = sdsnewlen (c->querybuf, querylen);
+  split = sdssplitargs (aux, &count);
+  sdsfree (aux);
+  if (split == NULL)
+    {
+      addReplyStr (c,
+		   "-ERR Protocol error: unbalanced quotes in request\r\n");
       c->flags |= REDIS_CLOSE_AFTER_REPLY;
       return -1;
     }
-  if (newline - c->querybuf == 0)
+
+  argv = malloc (sizeof (sds) * count);
+  argvlen = malloc (sizeof (size_t) * count);
+  argc = 0;
+  for (j = 0; j < count; j++)
     {
-      sdsrange (c->querybuf, 2, -1);	// sdsrange 2 bytes ("\r\n")
-      return 0;
+      if (sdslen (split[j]))
+	{
+	  argv[argc] = sdsdup (split[j]);
+	  argvlen[argc] = sdslen (split[j]);
+	  argc++;
+	}
+    }
+  sdsfreesplitres (split, count);
+
+  if (argc == 1 && !strcasecmp (argv[0], "quit"))
+    {
+      addReplyStrLen (c, "+OK\r\n", 5);
+      c->flags |= REDIS_CLOSE_AFTER_REPLY;
+      ret = -1;
+      goto close_return;
     }
 
-  arc_append_command (c->rqst, c->querybuf);
-  c->total_append_command++;
-  sdsrange (c->querybuf, newline - c->querybuf + 2, -1);
-  return 0;
+  ret = 0;
+  if (argc > 0)
+    {
+      arc_append_commandcv (c->rqst, argc, (const char **) argv, argvlen);
+      c->total_append_command++;
+    }
+
+close_return:
+
+  while (argc--)
+    {
+      sdsfree (argv[argc]);
+    }
+  free (argv);
+  free (argvlen);
+
+  sdsrange (c->querybuf, newline - c->querybuf + 1 + has_cr, -1);
+  return ret;
 }
 
 static void

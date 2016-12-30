@@ -81,7 +81,7 @@ int sbuf_offset (sbuf_pos start, sbuf_pos last, size_t offset,
 ssize_t sbuf_offset_len (sbuf_pos start, sbuf_pos last);
 int sbuf_offset_char (sbuf_pos start, sbuf_pos last, size_t offset,
 		      char *ret_char);
-int sbuf_memchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
+int sbuf_strchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
 		 size_t * ret_offset);
 ssize_t sbuf_writev (sbuf ** bufv, ssize_t nbuf, int fd);
 void sbuf_reset_write_marker (sbuf * buf);
