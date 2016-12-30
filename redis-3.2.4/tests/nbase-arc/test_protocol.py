@@ -69,15 +69,13 @@ class TestProcotol (unittest.TestCase):
     def test_generic_wrong_number_of_args(self):
         self.assert_subs(".*wrong.*arguments.*ping.*", self.r('ping', 'x', 'y', 'z'))
 
-    # TODO c api server does not handle this.
-    #def test_unbalanced_number_of_quotes(self):
-    #    self.send('set """test-key""" test-value\r\n')
-    #    self.send('ping\r\n')
-    #    self.assert_subs(".*unbalanced.*", self.recv())
+    def test_unbalanced_number_of_quotes(self):
+        self.send('set """test-key""" test-value\r\n')
+        self.send('ping\r\n')
+        self.assert_subs(".*unbalanced.*", self.recv())
 
     @timeout(1)
     def test_protocol_desync_regiression(self):
-        return # disabled for now (gateway has a issue on this test case TODO)
         for seq in ['\x00', '*\x00', '$\x00']:
             self.send(seq)
             while True:
