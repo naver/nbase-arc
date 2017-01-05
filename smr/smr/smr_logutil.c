@@ -244,7 +244,7 @@ usertime2ts (long long usertime)
   usertime /= 100;
 
   tm.tm_mon = usertime % 100 - 1;
-  _func_check (tm.tm_mon > 0 && tm.tm_mon < 12);
+  _func_check (tm.tm_mon >= 0 && tm.tm_mon < 12);
   usertime /= 100;
 
   tm.tm_year = usertime - 1900;

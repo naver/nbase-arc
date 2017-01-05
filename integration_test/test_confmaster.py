@@ -1243,6 +1243,61 @@ class TestConfMaster(unittest.TestCase):
             util.log('affinity-hit-ratio:%0.3f' % hit_ratio)
             self.assertGreater(hit_ratio, 0.90, '[AFFINITY_HIT_RATIO] too low affinity-hit-ratio:%0.3f' % hit_ratio)
 
+            ##################
+            # Write Affinity #
+            ##################
+            """
+                +-------+----------------+------+-------+
+                | GW_ID |       IP       | PORT | STATE |
+                +-------+----------------+------+-------+
+                |     0 |    127.0.0.100 | 8200 |  N(N) |
+                |     1 |    127.0.0.100 | 9200 |  N(N) |
+                |     2 |    127.0.0.100 |10200 |  N(N) |
+                |     3 |      127.0.0.1 | 8210 |  N(N) |
+                |     4 |      127.0.0.1 | 9210 |  N(N) |
+                |     5 |      127.0.0.1 |10210 |  N(N) |
+                +-------+----------------+------+-------+
+
+                +-------+---------------------+--------+----------------+------+-----------+
+                | PG_ID |         SLOT        | PGS_ID |       IP       | PORT |    ROLE   |
+                +-------+---------------------+--------+----------------+------+-----------+
+                |     0 |              0:4095 |      0 |    127.0.0.100 | 8100 | M         |
+                |       |                     |      1 |    127.0.0.100 | 9100 | S         |
+                |       |                     |      2 |    127.0.0.100 |10100 | S         |
+                +-------+---------------------+--------+----------------+------+-----------+
+                |     1 |           4096:8191 |      3 |      127.0.0.1 | 8110 | M         |
+                |       |                     |      4 |      127.0.0.1 | 9110 | S         |
+                |       |                     |      5 |      127.0.0.1 |10110 | S         |
+                +-------+---------------------+--------+----------------+------+-----------+
+            """
+
+            affinity = '[{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":5}]'
+            ret = util.zk_cmd('set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))
+
+            # Check OPS of Gateways
+            con_cnt = 0
+            for i in range(10):
+                ok = True
+                for s in self.cluster['servers']:
+                    tps = util.get_tps(s['ip'], s['gateway_port'], 'gw')
+                    util.log('%s:%d TPS:%d' % (s['ip'], s['gateway_port'], tps))
+                    if tps < 500:
+                        ok = False
+
+                if ok:
+                    con_cnt += 1
+                    if con_cnt > 2:
+                        break
+                else:
+                    con_cnt = 0
+
+                time.sleep(1)
+
+            if con_cnt >= 3:
+                util.log('SUCCESS, arcci follows write affinity')
+            else:
+                self.fail('FAIL, arcci does not follow write affinity')
+
         finally:
             util.nic_del('eth1:arc')
 
