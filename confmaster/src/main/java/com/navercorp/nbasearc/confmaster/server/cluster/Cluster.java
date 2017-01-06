@@ -253,7 +253,7 @@ public class Cluster implements Comparable<Cluster>, ClusterComponent {
             byte[] data = zk.getData(gwPath, stat, true);
             Gateway gw = (Gateway) container.get(gwPath);
             if (gw != null) {
-                gw.setPersistentData(d);
+                gw.setPersistentData(data);
                 gw.setZNodeVersion(stat.getVersion());
             } else {
                 gw = new Gateway(context, cluster.getName(), gwName, data, stat.getVersion());
