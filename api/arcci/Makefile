@@ -42,7 +42,8 @@ FINAL_CFLAGS+=-D_REENTRANT
 FINAL_LDFLAGS=$(DEBUG) $(LDFLAGS) $(GCOV_FLAGS)
 
 # LIBS
-FINAL_LIBS=$(ZK_LIB) -lpthread -lm
+FINAL_LIBS=$(ZK_LIB)
+FINAL_LIBS_LDFLAGS=-lpthread -lm
 
 # OBJECT
 LIB_OBJ=dict.o sds.o anet.o ae.o crc16.o arcci_common.o arcci_fe.o arcci_be.o os.o
@@ -53,6 +54,14 @@ TESTFI_OBJ=$(LIB_OBJ) test_fiall.o
 LIB_OBJ_WITH_DIR=$(addprefix $(OBJDIR)/,$(LIB_OBJ))
 DUMMYPERF_OBJ_WITH_DIR=$(addprefix $(OBJDIR)/,$(DUMMYPERF_OBJ))
 TESTFI_OBJ_WITH_DIR=$(addprefix $(OBJDIR)/,$(TESTFI_OBJ))
+
+ifeq ($(shell uname -s), Darwin)
+    ZK_LN=ln -sf
+    SHARED_LIB_VERSION_SCRIPT=
+else
+    ZK_LN=ln -sfT
+    SHARED_LIB_VERSION_SCRIPT=-Wl,--version-script=arcci.map
+endif
 
 all: $(STATIC_LIB) $(SHARED_LIB) $(DUMMY_PERF) $(TEST_FI)
 	mkdir -p $(RELEASE_DIR)
@@ -77,7 +86,7 @@ gcov32:
 
 $(ZK_LIB):
 	cd zk-$(ZK_VERSION) && $(MAKE) CFLAGS=$(CFLAGS)
-	ln -sfT zk-$(ZK_VERSION) zk
+	$(ZK_LN) zk-$(ZK_VERSION) zk
 
 $(STATIC_LIB): $(FINAL_LIBS) $(LIB_OBJ)
 	mkdir -p $(ZKLIB_TMPDIR)
@@ -87,13 +96,13 @@ $(STATIC_LIB): $(FINAL_LIBS) $(LIB_OBJ)
 	rm -rf $(ZKLIB_TMPDIR)
 
 $(SHARED_LIB): $(FINAL_LIBS) $(LIB_OBJ)
-	$(CC) -shared -Wl,--version-script=arcci.map -o $(OBJDIR)/lib/$@ $(LIB_OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS)
+	$(CC) -shared $(SHARED_LIB_VERSION_SCRIPT) -o $(OBJDIR)/lib/$@ $(LIB_OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS) $(FINAL_LIBS_LDFLAGS)
 
 $(DUMMY_PERF): $(FINAL_LIBS) $(DUMMYPERF_OBJ)
-	$(CC) -o $(OBJDIR)/$@ $(DUMMYPERF_OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS)
+	$(CC) -o $(OBJDIR)/$@ $(DUMMYPERF_OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS) $(FINAL_LIBS_LDFLAGS)
 
 $(TEST_FI): $(FINAL_LIBS) $(TESTFI_OBJ)
-	$(CC) -o $(OBJDIR)/$@ $(TESTFI_OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS)
+	$(CC) -o $(OBJDIR)/$@ $(TESTFI_OBJ_WITH_DIR) $(FINAL_LDFLAGS) $(FINAL_LIBS) $(FINAL_LIBS_LDFLAGS)
 
 clean:
 	cd zk-$(ZK_VERSION) && $(MAKE) $@

@@ -49,6 +49,8 @@
  * The following should be ordered by performances, descending. */
 #ifdef _WIN32
 #include "ae_wsiocp.c"
+#elif __APPLE__
+#include "ae_kqueue.c"
 #else
 #include "ae_epoll.c"
 #endif
