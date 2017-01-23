@@ -1634,8 +1634,7 @@ class TestConfMaster(unittest.TestCase):
             # Delete Affinity ZNODE
             util.log('Delete gateway affinity znode')
             ret = util.zk_cmd('rmr /RC/NOTIFICATION/CLUSTER/%s/AFFINITY' % cluster['cluster_name'])
-            ret = ret['err']
-            self.assertTrue(len(ret.strip()) == 0, 'failed to remove affinity znode. ret:%s' % ret)
+            self.assertEqual(ret['exitcode'], 'OK', 'failed to remove affinity znode. ret:%s' % ret)
             time.sleep(1)
 
             # Start C clients

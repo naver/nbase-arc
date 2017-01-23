@@ -50,15 +50,15 @@ def cleanup_zookeeper_root():
     max_try = 20
     for i in range( max_try ):
         print 'try cleanup zookeeper, i:%d' % i
-        ret = util.zk_cmd( 'rmr /RC' )
-        err = ret['err']
-        if err == '':
+
+        if util.zk_cmd( 'get /RC' )['exitcode'] == 'ZK_NO_NODE':
             return 0
-        elif -1 != err.find( 'Node does not exist: /RC'):
-            if err.count('/') == 1:
-                return 0
+
+        ret = util.zk_cmd( 'rmr /RC' )
+        if ret['exitcode'] == 'OK':
+            return 0
         else:
-            util.log('failed to clean up zookeeper, err:%s' % err)
+            util.log('failed to clean up zookeeper, ret:%s' % ret)
         time.sleep(0.2)
     return -1
 
@@ -147,6 +147,29 @@ def initialize_cluster( cluster, leader_cm=None ):
 
     for server in servers:
         initialize_info_of_cm_about_pgs( cluster, server, leader_cm )
+
+    return 0
+
+
+def finalize_cluster(cluster, leader_cm=None):
+    if leader_cm == None:
+        leader_cm = cluster['servers'][0]
+    servers = cluster['servers']
+
+    # PGS
+    for server in servers:
+        if finalize_info_of_cm_about_pgs(cluster, server,leader_cm ) != 0:
+            return -1
+
+    # PG
+    for pg_id in cluster['pg_id_list']:
+        if util.cm_success(util.cm_command(leader_cm['ip'], leader_cm['cm_port'],
+            'pg_del %s %d' % (cluster['cluster_name'], pg_id)))[0] == False:
+            return -1
+
+    # Cluster
+    if util.cluster_del(leader_cm['ip'], leader_cm['cm_port'], cluster['cluster_name']) == False:
+        return -1
 
     return 0
 
