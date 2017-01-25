@@ -351,4 +351,8 @@ class TestQuorumPolicy( unittest.TestCase ):
             load_gen_list[i].quit()
             load_gen_list[i].join()
 
+        # Go back to initial configuration
+        self.assertTrue(util.pgs_join(self.leader_cm['ip'], self.leader_cm['cm_port'], m['cluster_name'], m['id']),
+                'failed to recover pgs, (pgs_join)')
+
         return 0

@@ -590,7 +590,7 @@ class TestMaintenance(unittest.TestCase):
                 'failed : util.cluster_util_getdump returns false, src=%s:%d dest_pgsid=%d' % (
                 m['ip'], m['redis_port'], s['id']))
 
-            ret = util.pgs_add(self.cluster, s, self.leader_cm, 0, rm_ckpt=False)
+            ret = util.install_pgs(self.cluster, s, self.leader_cm, 0, rm_ckpt=False)
             self.assertEqual(True, ret, 'failed : util.pgs_add returns false, pgsid=%d' % s['id'])
             util.log('succeeeded : add a new slave, pgsid=%d' % s['id'])
 
@@ -627,3 +627,15 @@ class TestMaintenance(unittest.TestCase):
             self.load_gen_list[i].join()
             self.assertTrue(self.load_gen_list[i].isConsistent(), 'Inconsistent after migration')
             self.load_gen_list.pop(i, None)
+
+        # Go back to initial configuration
+        # recover pgs
+        for s in servers:
+            self.assertTrue(util.install_pgs(self.cluster, s, self.leader_cm, rm_ckpt=False),
+                    'failed to recover pgs. (install_pgs)')
+
+        # cleanup new slaves
+        for s in new_servers:
+            self.assertTrue(util.uninstall_pgs(self.cluster, s, self.leader_cm),
+                    'failed to cleanup pgs. (uninstall_pgs)')
+

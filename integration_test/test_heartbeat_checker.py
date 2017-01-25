@@ -332,6 +332,10 @@ class TestHeartbeatChecker( unittest.TestCase ):
             self.assertEquals( success, True, 'failed : the number of connections to smr%d(%s:%d) is %d, exptected=%d, before=%d' % (server['id'], server['ip'], server['smr_mgmt_port'], after_cnt, expected, before_cnt_smr) )
             util.log( 'succeeded : the number of connections to smr%d(%s:%d) is %d, exptected=%d, before=%d' % (server['id'], server['ip'], server['smr_mgmt_port'], after_cnt, expected, before_cnt_smr) )
 
+            # Go back to initial configuration
+            self.assertTrue(util.pgs_join(self.leader_cm['ip'], self.leader_cm['cm_port'], server['cluster_name'], server['id']),
+                    'failed to join pgs %d' % server['id'])
+
         # check gateway
         for server in self.cluster['servers']:
             before_cnt = util.get_clients_count_of_gw(server['ip'], server['gateway_port'])
@@ -353,6 +357,10 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
             self.assertEquals( success, True, 'failed : the number of connections to gateway%d(%s:%d) is %d, exptected=%d.' % (server['id'], server['ip'], server['gateway_port'], after_cnt, expected) )
             util.log( 'succeeded : the number of connections to gateway%d(%s:%d) is %d, exptected=%d.' % (server['id'], server['ip'], server['gateway_port'], after_cnt, expected) )
+
+            # Go back to initial configuration
+            self.assertTrue(util.gw_add(server['cluster_name'], server['id'], server['pm_name'], server['ip'], server['gateway_port'], self.leader_cm['ip'], self.leader_cm['cm_port']),
+                    'failed to add gw %d' % server['id'])
 
     def test_4_elect_master_randomly( self ):
         util.print_frame()
@@ -459,11 +467,18 @@ class TestHeartbeatChecker( unittest.TestCase ):
             time.sleep( 20 )
             self.leader_cm = self.cluster['servers'][i+1]
 
+            self.match_cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster)
+
             self.state_transition()
+
+        # Go back to initial configuration
+        self.assertTrue(util.recover_confmaster(self.cluster, [0,1], 0),
+                'failed to recover confmaster.')
 
     def test_6_from_3_to_6_heartbeat_checkers( self ):
         util.print_frame()
 
+        hbc_svr_list = []
         i = 5000 + len( self.cluster['servers'] )
         for server in self.cluster['servers']:
             i = i + 1
@@ -471,6 +486,7 @@ class TestHeartbeatChecker( unittest.TestCase ):
             hbc_svr['id'] = i
             hbc_svr['ip'] = server['ip']
             hbc_svr['zk_port'] = server['zk_port']
+            hbc_svr_list.append(hbc_svr)
 
             ret = testbase.setup_cm( i )
             self.assertEquals( 0, ret, 'failed to copy heartbeat checker, server:%d' % hbc_svr['id'] )
@@ -479,6 +495,11 @@ class TestHeartbeatChecker( unittest.TestCase ):
             self.assertEquals( 0, ret,
                                'failed to request_to_start_cm, server:%d' % hbc_svr['id'] )
             self.state_transition()
+
+        # Go back to initial configuration
+        for hbc_svr in hbc_svr_list:
+            self.assertEqual(0, testbase.request_to_shutdown_cm(hbc_svr),
+                    'failed to shutdown confmaster')
 
     def test_7_remaining_hbc_connection( self ):
         util.print_frame()
@@ -534,3 +555,58 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
             self.assertEquals( success, True, 'failed : the number of connections to gateway%d(%s:%d) is %d, exptected=%d.' % (server['id'], server['ip'], server['gateway_port'], after_cnt, expected) )
             util.log( 'succeeded : the number of connections to gateway%d(%s:%d) is %d, exptected=%d.' % (server['id'], server['ip'], server['gateway_port'], after_cnt, expected) )
+
+        # Go back to initial configuration
+        # Cleanup PG
+        self.assertTrue(util.cm_success(util.cm_command(
+            self.leader_cm['ip'], self.leader_cm['cm_port'], 
+            'pg_del %s %d' % (self.cluster['cluster_name'], self.cluster['servers'][0]['pg_id'])))[0])
+
+        # Cleanup processes of PGS and GW
+        for s in self.cluster['servers']:
+            self.assertEqual(0, util.shutdown_redis(s['id'], s['redis_port']), 
+                'failed to kill redis %d process' % s['id'])
+            self.assertEqual(0, util.shutdown_smr(s['id'], s['ip'], s['smr_base_port']), 
+                'failed to kill smr %d process' % s['id'])
+            self.assertEqual(0, util.shutdown_gateway(s['id'], s['gateway_port']),
+                'failed to kill gw %d process' % s['id'])
+
+        # Recover PG
+        self.assertTrue(
+                util.install_pg(self.cluster, self.cluster['servers'], self.cluster['servers'][0], start_gw=True),
+                'failed to recover PGS and GW in a PM')
+
+    def match_cluster_info(self, cm_ip, cm_port, cluster):
+        # Cluster
+        cluster_info = util.cluster_info(cm_ip, cm_port, cluster['cluster_name'])['cluster_info']
+        self.assertEquals(cluster_info['PN_PG_Map'], '0 8192')
+        self.assertEquals(cluster_info['Key_Space_Size'], 8192)
+
+        # PG
+        for pg_id in cluster['pg_id_list']:
+            pg = util.pg_info(cm_ip, cm_port, cluster['cluster_name'], pg_id)
+            self.assertIsNotNone(pg)
+
+        for s in self.cluster['servers']:
+            # GW
+            gw_info = util.get_gw_info(cm_ip, cm_port, cluster['cluster_name'], s['id'])
+            self.assertEquals(gw_info['port'], s['gateway_port'])
+            self.assertEquals(gw_info['state'], 'N')
+            self.assertEquals(gw_info['hb'], 'Y')
+            self.assertEquals(gw_info['pm_Name'], s['pm_name'])
+            self.assertEquals(gw_info['pm_IP'], s['ip'])
+
+            # PGS
+            pgs_info = util.get_pgs_info(cm_ip, cm_port, cluster['cluster_name'], s['id'])
+            self.assertEquals(pgs_info['pg_ID'], s['pg_id'])
+            self.assertEquals(pgs_info['pm_Name'], s['pm_name'])
+            self.assertEquals(pgs_info['pm_IP'], s['ip'])
+            self.assertEquals(pgs_info['backend_Port_Of_Redis'], s['redis_port'])
+            self.assertEquals(pgs_info['replicator_Port_Of_SMR'], s['smr_base_port'])
+            self.assertEquals(pgs_info['management_Port_Of_SMR'], s['smr_mgmt_port'])
+            self.assertEquals(pgs_info['state'], 'N')
+            self.assertEquals(pgs_info['hb'], 'Y')
+            self.assertEquals(pgs_info['color'], 'GREEN')
+            self.assertTrue(pgs_info['smr_Role'] == 'M' or pgs_info['smr_Role'] == 'S')
+            self.assertEquals(pgs_info['old_master_version'], '201')
+

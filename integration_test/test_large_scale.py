@@ -269,7 +269,8 @@ class TestLargeScale( unittest.TestCase ):
             ret = testbase.wait_until_finished_to_set_up_role(server)
             self.assertEqual(ret, 0, 'failed to role set up, id=%d' % server['id'])
 
-        for i in range(4):
+        GW_MAX = 4
+        for i in range(GW_MAX):
             server = cluster['servers'][i]
             ret = testbase.request_to_start_gateway( cluster['cluster_name'], server, self.leader_cm )
             self.assertEqual(ret, 0, 'failed to request_to_start_gateway, id=%d' % server['id'])
@@ -283,3 +284,24 @@ class TestLargeScale( unittest.TestCase ):
                 ok = False
 
         self.assertEqual(ok, True, 'failed to initlize roles of pgs')
+
+        # Go back to initial configuration
+        # cleanup gw confiruation and processes
+        for i in range(GW_MAX):
+            s = cluster['servers'][i]
+            self.assertEqual(testbase.request_to_shutdown_gateway(cluster['cluster_name'], s, self.leader_cm), 0,
+                    'failed to cleanup gw %d' % s['id'])
+
+        # cleanup cluster confiruations
+        self.assertEqual(testbase.finalize_cluster(cluster, self.leader_cm), 0,
+                'failed to finalize_cluster')
+
+        # cleanup pgs processes
+        for s in cluster['servers']:
+            self.assertEqual(testbase.request_to_shutdown_redis(s), 0,
+                    'failed to cleanup redis %d' % s['id'])
+
+        for s in cluster['servers']:
+            self.assertEqual(testbase.request_to_shutdown_smr(s), 0,
+                    'failed to cleanup smr %d' % s['id'])
+

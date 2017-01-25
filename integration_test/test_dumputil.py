@@ -403,8 +403,20 @@ class TestDumpUtil(unittest.TestCase):
         ret = redis.read_until('\r\n', 1)
         self.assertEqual(ret, '+OK\r\n')
 
+    def migend(self, redis):
+        cmd = 'migconf migend\r\n'
+        redis.write(cmd)
+        ret = redis.read_until('\r\n', 1)
+        self.assertEqual(ret, '+OK\r\n')
+
     def clearstart(self, redis, range_from, range_to):
         cmd = 'migconf clearstart %s-%s\r\n' % (range_from, range_to)
+        redis.write(cmd)
+        ret = redis.read_until('\r\n', 1)
+        self.assertEqual(ret, '+OK\r\n')
+
+    def clearend(self, redis):
+        cmd = 'migconf clearend\r\n'
         redis.write(cmd)
         ret = redis.read_until('\r\n', 1)
         self.assertEqual(ret, '+OK\r\n')
@@ -454,6 +466,9 @@ class TestDumpUtil(unittest.TestCase):
         print "Total Count of json output = %d" % count
         f.close()
 
+        # Go back to initial configuration
+        self.migend(redis0)
+
     def test_dump_iterator_with_mig_conf_clearstart(self):
         util.print_frame()
 
@@ -498,3 +513,6 @@ class TestDumpUtil(unittest.TestCase):
 
         print "Total Count of json output = %d" % count
         f.close()
+
+        # Go back to initial configuration
+        self.clearend(redis0)

@@ -229,6 +229,11 @@ class TestMigration(unittest.TestCase):
             load_gen_thrd_list[i].join()
             self.assertTrue(load_gen_thrd_list[i].isConsistent(), 'Inconsistent after migration')
 
+        # Go back to initial configuration
+        cinfo = util.cluster_info(leader_cm['ip'], leader_cm['cm_port'], cluster_name)
+        for slot in util.get_slots(cinfo['cluster_info']['PN_PG_Map'], 1):
+            self.assertTrue(util.migration(self.cluster, 1, 0, slot['begin'], slot['end'], 40000),
+                    'failed to rollback migration')
 
     def test_migration_with_expire_command(self):
         util.print_frame()
@@ -674,6 +679,10 @@ class TestMigration(unittest.TestCase):
         self.assertFalse(self.isS3Exist(dst_redis_slave, 'S3:afterMig2pc~migrateEnd:expired'))
 
         self.getS3TTL(dst_redis_slave, 'S3:PermanentKey')
+
+        # Go back to initial configuration
+        self.assertTrue(util.migration(self.cluster, dst_pg_id, src_pg_id, 0, 8191, 40000),
+                'failed to rollback migration')
 
     def __test_pdump(self):
         util.print_frame()

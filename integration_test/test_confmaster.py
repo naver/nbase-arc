@@ -38,14 +38,14 @@ cluster_2_name = 'test_lock'
 cluster_2_pg_count = 4
 cluster_2_pgs_per_pg = 2
 
-class CresteClusterThread(threading.Thread):
+class CreateClusterThread(threading.Thread):
     def __init__(self, cluster_name, ip, pm_name, pg_max, pgs_per_pg, leader_cm):
         threading.Thread.__init__(self)
         self.cluster_name = cluster_name
         self.ip = ip
         self.pm_name = pm_name
         self.leader_cm = leader_cm
-        self.pg_max = pg_max
+        self.gw_max = self.pg_max = pg_max
         self.pgs_per_pg = pgs_per_pg
         self.result = False
         self.cluster = None
@@ -92,6 +92,7 @@ class CresteClusterThread(threading.Thread):
                 server['zk_port'] = 2181
 
                 cluster['servers'].append(server)
+        self.cluster = cluster
 
         # Send cluster information to MGMT-CC
         testbase.initialize_cluster(cluster, self.leader_cm)
@@ -139,7 +140,7 @@ class CresteClusterThread(threading.Thread):
                 util.log('failed to role set up, id=%d' % server['id'])
                 return
 
-        for i in range(self.pg_max):
+        for i in range(self.gw_max):
             server = cluster['servers'][i]
             if testbase.request_to_start_gateway(cluster['cluster_name'], server, self.leader_cm) != 0:
                 util.log('failed to request_to_start_gateway, id=%d' % server['id'])
@@ -152,6 +153,29 @@ class CresteClusterThread(threading.Thread):
 
         self.cluster = cluster
 
+    def cleanup_cluster(self):
+        # Cleanup gateway
+        for i in range(self.gw_max):
+            server = self.cluster['servers'][i]
+            if testbase.request_to_shutdown_gateway(self.cluster['cluster_name'], server, self.leader_cm) != 0:
+                util.log('failed to request_to_shutdown_gateway, id=%d' % server['id'])
+                return False
+
+        # Cleanup pgs and pg
+        for pg_id in range(self.pg_max):
+            if util.uninstall_pg(
+                    self.cluster, 
+                    filter(lambda s :s['pg_id'] == pg_id, self.cluster['servers']), 
+                    self.leader_cm, 
+                    stop_gw=False) == False:
+                return False
+
+        # Cleanup cluster configuration
+        if util.cluster_del(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name']) == False:
+            return False
+
+        return True
+
     def get_result(self):
         return self.result
 
@@ -160,7 +184,7 @@ class CresteClusterThread(threading.Thread):
 
 class CommandThread(threading.Thread):
     """
-        method : 'random' or 'sequencial'
+        method : 'random' or 'round'
     """
     def __init__(self, leader_cm, commands, method):
         threading.Thread.__init__(self)
@@ -185,14 +209,14 @@ class CommandThread(threading.Thread):
         sequence = 0
         while True:
             if self.term:
-                if self.method == 'random' or self.method == 'sequencial':
+                if self.method == 'random':
                     break
                 elif self.method == 'round' and sequence == 0:
                     break
 
             if self.method == 'random':
                 cmd = random.choice(self.commands)
-            elif self.method == 'sequencial' or self.method == 'round':
+            elif self.method == 'round':
                 cmd = self.commands[sequence]
                 sequence += 1
                 if sequence >= len(self.commands):
@@ -441,6 +465,10 @@ class TestConfMaster(unittest.TestCase):
 
             self.assertTrue(there_is_a_leader, 'failed to get a new leader')
 
+            # Go back to initial configuration
+            # Recover confmaster
+            self.assertTrue(util.recover_confmaster(self.cluster, [], 0), 'failed to recover confmaster')
+
         finally:
             default_cluster.finalize(self.cluster)
 
@@ -584,11 +612,11 @@ class TestConfMaster(unittest.TestCase):
                 write_cmds_1.append('pg_del lock_test_write_thread 2')
                 write_cmds_1.append('pg_del lock_test_write_thread 3')
                 write_cmds_1.append('cluster_del lock_test_write_thread')
-                write_cmd_thrd = CommandThread(self.leader_cm, write_cmds_1, 'sequencial')
+                write_cmd_thrd = CommandThread(self.leader_cm, write_cmds_1, 'round')
                 write_cmd_thrd.start()
 
-                # Test CresteClusterThread (additioal cluster)
-                create_cluster_thrd = CresteClusterThread(cluster_2_name,
+                # Test CreateClusterThread (additioal cluster)
+                create_cluster_thrd = CreateClusterThread(cluster_2_name,
                         self.cluster['servers'][0]['ip'], self.cluster['servers'][0]['pm_name'],
                         cluster_2_pg_count, cluster_2_pgs_per_pg, self.leader_cm)
 
@@ -658,6 +686,9 @@ class TestConfMaster(unittest.TestCase):
 
                 util.log('total_write_command_request (for test_lock cluster):%d' % write_cmd_thrd_2.get_total_rqst())
                 util.log('total_write_command_response (for test_lock cluster):%d' % write_cmd_thrd_2.get_total_resp())
+
+                # Cleanup additional cluster 
+                self.assertTrue(create_cluster_thrd.cleanup_cluster(), 'failed to cleanup cluster')
 
             finally:
                 ret = default_cluster.finalize( self.cluster )
@@ -903,7 +934,7 @@ class TestConfMaster(unittest.TestCase):
             ret = util.deploy_pgs(server2['id'])
             self.assertTrue(ret, '[ADD PG] deploy pgs fail. pgs_id:%d' % server2['id'])
 
-            ret = util.pg_add(cluster, servers, leader_cm, start_gw=False)
+            ret = util.install_pg(cluster, servers, leader_cm, start_gw=False)
             self.assertTrue(ret, '[ADD PG] add pg fail.')
             cluster['servers'].append(server1)
             cluster['servers'].append(server2)
@@ -1225,8 +1256,11 @@ class TestConfMaster(unittest.TestCase):
             ret = util.migration(cluster, 2, 0, 2000, 4095, 50000)
             self.assertTrue(ret, '[ADD PG] migration fail 2 -> 0')
 
-            ret = util.pg_del(cluster, servers, leader_cm, stop_gw=False)
+            ret = util.uninstall_pg(cluster, servers, leader_cm, stop_gw=False)
             self.assertTrue(ret, '[DELETE PG] delete pg fail.')
+
+            cluster['servers'].remove(server1)
+            cluster['servers'].remove(server2)
 
             expected_affinity = json.loads('[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]')
             expected_affinity = sorted(expected_affinity, key=lambda x: int(x['gw_id']))
@@ -1297,6 +1331,15 @@ class TestConfMaster(unittest.TestCase):
                 util.log('SUCCESS, arcci follows write affinity')
             else:
                 self.fail('FAIL, arcci does not follow write affinity')
+
+            # Go back to initial configuration
+            # Recover affinity
+            affinity = '[{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":5}]'
+            self.assertEqual(
+                util.zk_cmd(
+                    'set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))['exitcode'],
+                'OK',
+                'failed to recover affinity')
 
         finally:
             util.nic_del('eth1:arc')
@@ -1533,7 +1576,7 @@ class TestConfMaster(unittest.TestCase):
             dst_ports.append(s['gateway_mgmt_port'])
 
         # Remove PGS, GW
-        ret = util.pg_del(cluster, cluster['servers'], leader_cm, stop_gw=True)
+        ret = util.uninstall_pg(cluster, cluster['servers'], leader_cm, stop_gw=True)
         self.assertTrue(ret, 'failed to delete all PGS and GW')
 
         ok = True
@@ -1553,6 +1596,12 @@ class TestConfMaster(unittest.TestCase):
                 break
             else:
                 time.sleep(1)
+
+        # Go back to initial configuration
+        # Recover PGS, GW
+        self.assertTrue(
+                util.install_pg(cluster, cluster['servers'], leader_cm, start_gw=True),
+                'failed to recover all PGS and GW')
 
         self.assertTrue(ok, 'File descriptor mismatch')
 
@@ -1602,7 +1651,7 @@ class TestConfMaster(unittest.TestCase):
                     "It expects %s:%d is the leader, but it is not the leader." %
                         (leader_cm['ip'], leader_cm['cm_port']) )
 
-                # Check laster worklog number after failover.
+                # Check latest worklog number after failover.
                 n_sno, n_eno = util.worklog_info( leader_cm )
                 self.assertGreaterEqual( n_sno, 1,
                     "New start number of worklog(%d) must be larger than or equal to 1" %
@@ -1613,6 +1662,12 @@ class TestConfMaster(unittest.TestCase):
                 self.assertGreaterEqual( n_eno, eno,
                     "New End number of worklog(%d) must be larger than or equal to old end number of worklog(%d)" %
                         (n_eno, eno) )
+
+            # Go back to initial configuration
+            # Recover Confmaster
+            self.assertTrue(
+                    util.recover_confmaster(self.cluster, [0,1], 0),
+                    'failed to recover confmaster')
 
         finally:
             # shutdown cluster
@@ -1654,6 +1709,15 @@ class TestConfMaster(unittest.TestCase):
             self.assertTrue(ret, '[AFFINITY_HIT_RATIO] failed to get hit ratio')
             util.log('affinity-hit-ratio:%0.3f' % hit_ratio)
             self.assertLess(hit_ratio, 0.6, '[AFFINITY_HIT_RATIO] too high affinity-hit-ratio:%0.3f' % hit_ratio)
+
+            # Go back to initial configuration
+            # Recover Affinity ZNODE
+            affinity = '[{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":5}]'
+            self.assertEqual(
+                    util.zk_cmd(
+                        'create /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))['exitcode'],
+                    'OK',
+                    'failed to recover affinity')
 
         finally:
             self.destroy_load_gens(load_gens)
@@ -1832,6 +1896,39 @@ class TestConfMaster(unittest.TestCase):
             cmd = 'gw_add %s 100 %s %s %d' % (s['cluster_name'], s['pm_name'], s['ip'], s['gateway_port']) 
             reply = util.cm_command(new_cm['ip'], 5000, cmd)
             self.assertEquals(json.loads(reply)['state'], 'success', 'Execution fail, cmd: "%s", reply: "%s"' % (cmd, reply))
+
+            # Go back to initial configuration
+            # Delete new GW
+            self.assertTrue(util.gw_del(s['cluster_name'], 100, new_cm['ip'], 5000), 'failed to delete new gw')
+
+            # Delete new PGS
+            self.assertTrue(util.pgs_del(new_cm['ip'], 5000, s['cluster_name'], 100), 'failed to delete new pgs')
+
+            # Shutdown new Confmaster
+            self.assertEqual(0, testbase.request_to_shutdown_cm(new_cm),
+                               'failed to request_to_shutdown_cm, server:%d' % new_cm['id'])
+
+            # Recover confmaster
+            self.assertTrue(util.recover_confmaster(self.cluster, [0,1,2], self.leader_cm['id']), 
+                    'failed to recover confmaster')
+
+            # Cleanup PG
+            self.assertTrue(util.cm_success(util.cm_command(self.leader_cm['ip'], self.leader_cm['cm_port'], 
+                'pg_del %s %d' % (s['cluster_name'], s['pg_id'])))[0])
+
+            # Cleanup PGS and GW
+            for s in self.cluster['servers']:
+                self.assertEqual(0, util.shutdown_redis(s['id'], s['redis_port']), 
+                    'failed to cleanup redis %d' % s['id'])
+                self.assertEqual(0, util.shutdown_smr(s['id'], s['ip'], s['smr_base_port']), 
+                    'failed to cleanup smr %d' % s['id'])
+                self.assertEqual(0, util.shutdown_gateway(s['id'], s['gateway_port']),
+                    'failed to cleanup gw %d' % s['id'])
+
+            # Recover PG
+            self.assertTrue(
+                    util.install_pg(self.cluster, self.cluster['servers'], self.cluster['servers'][0], start_gw=True),
+                    'failed to recover PGS and GW in a PM')
           
         finally:
             ret = default_cluster.finalize( self.cluster ) 
@@ -1867,6 +1964,18 @@ class TestConfMaster(unittest.TestCase):
 
                 for i in range(len(load_gen_list)):
                     self.assertTrue(load_gen_list[i].consistency, 'data consistency error')
+
+            # Go back to initial configuration
+            # increase PG.Quorum
+            self.assertTrue(
+                    util.pg_iq(self.leader_cm, self.cluster['cluster_name'], self.cluster['servers'][0]['pg_id']),
+                    'failed to increase quorum')
+            # Wait for quorum escalation
+            self.assertTrue(
+                    util.await(20)(
+                        lambda ret: ret == True,
+                        lambda : util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], check_quorum=True)),
+                    'failed to recover quorum')
 
         finally:
             # shutdown load generators
@@ -2127,15 +2236,16 @@ class TestConfMaster(unittest.TestCase):
                     util.check_cluster_closure(self.cluster['cluster_name'], dest_cm_ip, dest_cm_port, None, True))
                 self.assertTrue(ret, 'after mgmt cluster migration, incorrect state of Cluster')
 
-        finally:
-            # cluster_on in order to enable confmaster commands on test cluster
-            cinfo = util.cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
-            if cinfo != None and cinfo['cluster_info']['Mode'] == 2:
-                util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
+            # Go back to initial configuration
+            # rollback - migrate mgmt clsuter
+            ret = util.migrate_mgmt_cluster(self.cluster['cluster_name'], 
+                    dest_cm_ip, dest_cm_port, '127.0.0.1:%d' % dest_zk_port, '127.0.0.1', 1122, '127.0.0.1:2181')
+            self.assertTrue(ret, 'Failed to rollback - migrate mgmt cluster')
 
-            # shutdown cluster
-            ret = default_cluster.finalize( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+            ret = util.await(8, False)(
+                lambda x: x,
+                util.check_cluster_closure(self.cluster['cluster_name'], '127.0.0.1', 1122, None, True))
+            self.assertTrue(ret, 'after rollback - mgmt cluster migration, incorrect state of Cluster')
 
             # uninstall destination confmaster
             util.shutdown_cm(dest_cm_port)
@@ -2143,4 +2253,9 @@ class TestConfMaster(unittest.TestCase):
             # uninstall destination zookeeper
             zk.stop()
             zk.cleanup()
+
+        finally:
+            # shutdown cluster
+            ret = default_cluster.finalize( self.cluster )
+            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
 
