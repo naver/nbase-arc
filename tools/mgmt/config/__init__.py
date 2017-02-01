@@ -101,20 +101,12 @@ def make_redis_conf_file(conf):
 
 # make redis configuartion
 # return : conf = {"redis_config_key" : "redis_config_value", ...}
-def make_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_hour, cronsave_min, cronsave_num=1):
+def make_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_times):
     try:
         conf = {}
         for e in REDIS_CONFIG:
             if e[0] == 'cronsave':
-                base = cronsave_hour * 60 + cronsave_min + (smr_base_port - PGS_BASE_PORT)
-                intv = (24 * 60) / cronsave_num  
-                save = []
-                for i in range(cronsave_num):
-                    t = base + intv * i
-                    h = (t / 60) % 24
-                    m = (t % 60) % 60
-                    save.append([m,h])
-                conf["cronsave"] = save
+                conf["cronsave"] = cronsave_times
             elif e[0] == "smr-local-port":
                 conf[e[0]] = str(smr_base_port)
             elif e[0] == "port":

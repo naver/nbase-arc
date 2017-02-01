@@ -102,9 +102,6 @@ def apply_pgs_conf(cluster_name, smr_base_port, redis_port, cronsave_num=1):
         return False
 
 def deploy_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_num=1):
-    cronsave_min = (smr_base_port - config.BGSAVE_BASE) % 60
-    cronsave_hour = float((3 + int((smr_base_port - config.BGSAVE_BASE) / 60)) % 24)
-
     remote_path = '%s/%d/redis' % (config.REMOTE_PGS_DIR, smr_base_port)
     remote_file_path = '%s/%d/redis/%d.%s.conf' % (config.REMOTE_PGS_DIR, smr_base_port, smr_base_port, cluster_name)
 
@@ -114,15 +111,11 @@ def deploy_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_num=1):
             return False
         run('mkdir -p %s' % remote_path)
 
-    cronsave_opt = ''
-    for i in range(cronsave_num):
-        cronsave_opt += 'cronsave %d %d\\n' % (cronsave_min, int(cronsave_hour))
-        cronsave_hour += 24.0 / cronsave_num
-        cronsave_hour = cronsave_hour % 24
+    # Get cronsave times
+    cronsave_times = util.alloc_cronsave_times(smr_base_port, cronsave_num, util.cronsave_table(), config.BGSAVE_BASE, config.CRONSAVE_BASE_HOUR, config.CRONSAVE_BASE_MIN)
 
     # Make redis configuration
-    redis_conf = config.make_redis_conf(
-            cluster_name, smr_base_port, redis_port, config.CRONSAVE_BASE_HOUR, config.CRONSAVE_BASE_MIN, cronsave_num)
+    redis_conf = config.make_redis_conf(cluster_name, smr_base_port, redis_port, cronsave_times)
     if redis_conf == None:
         warn("[%s:%d] Make redis config fail." % (env.host_string, smr_base_port))
         return False
