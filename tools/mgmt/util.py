@@ -777,3 +777,44 @@ def get_deployed_pgs_info(cluster_name, pgs_id_list, memlog):
 
     return pgs_list
 
+def alloc_cronsave_times(port, cronsave_num, table, base_port, base_hour, base_min):
+    """
+    return: [(min, hour), ...]
+    """
+
+    index = ((port - base_port) / 10) % 60
+    interval = int(1440 / cronsave_num)
+
+    scalefactor = int(interval / 60)
+    if scalefactor == 0:
+        scalefactor = 1
+    elif scalefactor > 3:
+        scalefactor = 3
+
+    start_min = base_hour * 60 + base_min
+    times = []
+    for i in xrange(cronsave_num):
+        times.append(format_min_hour((table[index] * scalefactor + start_min + i * interval) % 1440))
+    return times
+
+def format_min_hour(min):
+    """
+    return: (min, hour)
+    """
+    return (min % 60, min / 60)
+
+def cronsave_table():
+    """
+    (7000, 0)  (7010, 10) (7020, 20) (7030, 30) (7040, 40) (7050, 50) (7060, 3)  (7070, 13) (7080, 23) (7090, 33)
+    (7100, 43) (7110, 53) (7120, 6)  (7130, 16) (7140, 26) (7150, 36) (7160, 46) (7170, 56) (7180, 9)  (7190, 19)
+    (7200, 29) (7210, 39) (7220, 49) (7230, 59) (7240, 12) (7250, 22) (7260, 32) (7270, 42) (7280, 52) (7290, 2)
+    (7300, 15) (7310, 25) (7320, 35) (7330, 45) (7340, 55) (7350, 5)  (7360, 18) (7370, 28) (7380, 38) (7390, 48)
+    (7400, 58) (7410, 8)  (7420, 21) (7430, 31) (7440, 41) (7450, 51) (7460, 1)  (7470, 11) (7480, 24) (7490, 34)
+    (7500, 44) (7510, 54) (7520, 4)  (7530, 14) (7540, 27) (7550, 37) (7560, 47) (7570, 57) (7580, 7)  (7590, 17)
+    """
+    table = []
+    for port in xrange(7000, 7600, 10):
+        d = port - 7000
+        table.append((d + d / 60 * 3) % 60)
+    return table
+
