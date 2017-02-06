@@ -154,9 +154,8 @@ class TestGateway( unittest.TestCase ):
             success = False
             for try_cnt in range( 5 ):
                 cmd = 'get /RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (self.cluster['cluster_name'], server['id'])
-                ret = util.zk_cmd( cmd )
-                ret = ret['err']
-                if -1 != ret.find('cZxid'):
+                ret = util.zk_cmd(cmd)
+                if ret['exitcode'] == 'OK':
                     success = True
                     break
                 time.sleep( 1 )
@@ -174,8 +173,7 @@ class TestGateway( unittest.TestCase ):
             for try_cnt in range( 10 ):
                 cmd = 'get /RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (self.cluster['cluster_name'], server['id'])
                 ret = util.zk_cmd( cmd )
-                ret = ret['err']
-                if -1 != ret.find('Node does not exist'):
+                if ret['exitcode'] == 'ZK_NO_NODE':
                     success = True
                     break
                 time.sleep( 1 )
@@ -193,8 +191,7 @@ class TestGateway( unittest.TestCase ):
             for try_cnt in range( 5 ):
                 cmd = 'get /RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (self.cluster['cluster_name'], server['id'])
                 ret = util.zk_cmd( cmd )
-                ret = ret['err']
-                if -1 != ret.find('cZxid'):
+                if ret['exitcode'] == 'OK':
                     success = True
                     break
                 time.sleep( 1 )

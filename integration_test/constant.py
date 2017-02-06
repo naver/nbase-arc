@@ -34,6 +34,7 @@ CC = 'confmaster-1.0.0-SNAPSHOT-jar-with-dependencies.jar'
 CM_DEFAULT_PORT = 1122
 CM_PROPERTY_FILE_NAME = 'cc.properties'
 CM_EXEC_SCRIPT = 'confmaster-integrationtest.sh'
+ZK_CLI = 'test-zk-cli-0.0.1-SNAPSHOT-jar-with-dependencies.jar'
 
 # Binary directoryes
 SMR_DIR = '%s/smr' % (homedir)
@@ -48,6 +49,7 @@ CC_DIR = '%s/confmaster' % (homedir)
 ARCCI_DIR = "../api/arcci/"
 ARCCI_SO_PATH = "../api/arcci/.obj64/lib/libarcci.so"
 ARCCI32_SO_PATH = "../api/arcci/.obj32/lib/libarcci.so"
+ZK_CLI_DIR = '../tools/test-zk-cli/target/'
 
 ROLE_LCONN = '1'
 ROLE_MASTER = '2'

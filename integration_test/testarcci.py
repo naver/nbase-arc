@@ -693,8 +693,7 @@ class TestARCCI(unittest.TestCase):
         # Delete root of GW znodes
         print 'try remove root of GW znodes'
         ret = util.zk_cmd('rmr /RC/NOTIFICATION/CLUSTER/%s/GW' % server['cluster_name'])
-        ret = ret['err']
-        self.assertEqual(ret, '', 'failed to remove root of GW znodes, ret:%s' % ret)
+        self.assertEqual(ret['exitcode'], 'OK', 'failed to remove root of GW znodes, ret:%s' % ret)
 
         # Check loadbalancing
         for i in range(10):
@@ -718,16 +717,14 @@ class TestARCCI(unittest.TestCase):
         # Recover root of GW znodes
         print 'try recover GW znodes'
         ret = util.zk_cmd('create /RC/NOTIFICATION/CLUSTER/%s/GW test' % server['cluster_name'])
-        ret = ret['err']
-        self.assertNotEqual(ret.find('Created /RC/NOTIFICATION/CLUSTER/testCluster0/GW'), -1,
+        self.assertEqual(ret['exitcode'], 'OK',
                 'failed to create root of GW znodes, ret:%s' % ret)
         for s in self.cluster['servers']:
             path = '/RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (s['cluster_name'], s['id'])
             cmd = 'create %s \'{"ip":"%s","port":%d}\'' % (path, s['ip'], s['gateway_port'])
             print cmd
             ret = util.zk_cmd(cmd)
-            ret = ret['err']
-            self.assertNotEqual(ret.find('Created %s' % path), -1, 'failed to recover GW znode, ret:%s' % ret)
+            self.assertEqual(ret['exitcode'], 'OK', 'failed to recover GW znode, ret:%s' % ret)
 
         # Check loadbalancing
         for i in range(10):

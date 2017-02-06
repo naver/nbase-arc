@@ -287,15 +287,18 @@ def write_executable_file( data, dir, file_name ):
 
 
 def cm_command( ip, port, cmd, line=1 ):
-    t = telnetlib.Telnet( ip, port )
-    t.write( cmd + '\n' )
-    ret = ''
-    i = 0
-    while i < line:
-        ret += t.read_until('\r\n')
-        i += 1
-    t.close()
-    return ret
+    try:
+        t = telnetlib.Telnet( ip, port )
+        t.write(cmd.rstrip() + '\r\n')
+        ret = ''
+        i = 0
+        while i < line:
+            ret += t.read_until('\r\n')
+            i += 1
+        t.close()
+        return ret
+    except:
+        return ''
 
 
 def cm_success(reply):
@@ -371,10 +374,19 @@ def get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id):
     return pgs_info
 
 
+def get_gw_info(mgmt_ip, mgmt_port, cluster_name, gw_id):
+    ok, data = cm_success(cm_command(mgmt_ip, mgmt_port, 'gw_info %s %s\r\n' % (cluster_name, gw_id)))
+    if ok == False:
+        return None
+    data['gw_id'] = gw_id
+    return data
+
+
 def check_cluster_closure(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=False):
     def check_cluster_f():
         return check_cluster(cluster_name, mgmt_ip, mgmt_port, state, check_quorum)
     return check_cluster_f
+
 
 def check_cluster(cluster_name, mgmt_ip, mgmt_port, state=None, check_quorum=False):
     log('')
@@ -609,6 +621,9 @@ def pg_dq(cm, cluster_name, pg_id):
         return False
     return True
 
+def pg_iq(cm, cluster_name, pg_id):
+    return cm_success(cm_command(cm['ip'], cm['cm_port'], 'pg_iq %s %d' % (cluster_name, pg_id)))[0]
+
 def check_if_smr_is_running_properly( ip, mgmt_port, timeout=1 ):
     max_try = 100
     error = False
@@ -756,7 +771,7 @@ def pm_add(name, ip, mgmt_ip, mgmt_port):
     return True
 
 
-def pg_del(cluster, servers, leader_cm, stop_gw=True):
+def uninstall_pg(cluster, servers, leader_cm, stop_gw=True):
     for server in servers:
         if testbase.finalize_info_of_cm_about_pgs(cluster, server, leader_cm) is not 0:
             log('scale in : failed to finalize cc_info, pgs_del command faile')
@@ -788,7 +803,7 @@ def pg_del(cluster, servers, leader_cm, stop_gw=True):
     return True
 
 
-def pg_add(cluster, servers, leader_cm, start_gw=True):
+def install_pg(cluster, servers, leader_cm, start_gw=True):
     for server in servers:
         ret = delete_smr_log_dir( server['id'], server['smr_base_port'] )
         if ret is not 0:
@@ -832,7 +847,7 @@ def pg_add(cluster, servers, leader_cm, start_gw=True):
     return True
 
 
-def pgs_add(cluster, server, leader_cm, pg_id=None, rm_ckpt=True):
+def install_pgs(cluster, server, leader_cm, pg_id=None, rm_ckpt=True):
     ret = delete_smr_log_dir( server['id'], server['smr_base_port'] )
     if ret is not 0:
         log('failed to delete smr log dir')
@@ -855,6 +870,31 @@ def pgs_add(cluster, server, leader_cm, pg_id=None, rm_ckpt=True):
     time.sleep( 10 )
     if testbase.wait_until_finished_to_set_up_role( server ) is not 0:
         return False
+
+    return True
+
+
+
+def uninstall_pgs(cluster, server, leader_cm, rm_ckpt=True):
+    if testbase.finalize_info_of_cm_about_pgs(cluster, server, leader_cm) is not 0:
+        return False
+
+    if testbase.request_to_shutdown_redis(server) is not 0:
+        return False
+
+    if testbase.request_to_shutdown_smr(server) is not 0:
+        return False
+
+    ret = delete_smr_log_dir(server['id'], server['smr_base_port'])
+    if ret is not 0:
+        log('failed to delete smr log dir')
+        return False
+
+    if rm_ckpt:
+        ret = delete_redis_check_point(server['id'])
+        if ret is not 0:
+            log('failed to delete redis check point')
+            return False
 
     return True
 
@@ -899,6 +939,50 @@ def cluster_util_getdump(dest_id, src_ip, src_port, target_rdb_filename, range_f
     if ret != 0:
         return False
     return True
+
+
+def get_slots(pnpgMapRle, pg_id):
+    """
+    pnpgMapRle: string of pnpgMapRle(run length encoding)
+    return [{"begin":begin_slot_number, "end":end_slot_number], ..., {"begin":begin_slot_number, "end":end_slot_number]]
+    """
+
+    # Decode pnpgMapRLE to an array
+    index = 0
+    sp = pnpgMapRle.split()
+    mapping = [-1] * 8192
+    for i in range(len(sp)/2):
+        for j in range(int(sp[i*2+1])):
+            mapping[index] = int(sp[i*2])
+            index += 1
+
+    # Find slots
+    slot_idx = -1
+    mig_slot_pairs = []
+    while slot_idx < 8191:
+        find = False
+
+        # Get slot_begin
+        while slot_idx < 8191:
+            slot_idx += 1
+            if mapping[slot_idx] == pg_id:
+                slot_begin = slot_end = slot_idx
+                find = True
+                break
+
+        # Get slot_end
+        while slot_idx < 8191:
+            slot_idx += 1
+            if mapping[slot_idx] == pg_id:
+                slot_end = slot_idx
+            else:
+                break
+
+        # Append slot information
+        if find:
+            mig_slot_pairs.append({"begin":slot_begin, "end":slot_end})
+
+    return mig_slot_pairs
 
 
 def migration(cluster, src_pg_id, dst_pg_id, range_from, range_to, tps, num_part=8192):
@@ -1642,7 +1726,7 @@ def handle_not_json_format_object(o):
 
 def get_gateway_affinity(cluster_name):
     ret = zk_cmd('get /RC/NOTIFICATION/CLUSTER/%s/AFFINITY' % cluster_name)
-    znode_data = ret['znode_data']
+    znode_data = ret['data']
     log('Gateway affinity znode data : %s' % znode_data)
     affinity_data = znode_data
     return affinity_data
@@ -2270,6 +2354,15 @@ def start_cm(ip, port):
 
     return False
 
+def cm_state(ip, port):
+    ret, data = cm_success(cm_command(ip, port, 'cm_info'))
+    if ret == False:
+        return None
+    return data['state']
+
+def cm_start(ip, port):
+    return cm_success(cm_command(ip, port, 'cm_start'))[0]
+
 def cluster_on(ip, port, cluster_name):
     return cm_success(cm_command(ip, port, 'cluster_on %s' % cluster_name))[0]
 
@@ -2288,11 +2381,24 @@ def cluster_load(ip, port, dump):
 def cluster_purge(ip, port, cluster_name):
     return cm_success(cm_command(ip, port, 'cluster_purge %s' % cluster_name))[0]
 
+def cluster_ls(ip, port):
+    ok, data = cm_success(cm_command(ip, port, 'cluster_ls'))
+    if ok:
+        return True, data['list']
+    else:
+        return False, None
+
+def cluster_del(ip, port, cluster_name):
+    return cm_success(cm_command(ip, port, 'cluster_del %s' % cluster_name))[0]
+
 def pgs_leave(ip, port, cluster_name, pgs_id):
     return cm_success(cm_command(ip, port, 'pgs_leave %s %d' % (cluster_name, pgs_id)))[0]
 
 def pgs_join(ip, port, cluster_name, pgs_id):
     return cm_success(cm_command(ip, port, 'pgs_join %s %d' % (cluster_name, pgs_id)))[0]
+
+def pgs_del(ip, port, cluster_name, pgs_id):
+    return cm_success(cm_command(ip, port, 'pgs_del %s %d' % (cluster_name, pgs_id)))[0]
 
 def do_logutil_cmd (id, subcmd):
     parent_dir, log_dir = smr_log_dir( id )
@@ -2444,30 +2550,69 @@ def kill_all_processes():
 
 
 def zk_cmd( cmd ):
-    args = 'zkCli.sh -server localhost:2181 %s' % (cmd)
-    p = exec_proc_async( './', args, True, out_handle=subprocess.PIPE, err_handle=subprocess.PIPE )
+    args = 'java -jar %s -z localhost:2181 %s' % (c.ZK_CLI, cmd)
+    p = exec_proc_async(c.ZK_CLI_DIR, args, True, out_handle=subprocess.PIPE, err_handle=subprocess.PIPE)
     p.wait()
-    (std, err) = p.communicate()
-    # zkCli.sh stdout : znode data
-    #          stderr : output messages(not error) and error messages
-    if err != '':
-        log( 'failed to execute zkCli.sh. command:%s, err:%s' % (cmd, err) )
+    (stdo, stde) = p.communicate()
 
-    lines = std.split('\n')
-    znode_data = ''
-    i = 0
-    while i < len(lines):
-        if lines[i] == 'WatchedEvent state:SyncConnected type:None path:null':
-            j = i+1
-            while j < len(lines)-1:
-                if znode_data != '':
-                    znode_data += '\n'
-                znode_data += lines[j]
-                j += 1
-            break
-        i += 1
+    return {
+            'exitcode':zk_exitcode_str(p.returncode),
+            'err':stde.strip(),
+            'data':stdo.strip()
+           }
 
-    return {'err':err, 'znode_data':znode_data}
+
+def zk_exitcode_str(exitcode):
+    if exitcode == 0: return 'OK'
+    elif exitcode == 10: return 'ZK_CONNECTION_LOSS'
+    elif exitcode == 11: return 'ZK_UNEXPECTED_ERROR'
+    elif exitcode == 12: return 'ZK_NO_NODE'
+    elif exitcode == 13: return 'ZK_NODE_EXISTS'
+    elif exitcode == 14: return 'ZK_BAD_NODE_VERSION'
+    elif exitcode == 15: return 'ZK_NO_CHILDREN_FOR_EPHEMERALS'
+    elif exitcode == 16: return 'ZK_NOT_EMPTY_NODE'
+    elif exitcode == 50: return 'INVALID_COMMAND'
+    elif exitcode == 51: return 'INVALID_ARGUMENT'
+    elif exitcode == 100: return 'INTERNAL_ERROR'
+    else: raise Exception("Unkown zk-test-client exitcode")
+
+
+def zk_get_children(path):
+    """
+    return (boolean, list of strings)
+    """
+
+    ret = zk_cmd('ls %s' % path)
+    if ret['exitcode'] != 'OK':
+        return False, None
+
+    return True, [] if len(ret['data']) == 0 else map(lambda s: s.strip(), ret['data'].split(','))
+
+
+def zk_rm_child_if_match(path, child_value):
+    """
+    return true, if a znode with child_value is deleted or there is not a znode with child_value.
+    """
+
+    r, children = zk_get_children(path)
+    if r == False:
+        return False
+
+    for child in children:
+        cmd = 'get %s/%s' % (path, child)
+        r = zk_cmd(cmd)
+        if r['exitcode'] == 'ZK_NO_NODE':
+            continue
+        elif r['exitcode'] != 'OK':
+            log('failed to execute zk_cmd "%s", ret: %s' % (cmd, r))
+            return False
+
+        if r['data'] == child_value:
+            r = zk_cmd('rmr %s' % child_path)
+            if r['exitcode'] == 'OK' or r['exitcode'] == 'ZK_NO_NODE':
+                return True
+
+    return True
 
 
 def delete_redis_check_point( id ):
@@ -2782,4 +2927,69 @@ def rmr(path):
         for name in dirs:
             os.rmdir(os.path.join(root, name))
     os.rmdir(path)
+
+
+def cleanup_cm_le_znode(port):
+    # Cleanup leader election znode
+    r = zk_rm_child_if_match('/RC/CC/LE', '{"ip":"0.0.0.0","port":"%d"}' % port)
+    if r == False:
+        return False
+
+    # Cleanup fault detector znode
+    r = zk_cmd('rmr /RC/CC/FD/0.0.0.0:%d' % port)
+    if r['exitcode'] != 'OK' and r['exitcode'] != 'ZK_NO_NODE':
+        return False
+
+    return True
+
+
+def recover_confmaster(cluster, killed_id_list, leader_id):
+    """
+    cluster: dict of cluster in config.py
+    killed_id_list: list of ids of already killed confmasters
+    leader_id: leader confmaster id
+    """
+
+    # Run leader
+    leader = cluster['servers'][leader_id]
+    if util.cm_success(util.cm_command(leader['ip'], leader['cm_port'], 'ping'))[0] == False:
+        if cleanup_cm_le_znode(leader['cm_port']) == False:
+            return False
+
+        if testbase.request_to_start_cm(leader['id'], leader['cm_port']) is not 0:
+            util.log('failed to recover confmaster %d' % (leader['id']))
+            return False
+
+    # Kill the others
+    for s in cluster['servers']:
+        if s['id'] in killed_id_list or s['id'] == leader_id:
+            continue
+
+        if testbase.request_to_shutdown_cm(s) is not 0:
+            util.log('failed to shutdown confmaster %d' % s['id'])
+            return False
+
+    # Make followers
+    for s in cluster['servers']:
+        if s['id'] == leader_id:
+            continue
+
+        if cleanup_cm_le_znode(s['cm_port']) == False:
+            return False
+
+        if testbase.request_to_start_cm(s['id'], s['cm_port']) is not 0:
+            util.log('failed to start confmaster %d' % s['id'])
+            return False
+
+    # Wait until leader appear
+    if await(100)(lambda ret: ret == True, 
+            lambda: cm_success(cm_command(leader['ip'], leader['cm_port'], 'cluster_ls'))[0]) == False:
+        return False
+
+    # Start confmaster service
+    if cm_state(leader['ip'], leader['cm_port']) == '1':
+        if cm_start(leader['ip'], leader['cm_port']) == False:
+            return False
+
+    return True
 

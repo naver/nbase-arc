@@ -75,8 +75,8 @@ class TestScaleout(unittest.TestCase):
         for i in range(migration_count):
             # Scale out
             cluster = config.clusters[0]
-            ret = util.pg_add(cluster, servers, leader_cm)
-            self.assertEqual(True, ret, 'Scale out fail. util.pg_add returns false')
+            ret = util.install_pg(cluster, servers, leader_cm)
+            self.assertEqual(True, ret, 'Scale out fail. util.install_pg(returns false')
 
             time.sleep(5)
             # pg0 -> pg1
@@ -101,8 +101,8 @@ class TestScaleout(unittest.TestCase):
             ###############
 
             cluster = config.clusters[1]
-            ret = util.pg_del(cluster, servers, leader_cm)
-            self.assertEqual(True, ret, 'Scale in fail. util.pg_del returns false')
+            ret = util.uninstall_pg(cluster, servers, leader_cm)
+            self.assertEqual(True, ret, 'Scale in fail. util.uninstall_pg(returns false')
 
             #TODO Temporary
             #cluster = config.clusters[0]
@@ -149,8 +149,8 @@ class TestScaleout(unittest.TestCase):
 
         # Scale out
         cluster = config.clusters[0]
-        ret = util.pg_add(cluster, servers, leader_cm)
-        self.assertEqual(True, ret, 'Scale out fail. util.pg_add returns false')
+        ret = util.install_pg(cluster, servers, leader_cm)
+        self.assertEqual(True, ret, 'Scale out fail. util.install_pg(returns false')
 
         time.sleep(5)
         # pg0 -> pg1
@@ -220,3 +220,12 @@ class TestScaleout(unittest.TestCase):
         for i in range(len(self.load_gen_thrd_list)):
             self.load_gen_thrd_list[i].join()
             self.assertTrue(self.load_gen_thrd_list[i].isConsistent(), 'Inconsistent after migration')
+
+        # Go back to initial configuration
+        # Rollback migration
+        self.assertTrue(util.migration(cluster, 1, 0, 8000, 8191, 40000),
+                'failed to rollback migration')
+
+        # Cleanup pgs
+        self.assertTrue(util.uninstall_pg(cluster, servers, leader_cm),
+                'failed to cleanup pgs')
