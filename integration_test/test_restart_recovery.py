@@ -43,15 +43,11 @@ class TestRestartRecovery( unittest.TestCase ):
 
     def setUp( self ):
         util.set_process_logfile_prefix( 'TestRestartRecovery_%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to test_restart_recovery.initialize' )
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown( self ):
-        ret = default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to test_restart_recovery.finalize' )
-        return 0
+        testbase.defaultTearDown(self)
 
     def failure_recovery( self, role, wait_count=10, redis_only=False ):
         time.sleep( 2 )

@@ -48,9 +48,7 @@ class TestPGSHanging( unittest.TestCase ):
         return 0
 
     def tearDown( self ):
-        ret = default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to TestPGSHanging.finalize' )
-        return 0
+        testbase.defaultTearDown(self)
 
     def setup_test_cluster( self, cluster ):
         self.cluster = cluster
@@ -58,11 +56,8 @@ class TestPGSHanging( unittest.TestCase ):
         self.mgmt_ip = self.leader_cm['ip']
         self.mgmt_port = self.leader_cm['cm_port']
 
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to TestPGSHanging.initialize' )
-        return 0
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def test_master_hang_2copy( self ):
         util.print_frame()

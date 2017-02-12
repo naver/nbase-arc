@@ -313,7 +313,7 @@ def main():
 
     # When -i flag is on, it exits after setting up a cluster.
     if opt_init is True:
-        if default_cluster.initialize_starting_up_smr_before_redis( config.clusters[0], verbose=2 ) is not 0:
+        if default_cluster.initialize_starting_up_smr_before_redis( config.clusters[0], verbose=2 ) is None:
             util.log('failed setting up servers.')
         else:
             util.log('finished successfully setting up servers.' )

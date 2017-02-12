@@ -24,6 +24,7 @@ import default_cluster
 import subprocess
 import string
 import random
+import testbase
 
 class TestClusterUtil(unittest.TestCase):
     cluster = config.clusters[0]
@@ -38,9 +39,8 @@ class TestClusterUtil(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix('TestClusterUtil_%s' % self._testMethodName)
-        if default_cluster.initialize_starting_up_smr_before_redis(self.cluster) is not 0:
-            util.log('failed to TestClusterUtil.initialize')
-            return -1
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
         # Setup proxy server
         self.getdump_proxy_proc = self.setup_proxy_server(self.getdump_proxy_port, self.cluster['servers'][0]['redis_port'],
@@ -50,13 +50,11 @@ class TestClusterUtil(unittest.TestCase):
         return 0
 
     def tearDown(self):
-        if default_cluster.finalize(self.cluster) is not 0:
-            util.log('failed to TestClusterUtil.finalize')
-
         # Release proxy server
         self.release_proxy_server(self.getdump_proxy_proc, "getdump.fifo")
         self.release_proxy_server(self.playdump_proxy_proc, "playdump.fifo")
-        return 0
+
+        testbase.defaultTearDown(self)
 
     def insertLargeKey(self, redis, key):
         # Make random values

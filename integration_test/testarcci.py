@@ -120,10 +120,8 @@ class TestARCCI(unittest.TestCase):
     def setUp(self):
         # Initialize cluster
         util.set_process_logfile_prefix( 'TestARCCI%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to test_arcci.initialize' )
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster, arch=self.arch)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
         self.GW_LIST = []
         for s in self.cluster['servers']:
@@ -141,9 +139,7 @@ class TestARCCI(unittest.TestCase):
             self.load_gen_list.pop(i, None)
             i += 1
 
-        # Finalize cluster
-        default_cluster.finalize( self.cluster )
-        return 0
+        testbase.defaultTearDown(self)
 
     def test_gateway_load_info_zk(self):
         util.print_frame()
@@ -577,6 +573,12 @@ class TestARCCI(unittest.TestCase):
 
             api.destroy()
 
+            # Go back to initial configuration
+            for s in self.cluster['servers']:
+                self.assertEqual(testbase.request_to_shutdown_cm(s), 0, 'failed to shutdown confmaster to recover')
+            self.assertTrue(util.recover_confmaster(self.cluster, [s['id'] for s in self.cluster['servers']], 0),
+                    'failed to recover confmaster')
+
     def test_zookeeper_ensemble_failback(self):
         util.print_frame()
 
@@ -658,6 +660,12 @@ class TestARCCI(unittest.TestCase):
                 util.log('SUCCESS, loadbalancing.')
 
             api.destroy()
+
+            # Go back to initial configuration
+            for s in self.cluster['servers']:
+                self.assertEqual(testbase.request_to_shutdown_cm(s), 0, 'failed to shutdown confmaster to recover')
+            self.assertTrue(util.recover_confmaster(self.cluster, [s['id'] for s in self.cluster['servers']], 0),
+                    'failed to recover confmaster')
 
     def test_zookeeper_delete_root_of_gw_znodes(self):
         util.print_frame()

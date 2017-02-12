@@ -21,6 +21,7 @@ import os
 import util
 import smr_mgmt
 import json
+import default_cluster
 
 
 def setup_binaries( clusters, skip_copy_binaries, opt_32bit_binary_test ):
@@ -309,7 +310,7 @@ def request_to_start_gateway( cluster_name, server, leader_cm, check_state=True 
 def wait_until_finished_to_set_up_role( server, max_try = 20 ):
     smr = smr_mgmt.SMR( server['id'] )
     if smr.connect( server['ip'], server['smr_mgmt_port'] ) is not 0:
-        util.log('wait_until_finished_to_set_up_rol(), eserver%d(%s:%d) is stopped.' % (server['id'], server['ip'], server['smr_mgmt_port']))
+        util.log('wait_until_finished_to_set_up_role(), eserver%d(%s:%d) is stopped.' % (server['id'], server['ip'], server['smr_mgmt_port']))
         return -1
 
     try_count = 0
@@ -325,14 +326,6 @@ def wait_until_finished_to_set_up_role( server, max_try = 20 ):
 
     util.log('failed to wait until finished to set up a role for %s:%d' % (server['ip'], server['smr_mgmt_port']))
     return -1
-
-
-def kill_all_processes( server ):
-    ret = util.kill_all_processes()
-    if ret is not 0:
-        util.log('failed to kill_all_processes')
-        return -1
-    return 0
 
 
 def request_to_shutdown_smr( server ):
@@ -471,3 +464,13 @@ def copy_binaries( id, opt_32bit_binary_test ):
         return -1
 
     return 0
+
+def defaultTearDown(cls):
+    """
+    cls is a TestXXX and cls must have conf_checker and cluster as member variables.
+    """
+
+    try:
+        assert cls.conf_checker.final_check()
+    finally:
+        default_cluster.finalize(cls.cluster)

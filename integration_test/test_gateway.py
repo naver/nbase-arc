@@ -37,16 +37,12 @@ class TestGateway( unittest.TestCase ):
 
     @classmethod
     def setUpClass( cls ):
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
-        if ret is not 0:
-            util.log( 'failed to initialize_starting_up_smr_before_redis in TestUpgrade' )
-            default_cluster.finalize( cls.cluster )
-        return 0
+        cls.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
+        assert cls.conf_checker != None, 'failed to initialize cluster'
 
     @classmethod
     def tearDownClass( cls ):
-        ret = default_cluster.finalize( cls.cluster )
-        return 0
+        testbase.defaultTearDown(cls)
 
     def setUp( self ):
         util.set_process_logfile_prefix( 'TestGateway_%s' % self._testMethodName )

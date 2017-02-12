@@ -18,6 +18,7 @@ import local_proxy
 import util
 
 class TestLocalProxy32(local_proxy.TestLocalProxy):
+    arch = 32
     def test_local_proxy(self):
         util.print_frame()
-        local_proxy.TestLocalProxy.test_local_proxy(self, 32)
+        local_proxy.TestLocalProxy.test_local_proxy(self)

@@ -43,15 +43,11 @@ class TestScaleout(unittest.TestCase):
     def setUp(self):
         util.set_process_logfile_prefix( 'TestScaleout_%s' % self._testMethodName )
         conf = {'smr_log_delete_delay':60}
-        if default_cluster.initialize_starting_up_smr_before_redis( self.cluster, conf=conf ) is not 0:
-            util.log('failed to TestScaleout.initialize')
-            return -1
-        return 0
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster, conf=conf )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize( self.cluster ) is not 0:
-            util.log('failed to TestScaleout.finalize')
-        return 0
+        testbase.defaultTearDown(self)
 
     def test_scaleout(self):
         util.print_frame()
