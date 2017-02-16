@@ -34,6 +34,7 @@ import sys
 import threading
 import crc16
 import traceback
+from zookeeper import *
 from load_generator import *
 from arcci.arcci import *
 from ctypes import *
@@ -552,6 +553,8 @@ class TestARCCI(unittest.TestCase):
             self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
 
+            ZooKeeperCli.start(CLI_RESTART)
+
             # Check loadbalancing
             for i in range(5):
                 ok = True
@@ -639,6 +642,8 @@ class TestARCCI(unittest.TestCase):
                 util.log("zookeeper start - stdout:%s" % stdout)
                 self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
+
+            ZooKeeperCli.start(CLI_RESTART)
 
             # Check loadbalancing
             for i in range(5):
@@ -729,7 +734,7 @@ class TestARCCI(unittest.TestCase):
                 'failed to create root of GW znodes, ret:%s' % ret)
         for s in self.cluster['servers']:
             path = '/RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (s['cluster_name'], s['id'])
-            cmd = 'create %s \'{"ip":"%s","port":%d}\'' % (path, s['ip'], s['gateway_port'])
+            cmd = 'create %s {"ip":"%s","port":%d}' % (path, s['ip'], s['gateway_port'])
             print cmd
             ret = util.zk_cmd(cmd)
             self.assertEqual(ret['exitcode'], 'OK', 'failed to recover GW znode, ret:%s' % ret)

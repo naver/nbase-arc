@@ -48,6 +48,7 @@ public class Client {
     private final static String charset = "UTF-8";
     private final static Map<String, Command> commandMap;
     private final static String usage;
+    private final static String cmdUsage;
     
     public enum Code {
         OK(0),
@@ -116,25 +117,23 @@ public class Client {
 
     public Result execute(String []command) {
         if (command.length == 0) {
-            return new Result("", getUsage(), INVALID_COMMAND);
+            return new Result("", "Command length is 0", INVALID_COMMAND);
         }
 
         Command cmd = commandMap.get(command[0]);
         if (cmd == null) {
-            return new Result("", getUsage(), INVALID_COMMAND);
+            return new Result("", "Command not found", INVALID_COMMAND);
         }
         
         if (cmd.arity() != command.length) {
-            return new Result("", getUsage(), INVALID_ARGUMENT);
-        }
-        
-        try {
-            PathUtils.validatePath(command[1]);
-        } catch (IllegalArgumentException e) {
-            return new Result("", getUsage(), INVALID_ARGUMENT);
+            return new Result("", "Wrong number of arguments", INVALID_ARGUMENT);
         }
 
-        return cmd.execute(zk, command);
+        try {
+            return cmd.execute(zk, command);
+        } catch (IllegalArgumentException e) {
+            return new Result("", e.getMessage(), INVALID_ARGUMENT);
+        }
     }
     
     public static String getUsage() {
@@ -324,23 +323,36 @@ public class Client {
                 return 2;
             }
         });
+        
+        map.put("help", new Command() {
+            @Override
+            public Result execute(ZooKeeper zk, String[] args) {
+                return new Result(cmdUsage, "", OK);
+            }
+
+            @Override
+            public String usage() {
+                return "help";
+            }
+
+            @Override
+            public int arity() {
+                return 1;
+            }
+            
+        });
 
         commandMap = Collections.unmodifiableMap(map);
 
         // Usage
-        StringBuilder sb = new StringBuilder("[USAGE]\njava -jar test-zk-cli.jar -z <host:port> -t <timeout> cmd args\n");
+        StringBuilder sb = new StringBuilder();
         
-        sb.append("\n[CMD ARGS]\n");
         for (Entry<String, Command> c : commandMap.entrySet()) {
-            sb.append(c.getValue().usage()).append("\n");
+            sb.append(c.getValue().usage()).append(" | ");
         };
+        cmdUsage = sb.substring(0, sb.length() - 3);
         
-        sb.append("\n[EXITCODE]\n");
-        for (Code c : Code.values()) {
-            sb.append(c.n()).append(" ").append(c.name()).append("\n");
-        }
-        
-        usage = sb.toString();
+        usage = "[USAGE]\njava -jar test-zk-cli.jar -z <host:port> -t <timeout>\n";
     }
 
     private static Result keeperExceptionResult(KeeperException e) {

@@ -1,4 +1,3 @@
-#
 # Copyright 2015 Naver Corp.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +24,7 @@ import sys
 import os
 import signal
 import default_cluster
+import zookeeper
 
 def print_list_and_input(list):
     while True:
@@ -328,4 +328,8 @@ def main():
     return test_modules(module_list, opt_non_interactive, opt_backup_log_dir)
 
 if __name__ == '__main__':
-    exit(main())
+    try:
+        zookeeper.ZooKeeperCli.start()
+        exit(main())
+    finally:
+        zookeeper.ZooKeeperCli.stop()

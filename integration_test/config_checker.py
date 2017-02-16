@@ -3,6 +3,7 @@ import json
 import pprint
 import itertools
 import constant
+from zookeeper import *
 from arcci.arcci import *
 
 class ZoneConfigChecker:
@@ -14,6 +15,8 @@ class ZoneConfigChecker:
         self.__arch = arch
 
     def initial_check(self):
+        ZooKeeperCli.start(CLI_RESTART)
+
         self.__cmi = get_zone_conf_from_cm(self.__servers)
         self.__zki = get_zone_conf_from_zk()
         diffs = compare_zone_conf(self.__servers, self.__cmi, self.__zki)
@@ -23,6 +26,8 @@ class ZoneConfigChecker:
         return True
 
     def final_check(self):
+        ZooKeeperCli.start(CLI_RESTART)
+
         if util.await(30)(
                 lambda x: x,
                 lambda : exception_to_value(lambda : check_confmaster(self.__servers), False)) == False:

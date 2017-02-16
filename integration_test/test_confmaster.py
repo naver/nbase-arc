@@ -1304,8 +1304,8 @@ class TestConfMaster(unittest.TestCase):
                 +-------+---------------------+--------+----------------+------+-----------+
             """
 
-            affinity = '[{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":5}]'
-            ret = util.zk_cmd('set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))
+            affinity = '[{"affinity":"W4096N4096","gw_id":0},{"affinity":"W4096N4096","gw_id":1},{"affinity":"W4096N4096","gw_id":2},{"affinity":"N4096W4096","gw_id":3},{"affinity":"N4096W4096","gw_id":4},{"affinity":"N4096W4096","gw_id":5}]'
+            ret = util.zk_cmd('set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY %s' % (cluster['cluster_name'], affinity))
 
             # Check OPS of Gateways
             con_cnt = 0
@@ -1333,10 +1333,10 @@ class TestConfMaster(unittest.TestCase):
 
             # Go back to initial configuration
             # Recover affinity
-            affinity = '[{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":5}]'
+            affinity = '[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]'
             self.assertEqual(
                 util.zk_cmd(
-                    'set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))['exitcode'],
+                    'set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY %s' % (cluster['cluster_name'], affinity))['exitcode'],
                 'OK',
                 'failed to recover affinity')
 
@@ -1708,10 +1708,10 @@ class TestConfMaster(unittest.TestCase):
 
             # Go back to initial configuration
             # Recover Affinity ZNODE
-            affinity = '[{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":5}]'
+            affinity = '[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]'
             self.assertEqual(
                     util.zk_cmd(
-                        'create /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))['exitcode'],
+                        'create /RC/NOTIFICATION/CLUSTER/%s/AFFINITY %s' % (cluster['cluster_name'], affinity))['exitcode'],
                     'OK',
                     'failed to recover affinity')
 

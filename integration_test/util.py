@@ -42,6 +42,8 @@ import shutil
 import exceptions
 from arcci.arcci import *
 import itertools
+import threading
+import zookeeper
 
 proc_mgmt = process_mgmt.ProcessMgmt()
 
@@ -178,7 +180,7 @@ devnull = open( os.devnull, 'w' )
 def exec_proc_async( working_dir,
                      args,
                      is_shell,
-                     in_handle=devnull,
+                     in_handle=None,
                      out_handle=1,
                      err_handle=2 ):
     old_cwd = os.path.abspath( os.getcwd() )
@@ -186,6 +188,7 @@ def exec_proc_async( working_dir,
     p = subprocess.Popen( args,
                           preexec_fn=os.setsid,
                           shell=is_shell,
+                          stdin=in_handle,
                           stdout=out_handle,
                           stderr=err_handle,
                           close_fds=True )
@@ -2550,17 +2553,7 @@ def kill_all_processes():
 
 
 def zk_cmd( cmd ):
-    args = 'java -jar %s -z localhost:2181 %s' % (c.ZK_CLI, cmd)
-    p = exec_proc_async(c.ZK_CLI_DIR, args, True, out_handle=subprocess.PIPE, err_handle=subprocess.PIPE)
-    p.wait()
-    (stdo, stde) = p.communicate()
-
-    return {
-            'exitcode':zk_exitcode_str(p.returncode),
-            'err':stde.strip(),
-            'data':stdo.strip()
-           }
-
+    return zookeeper.ZooKeeperCli.execute(cmd)
 
 def zk_exitcode_str(exitcode):
     if exitcode == 0: return 'OK'
