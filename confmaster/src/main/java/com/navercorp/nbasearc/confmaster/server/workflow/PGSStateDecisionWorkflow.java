@@ -35,8 +35,6 @@ import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.JobIDGenerator;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
-import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.Opinion;
@@ -48,7 +46,6 @@ import com.navercorp.nbasearc.confmaster.server.cluster.UsedOpinionSet;
 public class PGSStateDecisionWorkflow {
     private final long jobID = JobIDGenerator.getInstance().getID();
     
-    private Cluster cluster;
     private PartitionGroup pg;
     private PartitionGroupServer pgs;
     private HeartbeatTarget target;
@@ -61,7 +58,6 @@ public class PGSStateDecisionWorkflow {
     private final String path;
 
     private final ZooKeeperHolder zk;
-    private final GatewayLookup gwInfoNotifier;
     private final WorkflowLogger workflowLogger;
     private final ClusterComponentContainer container;
     private final Opinion opinion;
@@ -76,7 +72,6 @@ public class PGSStateDecisionWorkflow {
         this.wfExecutor = context.getBean(WorkflowExecutor.class);
 
         this.zk = context.getBean(ZooKeeperHolder.class);
-        this.gwInfoNotifier = context.getBean(GatewayLookup.class);
         this.workflowLogger = context.getBean(WorkflowLogger.class);
         this.container = context.getBean(ClusterComponentContainer.class);
         this.opinion = context.getBean(Opinion.class);
@@ -93,7 +88,6 @@ public class PGSStateDecisionWorkflow {
                             + target.getFullName());
         }
         pg = container.getPg(target.getClusterName(), Integer.toString(pgs.getPgId()));
-        cluster = container.getCluster(target.getClusterName());
         majority = confmaster.getMajority();
 
         Logger.info("start reconfiguration. {}", target);
@@ -150,8 +144,6 @@ public class PGSStateDecisionWorkflow {
                                     target.getNodeType(), target.getName(),
                                     oldRole, makeDecisionResult.newView));
         }
-
-        gwInfoNotifier.updateGatewayAffinity(cluster);
 
         return null;
     }

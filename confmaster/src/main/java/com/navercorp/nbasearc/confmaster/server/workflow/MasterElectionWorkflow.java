@@ -140,6 +140,8 @@ public class MasterElectionWorkflow extends CascadingWorkflow {
 
         int newQ = pg.getQuorum() - d;
         roleMaster.roleMaster(newMaster, pg, newMasterLog, joinedPgsList, newQ, jobID);
+
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     @Override

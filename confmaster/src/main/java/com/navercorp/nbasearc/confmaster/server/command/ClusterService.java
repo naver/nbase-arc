@@ -925,7 +925,6 @@ public class ClusterService {
         List<Op> ops = new ArrayList<Op>();
             
 		ops.add(Op.setData(cluster.getPath(), clusterM.toBytes(), -1));
-        ops.add(gwInfoNoti.createGatewayAffinityUpdateOperation(cluster));
 
         List<OpResult> results = null;
         try {
@@ -938,6 +937,8 @@ public class ClusterService {
         } finally {
             zk.handleResultsOfMulti(results);
         }
+        
+        cluster.performUpdateGwAff();
         
         String message = "Set slot success. cluster:" + clusterName + "/pg:"
                 + pgid + ", range: " + rangeStart + "~" + rangeEnd;

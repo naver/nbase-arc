@@ -70,6 +70,7 @@ public class WorkflowExecutor {
         ctMap.put(OPINION_DISCARD, ContextType.HB);
         ctMap.put(OPINION_PUBLISH, ContextType.HB);
         ctMap.put(TOTAL_INSPECTION, ContextType.HB);
+        ctMap.put(UPDATE_GATEWAY_AFFINITY, ContextType.WF);
     }
     
     public static final String COMMON_STATE_DECISION = "CommonStateDecision";
@@ -83,6 +84,7 @@ public class WorkflowExecutor {
     public static final String OPINION_DISCARD = "OpinionDiscard";
     public static final String OPINION_PUBLISH = "OpinionPublish";
     public static final String TOTAL_INSPECTION = "TotalInspectionWorkflow";
+    public static final String UPDATE_GATEWAY_AFFINITY = "UpdateGatewayAffinity";
     
     public void initialize() {
         Map<String, Object> servies = context.getBeansWithAnnotation(Service.class);

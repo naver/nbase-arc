@@ -29,8 +29,6 @@ import org.springframework.context.ApplicationContext;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtNoAvaliablePgsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
-import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
-import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
@@ -39,7 +37,6 @@ import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
 public class DecreaseCopyWorkflow {
     final ApplicationContext context;
     final ZooKeeperHolder zk;
-    final GatewayLookup gwInfoNotifier;
     final ClusterComponentContainer container;
 
     final PartitionGroupServer pgs;
@@ -50,7 +47,6 @@ public class DecreaseCopyWorkflow {
             String mode, ApplicationContext context) {
         this.context = context;
         this.zk = context.getBean(ZooKeeperHolder.class);
-        this.gwInfoNotifier = context.getBean(GatewayLookup.class);
         this.container = context.getBean(ClusterComponentContainer.class);
 
         this.pgs = pgs;
@@ -82,13 +78,10 @@ public class DecreaseCopyWorkflow {
         pgM.copy = pg.getCopy() - 1;
         pgM.quorum = pg.getQuorum() - 1;
 
-        Cluster cluster = container.getCluster(pgs.getClusterName());
-
         List<Op> opList = new ArrayList<Op>();
         opList.add(Op.setData(pgs.getPath(), pgsM.toBytes(), -1));
         opList.add(Op.setData(rs.getPath(), rsM.toBytes(), -1));
         opList.add(Op.setData(pg.getPath(), pgM.toBytes(), -1));
-        opList.add(gwInfoNotifier.createGatewayAffinityUpdateOperation(cluster));
 
         List<OpResult> results = null;
         try {
@@ -106,5 +99,7 @@ public class DecreaseCopyWorkflow {
         rs.setZNodeVersion(rsd.getStat().getVersion());
 
         pg.setPersistentData(pgM);
+        
+        container.getCluster(pgs.getClusterName()).performUpdateGwAff();
     }
 }

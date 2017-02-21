@@ -158,7 +158,7 @@ public class GatewayService {
         }
         
         // Update gateway affinity
-        gwInfoNotifier.updateGatewayAffinity(cluster);
+        cluster.performUpdateGwAff();
     }
     
     protected void deleteGwObject(String pmName, String clusterName, String gwId)
@@ -268,7 +268,7 @@ public class GatewayService {
         deleteGwObject(gw.getPmName(), clusterName, gwId);
         
         // Update gateway affinity
-        gwInfoNotifier.updateGatewayAffinity(cluster);
+        cluster.performUpdateGwAff();
 
         // Log
         workflowLogger.log(0, SEVERITY_MODERATE, 

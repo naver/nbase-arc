@@ -73,6 +73,8 @@ public class YellowJoinWorkflow extends CascadingWorkflow {
                 roleSlave.roleSlave(pgs, pg, log, master, jobID);
             }
         }
+
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     @Override
