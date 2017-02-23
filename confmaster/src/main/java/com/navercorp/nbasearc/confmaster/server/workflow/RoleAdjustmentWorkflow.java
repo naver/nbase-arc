@@ -101,10 +101,14 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
         pgsM.color = RED;
         zk.setData(pgs.getPath(), pgsM.toBytes(), -1);
         pgs.setPersistentData(pgsM);
+
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     private void toLconn(PartitionGroupServer pgs) throws MgmtSmrCommandException {
         roleLconn.roleLconn(pgs, YELLOW, jobID);
+
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     private void toBlue(PartitionGroupServer pgs) throws MgmtZooKeeperException {
@@ -115,6 +119,8 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
         pgsM.color = BLUE;
         zk.setData(pgs.getPath(), pgsM.toBytes(), -1);
         pgs.setPersistentData(pgsM);
+
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     private void toGreen(PartitionGroupServer pgs)
@@ -126,6 +132,8 @@ public class RoleAdjustmentWorkflow extends CascadingWorkflow {
         pgsM.color = GREEN;
         zk.setData(pgs.getPath(), pgsM.toBytes(), -1);
         pgs.setPersistentData(pgsM);
+
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     @Override

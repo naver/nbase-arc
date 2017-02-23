@@ -17,10 +17,12 @@
 package com.navercorp.nbasearc.confmaster.server.cluster;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
+import static com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor.*;
 
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -40,6 +42,7 @@ import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
 import com.navercorp.nbasearc.confmaster.server.MemoryObjectMapper;
 import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup.GatewayAffinityData;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
 
 public class Cluster implements Comparable<Cluster>, ClusterComponent {
     
@@ -47,7 +50,10 @@ public class Cluster implements Comparable<Cluster>, ClusterComponent {
     private final ReentrantReadWriteLock gwRWLock = new ReentrantReadWriteLock();
     private final ReentrantReadWriteLock pgsListRWLock = new ReentrantReadWriteLock();
     
+    private final AtomicInteger gwAffVer = new AtomicInteger();
+    
     private ClusterComponentContainer clusterComponentContainer;
+    private WorkflowExecutor wfExecutor;
 
     private MemoryObjectMapper mapper = new MemoryObjectMapper();
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -56,9 +62,6 @@ public class Cluster implements Comparable<Cluster>, ClusterComponent {
     private String name;
     private ClusterData persistentData;
 
-    public Cluster(ApplicationContext context, String name) {
-    }
-    
     public Cluster(ApplicationContext context, String clusterName,
 			List<Integer> quorumPolicyAsList, List<Integer> pnPgMap,
 			int clusterOn) {
@@ -81,6 +84,7 @@ public class Cluster implements Comparable<Cluster>, ClusterComponent {
         name = clusterName;
         
         clusterComponentContainer = context.getBean(ClusterComponentContainer.class);
+        wfExecutor = context.getBean(WorkflowExecutor.class);
     }
     
     public Integer getQuorum(Integer closePgsCount) {
@@ -109,6 +113,14 @@ public class Cluster implements Comparable<Cluster>, ClusterComponent {
         }
         
         return gwAffinityList;
+    }
+    
+    public void performUpdateGwAff() {
+        wfExecutor.perform(UPDATE_GATEWAY_AFFINITY, this, gwAffVer.incrementAndGet());
+    }
+    
+    public int getGwAffVer() {
+        return gwAffVer.get();
     }
 
     /**

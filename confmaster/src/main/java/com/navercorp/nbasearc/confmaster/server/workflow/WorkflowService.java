@@ -43,6 +43,8 @@ import com.navercorp.nbasearc.confmaster.logger.EpochMsgDecorator;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.JobResult;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
+import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
 import com.navercorp.nbasearc.confmaster.server.cluster.HeartbeatTarget;
 import com.navercorp.nbasearc.confmaster.server.cluster.NodeType;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
@@ -63,6 +65,9 @@ public class WorkflowService {
     
     @Autowired
     private ThreadPool executor;
+    
+    @Autowired
+    private GatewayLookup gwLookup;
     
     @WorkflowMapping(name=COMMON_STATE_DECISION, privilege=LEADER,
             requiredMode=CLUSTER_ON)
@@ -367,6 +372,19 @@ public class WorkflowService {
     @LockMapping(name=TOTAL_INSPECTION)
     public void updateHeartbeatCheckerLock(HierarchicalLockHelper lockHelper) {
         lockHelper.root(WRITE);
+    }
+    
+    @WorkflowMapping(name=UPDATE_GATEWAY_AFFINITY, privilege=LEADER)
+    public void updateGatewayAffinity(Cluster cluster, int gwAffinityVersion) throws MgmtZooKeeperException {
+        if (gwAffinityVersion != cluster.getGwAffVer()) {
+            return;
+        }
+        gwLookup.updateGatewayAffinity(cluster);
+    }
+    
+    @LockMapping(name=UPDATE_GATEWAY_AFFINITY)
+    public void updateGatewayAffinityLock(HierarchicalLockHelper lockHelper, Cluster cluster) {
+        lockHelper.root(READ).cluster(WRITE, cluster.getName());
     }
     
     private void checkEpochAndExecute(CascadingWorkflow wf, long epoch, long lastEpoch)

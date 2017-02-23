@@ -34,14 +34,12 @@ import org.springframework.stereotype.Service;
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtCommandWrongArgumentException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
-import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.io.MultipleGatewayInvocator;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.ThreadPool;
 import com.navercorp.nbasearc.confmaster.server.ZooKeeperHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
-import com.navercorp.nbasearc.confmaster.server.cluster.GatewayLookup;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
@@ -60,15 +58,12 @@ import com.navercorp.nbasearc.confmaster.server.workflow.MembershipGrantWorkflow
 import com.navercorp.nbasearc.confmaster.server.workflow.QuorumAdjustmentWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.RoleAdjustmentWorkflow;
 import com.navercorp.nbasearc.confmaster.server.workflow.RoleChangeWorkflow;
-import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowExecutor;
 import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 import com.navercorp.nbasearc.confmaster.server.workflow.YellowJoinWorkflow;
 
 @Service
 public class PartitionGroupService {
 
-    @Autowired
-    private Config config;
     @Autowired
     private ThreadPool executor;
     @Autowired
@@ -78,15 +73,10 @@ public class PartitionGroupService {
     private ClusterComponentContainer container;
 
     @Autowired
-    private GatewayLookup gwInfoNotifier;
-    @Autowired
     private WorkflowLogger workflowLogger;
     
     @Autowired
     private ZooKeeperHolder zk;
-    
-    @Autowired
-    private WorkflowExecutor wfExecutor;
     
     @CommandMapping(name="pg_add",
             usage="pg_add <cluster_name> <pgid>\r\n" +
@@ -384,13 +374,7 @@ public class PartitionGroupService {
                 return "-ERR failed to role_change. " + e.getMessage();
             }
         } finally {
-            try {
-                gwInfoNotifier.updateGatewayAffinity(cluster);
-            } catch (MgmtZooKeeperException e) {
-                String msg = "-ERR failed to update gateway affinity. cluster: " + clusterName;
-                Logger.error(msg, e);
-                return msg;
-            }
+            cluster.performUpdateGwAff();
         }
         return rc.getResultString();
     }

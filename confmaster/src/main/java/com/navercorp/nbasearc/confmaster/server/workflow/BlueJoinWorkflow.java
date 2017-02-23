@@ -74,6 +74,8 @@ public class BlueJoinWorkflow extends CascadingWorkflow {
                 roleSlave.roleSlave(pgs, pg, logSeq, master, jobID);
             }
         }
+        
+        container.getCluster(pg.getClusterName()).performUpdateGwAff();
     }
 
     @Override
