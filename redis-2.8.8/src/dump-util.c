@@ -1118,7 +1118,6 @@ static int dumpIterator(int argc, sds *argv) {
                 if (sdslen(idx) == 1 && !memcmp(idx, "0", 1)) {
                     mode = PLUGIN_SSS_KV_SET;
                 } else {
-                    redisLog(REDIS_NOTICE, "list mode");
                     mode = PLUGIN_SSS_KV_LIST;
                 }
 
