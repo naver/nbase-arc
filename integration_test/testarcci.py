@@ -34,6 +34,7 @@ import sys
 import threading
 import crc16
 import traceback
+from zookeeper import *
 from load_generator import *
 from arcci.arcci import *
 from ctypes import *
@@ -120,10 +121,8 @@ class TestARCCI(unittest.TestCase):
     def setUp(self):
         # Initialize cluster
         util.set_process_logfile_prefix( 'TestARCCI%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to test_arcci.initialize' )
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster, arch=self.arch)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
         self.GW_LIST = []
         for s in self.cluster['servers']:
@@ -141,9 +140,7 @@ class TestARCCI(unittest.TestCase):
             self.load_gen_list.pop(i, None)
             i += 1
 
-        # Finalize cluster
-        default_cluster.finalize( self.cluster )
-        return 0
+        testbase.defaultTearDown(self)
 
     def test_gateway_load_info_zk(self):
         util.print_frame()
@@ -556,6 +553,8 @@ class TestARCCI(unittest.TestCase):
             self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
 
+            ZooKeeperCli.start(CLI_RESTART)
+
             # Check loadbalancing
             for i in range(5):
                 ok = True
@@ -576,6 +575,12 @@ class TestARCCI(unittest.TestCase):
                 util.log('SUCCESS, loadbalancing.')
 
             api.destroy()
+
+            # Go back to initial configuration
+            for s in self.cluster['servers']:
+                self.assertEqual(testbase.request_to_shutdown_cm(s), 0, 'failed to shutdown confmaster to recover')
+            self.assertTrue(util.recover_confmaster(self.cluster, [s['id'] for s in self.cluster['servers']], 0),
+                    'failed to recover confmaster')
 
     def test_zookeeper_ensemble_failback(self):
         util.print_frame()
@@ -638,6 +643,8 @@ class TestARCCI(unittest.TestCase):
                 self.assertEqual(returncode, 0, 'failed to stop zookeeper')
             time.sleep(1)
 
+            ZooKeeperCli.start(CLI_RESTART)
+
             # Check loadbalancing
             for i in range(5):
                 ok = True
@@ -658,6 +665,12 @@ class TestARCCI(unittest.TestCase):
                 util.log('SUCCESS, loadbalancing.')
 
             api.destroy()
+
+            # Go back to initial configuration
+            for s in self.cluster['servers']:
+                self.assertEqual(testbase.request_to_shutdown_cm(s), 0, 'failed to shutdown confmaster to recover')
+            self.assertTrue(util.recover_confmaster(self.cluster, [s['id'] for s in self.cluster['servers']], 0),
+                    'failed to recover confmaster')
 
     def test_zookeeper_delete_root_of_gw_znodes(self):
         util.print_frame()
@@ -721,7 +734,7 @@ class TestARCCI(unittest.TestCase):
                 'failed to create root of GW znodes, ret:%s' % ret)
         for s in self.cluster['servers']:
             path = '/RC/NOTIFICATION/CLUSTER/%s/GW/%d' % (s['cluster_name'], s['id'])
-            cmd = 'create %s \'{"ip":"%s","port":%d}\'' % (path, s['ip'], s['gateway_port'])
+            cmd = 'create %s {"ip":"%s","port":%d}' % (path, s['ip'], s['gateway_port'])
             print cmd
             ret = util.zk_cmd(cmd)
             self.assertEqual(ret['exitcode'], 'OK', 'failed to recover GW znode, ret:%s' % ret)

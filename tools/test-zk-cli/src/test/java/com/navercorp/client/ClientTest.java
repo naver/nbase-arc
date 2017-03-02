@@ -259,6 +259,37 @@ public class ClientTest {
     }
     
     @Test
+    public void help() {
+        Result r = c.execute("help".split(" "));
+        assertNotEquals(r.message, "");
+        assertEquals(r.error, "");
+        assertEquals(r.exitcode, OK);
+    }
+    
+    @Test
+    public void error() {
+        Result r = c.execute("get invalid_path".split(" "));
+        assertEquals(r.message, "");
+        assertNotEquals(r.error, "");
+        assertEquals(r.exitcode, INVALID_ARGUMENT);
+        
+        r = c.execute("set /test value wrong_number_of_arguments".split(" "));
+        assertEquals(r.message, "");
+        assertNotEquals(r.error, "");
+        assertEquals(r.exitcode, INVALID_ARGUMENT);
+
+        r = c.execute("".split(" "));
+        assertEquals(r.message, "");
+        assertNotEquals(r.error, "");
+        assertEquals(r.exitcode, INVALID_COMMAND);
+        
+        r = c.execute("wrong_command".split(" "));
+        assertEquals(r.message, "");
+        assertNotEquals(r.error, "");
+        assertEquals(r.exitcode, INVALID_COMMAND);
+    }
+    
+    @Test
     public void usage() {
         assertTrue(Client.getUsage().length() > 0);
     }

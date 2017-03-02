@@ -41,6 +41,9 @@ import process_mgmt
 import shutil
 import exceptions
 from arcci.arcci import *
+import itertools
+import threading
+import zookeeper
 
 proc_mgmt = process_mgmt.ProcessMgmt()
 
@@ -177,7 +180,7 @@ devnull = open( os.devnull, 'w' )
 def exec_proc_async( working_dir,
                      args,
                      is_shell,
-                     in_handle=devnull,
+                     in_handle=None,
                      out_handle=1,
                      err_handle=2 ):
     old_cwd = os.path.abspath( os.getcwd() )
@@ -185,6 +188,7 @@ def exec_proc_async( working_dir,
     p = subprocess.Popen( args,
                           preexec_fn=os.setsid,
                           shell=is_shell,
+                          stdin=in_handle,
                           stdout=out_handle,
                           stderr=err_handle,
                           close_fds=True )
@@ -2546,21 +2550,10 @@ def kill_redis( id ):
 
 def kill_all_processes():
     proc_mgmt.kill_all()
-    return 0
 
 
 def zk_cmd( cmd ):
-    args = 'java -jar %s -z localhost:2181 %s' % (c.ZK_CLI, cmd)
-    p = exec_proc_async(c.ZK_CLI_DIR, args, True, out_handle=subprocess.PIPE, err_handle=subprocess.PIPE)
-    p.wait()
-    (stdo, stde) = p.communicate()
-
-    return {
-            'exitcode':zk_exitcode_str(p.returncode),
-            'err':stde.strip(),
-            'data':stdo.strip()
-           }
-
+    return zookeeper.ZooKeeperCli.execute(cmd)
 
 def zk_exitcode_str(exitcode):
     if exitcode == 0: return 'OK'
@@ -2599,7 +2592,8 @@ def zk_rm_child_if_match(path, child_value):
         return False
 
     for child in children:
-        cmd = 'get %s/%s' % (path, child)
+        child_path = '%s/%s' % (path, child)
+        cmd = 'get %s' % child_path 
         r = zk_cmd(cmd)
         if r['exitcode'] == 'ZK_NO_NODE':
             continue
@@ -2613,6 +2607,40 @@ def zk_rm_child_if_match(path, child_value):
                 return True
 
     return True
+
+
+def zk_get_children_with_data(path):
+    """
+    return: list of dictionaries containing path and data of child-znode or None if failed
+            [
+                {
+                    'name' : <string>,
+                    'data' : <string>
+                }, ...
+            ]
+
+    """
+
+    result = []
+
+    ret, children = util.zk_get_children(path)
+    if ret == False:
+        return None
+
+    for child in children:
+        ret = util.zk_cmd('get %s/%s' % (path, child))
+        if ret['exitcode'] != 'OK':
+            util.log('failed to execute zookeeper command. ret: "%s"' % ret)
+            return None
+
+        result.append(
+            {
+                'name' : child,
+                'data' : ret['data']
+            }
+        )
+
+    return result
 
 
 def delete_redis_check_point( id ):
@@ -2950,6 +2978,19 @@ def recover_confmaster(cluster, killed_id_list, leader_id):
     leader_id: leader confmaster id
     """
 
+    # Wait until previous killed confmaster's ephemeral-znodes are deleted
+    for id in killed_id_list:
+        s = filter(lambda x: x['id'] == id, cluster['servers'])
+        if len(s) != 1:
+            log('wrong confmaster id. id: %d' % id)
+            return False
+
+        if await(30)(
+                lambda x: x['exitcode'] == 'ZK_NO_NODE',
+                lambda : zk_cmd('get /RC/CC/FD/%s:%d' % ('0.0.0.0', s[0]['cm_port']))) == False:
+            log('previous killed confmaster\'s ephemeral-znodes still exist')
+            return False
+
     # Run leader
     leader = cluster['servers'][leader_id]
     if util.cm_success(util.cm_command(leader['ip'], leader['cm_port'], 'ping'))[0] == False:
@@ -2993,3 +3034,14 @@ def recover_confmaster(cluster, killed_id_list, leader_id):
 
     return True
 
+def encode_to_rle(input_string):
+    """
+    return: a list of run length encoded input_string
+    """
+    return [(len(list(g)), k) for k,g in itertools.groupby(input_string)]
+
+def rle_list_to_string(lst):
+    return ''.join(['%s%s' % (v, c) for c, v in lst])
+
+def decode_from_rle(lst):
+    return ''.join(c * n for n,c in lst)

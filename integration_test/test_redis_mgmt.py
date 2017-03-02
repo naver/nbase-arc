@@ -43,15 +43,11 @@ class TestRedisMgmt(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix( 'TestRedisMgmt_%s' % self._testMethodName )
-        if default_cluster.initialize_starting_up_smr_before_redis( self.cluster ) is not 0:
-            util.log('failed to TestRedisMgmt.initialize')
-            return -1
-        return 0
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize( self.cluster ) is not 0:
-            util.log('failed to TestRedisMgmt.finalize')
-        return 0
+        testbase.defaultTearDown(self)
 
     def pgs_del_server(self, gw, server, n):
         gw.write("pgs_del %d %d\r\n" % (server['id']+n*6, server['pg_id']+n*2))

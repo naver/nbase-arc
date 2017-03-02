@@ -17,9 +17,23 @@
 import time
 import testbase
 import util
+import config_checker
 
 
-def initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
+def initialize_starting_up_smr_before_redis(cluster, verbose=2, conf=None, arch=64):
+    if __initialize_starting_up_smr_before_redis(cluster, verbose, conf) == -1:
+        __cleanup(cluster)
+        return None
+
+    checker = config_checker.ZoneConfigChecker(cluster['servers'], arch)
+    if checker.initial_check() == False:
+        __cleanup(cluster)
+        return None
+
+    return checker
+
+
+def __initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
     if conf == None:
         conf = {'smr_log_delete_delay':86400,
                 'cm_context':''}
@@ -70,7 +84,19 @@ def initialize_starting_up_smr_before_redis( cluster, verbose=2, conf=None ):
     return 0
 
 
-def initialize_for_test_confmaster( cluster ):
+def initialize_for_test_confmaster(cluster, arch=64):
+    if __initialize_for_test_confmaster(cluster) == -1:
+        __cleanup(cluster)
+        return None
+
+    checker = config_checker.ZoneConfigChecker(cluster['servers'], arch)
+    if checker.initial_check() == False:
+        __cleanup(cluster)
+        return None
+
+    return checker
+
+def __initialize_for_test_confmaster( cluster ):
     if testbase.cleanup_zookeeper_root() is not 0:
         util.log('failed to cleanup_zookeeper_root')
         return -1
@@ -91,10 +117,9 @@ def initialize_for_test_confmaster( cluster ):
 
     return 0
 
+def finalize(cluster):
+    __cleanup(cluster)
 
-def finalize( cluster ):
-    for server in cluster['servers']:
-        if testbase.kill_all_processes( server ) is not 0:
-            util.log('failed to kill_all_processes')
-            return -1
-    return 0
+def __cleanup(cluster):
+    util.kill_all_processes()
+

@@ -334,9 +334,8 @@ class TestConfMaster(unittest.TestCase):
     def configuration_master_commands(self):
         util.print_frame()
 
-        ret = default_cluster.initialize_for_test_confmaster(self.cluster)
-        if ret is not 0:
-            default_cluster.finalize(self.cluster)
+        conf_checker = default_cluster.initialize_for_test_confmaster(self.cluster)
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         try:
             # Cluster commands
@@ -469,6 +468,7 @@ class TestConfMaster(unittest.TestCase):
             # Recover confmaster
             self.assertTrue(util.recover_confmaster(self.cluster, [], 0), 'failed to recover confmaster')
 
+            self.assertTrue(conf_checker.final_check())
         finally:
             default_cluster.finalize(self.cluster)
 
@@ -548,8 +548,8 @@ class TestConfMaster(unittest.TestCase):
 
             try:
                 # Start default cluster
-                ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
-                self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+                conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+                self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
                 # Start ReadCommandThread
                 read_cmds = []
@@ -690,17 +690,16 @@ class TestConfMaster(unittest.TestCase):
                 # Cleanup additional cluster 
                 self.assertTrue(create_cluster_thrd.cleanup_cluster(), 'failed to cleanup cluster')
 
+                self.assertTrue(conf_checker.final_check())
             finally:
-                ret = default_cluster.finalize( self.cluster )
-                self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
-                pass
+                default_cluster.finalize(self.cluster)
 
     def test_check_redis_hang_after_role_change(self):
         util.print_frame()
         load_gen_list = {}
         try:
-            ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.initialize' )
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # start load generator
             for i in range( len(self.cluster['servers']) ):
@@ -718,6 +717,8 @@ class TestConfMaster(unittest.TestCase):
 
                 util.log( 'Loop:%d, role_change, master:%d' % (i, m['id']) )
                 self.role_change(m)
+
+            self.assertTrue(conf_checker.final_check())
         finally:
             # shutdown load generators
             for i in range(len(load_gen_list)):
@@ -725,9 +726,7 @@ class TestConfMaster(unittest.TestCase):
                 load_gen_list[i].join()
                 load_gen_list.pop(i, None)
 
-            # shutdown cluster
-            ret = default_cluster.finalize( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+            default_cluster.finalize(self.cluster)
 
     def role_change(self, target):
         #util.log_server_state( self.cluster )
@@ -789,8 +788,8 @@ class TestConfMaster(unittest.TestCase):
             ret = util.nic_add('eth1:arc', '127.0.0.100')
             self.assertTrue(ret, 'failed to add virtual network interface.')
 
-            ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis(cluster)
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             """
                 +-------+----------------+------+-------+
@@ -1305,8 +1304,8 @@ class TestConfMaster(unittest.TestCase):
                 +-------+---------------------+--------+----------------+------+-----------+
             """
 
-            affinity = '[{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"W4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096W4096\\",\\"gw_id\\":5}]'
-            ret = util.zk_cmd('set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))
+            affinity = '[{"affinity":"W4096N4096","gw_id":0},{"affinity":"W4096N4096","gw_id":1},{"affinity":"W4096N4096","gw_id":2},{"affinity":"N4096W4096","gw_id":3},{"affinity":"N4096W4096","gw_id":4},{"affinity":"N4096W4096","gw_id":5}]'
+            ret = util.zk_cmd('set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY %s' % (cluster['cluster_name'], affinity))
 
             # Check OPS of Gateways
             con_cnt = 0
@@ -1334,24 +1333,23 @@ class TestConfMaster(unittest.TestCase):
 
             # Go back to initial configuration
             # Recover affinity
-            affinity = '[{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":5}]'
+            affinity = '[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]'
             self.assertEqual(
                 util.zk_cmd(
-                    'set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))['exitcode'],
+                    'set /RC/NOTIFICATION/CLUSTER/%s/AFFINITY %s' % (cluster['cluster_name'], affinity))['exitcode'],
                 'OK',
                 'failed to recover affinity')
 
+            self.assertTrue(conf_checker.final_check())
         finally:
             util.nic_del('eth1:arc')
 
             self.destroy_load_gens(load_gens)
 
-            # shutdown cluster
-            #ret = default_cluster.finalize(cluster)
-            #self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
-
             while len(cluster['servers']) > 6:
                 cluster['servers'].pop(6)
+
+            default_cluster.finalize(cluster)
 
     def fd_leak_test_wrapper(test_name):
         def wrapper(function):
@@ -1361,8 +1359,8 @@ class TestConfMaster(unittest.TestCase):
                     cluster = config.clusters[0]
                     leader_cm = cluster['servers'][0]
 
-                    ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
-                    self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+                    conf_checker = default_cluster.initialize_starting_up_smr_before_redis(cluster)
+                    self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
                     # Check cluster state
                     ok = False
@@ -1392,11 +1390,10 @@ class TestConfMaster(unittest.TestCase):
                     # Call test method
                     function(self, cluster=cluster, leader_cm=leader_cm, init_fds=init_fds)
 
+                    self.assertTrue(conf_checker.final_check())
                 finally:
-                    # shutdown cluster
-                    ret = default_cluster.finalize(cluster)
-                    self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
-                    pass
+                    default_cluster.finalize(cluster)
+
             call._original = function
             return call
         return wrapper
@@ -1622,8 +1619,8 @@ class TestConfMaster(unittest.TestCase):
     def test_worklog_no_after_mgmt_failover(self):
         util.print_frame()
         try:
-            ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.initialize' )
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             for i in range( 0, len( self.cluster['servers'] ) - 1 ):
                 util.log( 'loop %d' % i )
@@ -1669,10 +1666,9 @@ class TestConfMaster(unittest.TestCase):
                     util.recover_confmaster(self.cluster, [0,1], 0),
                     'failed to recover confmaster')
 
+            self.assertTrue(conf_checker.final_check())
         finally:
-            # shutdown cluster
-            ret = default_cluster.finalize(self.cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
+            default_cluster.finalize(self.cluster)
 
     def test_no_gw_affinity_znode(self):
         util.print_frame()
@@ -1683,8 +1679,8 @@ class TestConfMaster(unittest.TestCase):
             leader_cm = cluster['servers'][0]
             gw_servers = map(lambda s: util.deepcopy_server(s), cluster['servers'])
 
-            ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis(cluster)
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # Delete Affinity ZNODE
             util.log('Delete gateway affinity znode')
@@ -1712,19 +1708,17 @@ class TestConfMaster(unittest.TestCase):
 
             # Go back to initial configuration
             # Recover Affinity ZNODE
-            affinity = '[{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":0},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":1},{\\"affinity\\":\\"A4096N4096\\",\\"gw_id\\":2},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":3},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":4},{\\"affinity\\":\\"N4096A4096\\",\\"gw_id\\":5}]'
+            affinity = '[{"affinity":"A4096N4096","gw_id":0},{"affinity":"A4096N4096","gw_id":1},{"affinity":"A4096N4096","gw_id":2},{"affinity":"N4096A4096","gw_id":3},{"affinity":"N4096A4096","gw_id":4},{"affinity":"N4096A4096","gw_id":5}]'
             self.assertEqual(
                     util.zk_cmd(
-                        'create /RC/NOTIFICATION/CLUSTER/%s/AFFINITY "%s"' % (cluster['cluster_name'], affinity))['exitcode'],
+                        'create /RC/NOTIFICATION/CLUSTER/%s/AFFINITY %s' % (cluster['cluster_name'], affinity))['exitcode'],
                     'OK',
                     'failed to recover affinity')
 
+            self.assertTrue(conf_checker.final_check())
         finally:
             self.destroy_load_gens(load_gens)
-
-            # shutdown cluster
-            ret = default_cluster.finalize(cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
+            default_cluster.finalize(cluster)
 
     def restart_gateway_with_virtual_network_info(self, cluster, leader_cm):
         # Shutdown gateways
@@ -1791,8 +1785,8 @@ class TestConfMaster(unittest.TestCase):
             leader_cm = cluster['servers'][0]
             gw_servers = map(lambda s: util.deepcopy_server(s), cluster['servers'])
 
-            ret = default_cluster.initialize_starting_up_smr_before_redis(cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis(cluster)
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # Set up local connection info in gateways
             self.restart_gateway_with_virtual_network_info(cluster, leader_cm)
@@ -1827,21 +1821,17 @@ class TestConfMaster(unittest.TestCase):
                 # Restart Gateways in order to clear stat-info of gateways
                 self.restart_gateway_with_virtual_network_info(cluster, leader_cm)
 
+            self.assertTrue(conf_checker.final_check())
         finally:
             self.destroy_load_gens(load_gens)
-
-            # shutdown cluster
-            ret = default_cluster.finalize(cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.finalize')
+            default_cluster.finalize(cluster)
 
     def test_no_stale_info_in_new_leader(self):
         util.print_frame()
         
         try:
-            ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-            if ret is not 0:
-                default_cluster.finalize( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestClusteredConfigurator.initialize' )
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # Run new ConfMaster
             s = self.cluster['servers'][0]
@@ -1930,16 +1920,16 @@ class TestConfMaster(unittest.TestCase):
                     util.install_pg(self.cluster, self.cluster['servers'], self.cluster['servers'][0], start_gw=True),
                     'failed to recover PGS and GW in a PM')
           
+            self.assertTrue(conf_checker.final_check())
         finally:
-            ret = default_cluster.finalize( self.cluster ) 
-            self.assertEquals( ret, 0, 'failed to TestClusteredConfigurator.finalize' )
+            default_cluster.finalize(self.cluster)
 
     def test_role_change_log_rank(self):
         util.print_frame()
         load_gen_list = {}
         try:
-            ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.initialize' )
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # start load generator
             for i in range( len(self.cluster['servers']) ):
@@ -1977,6 +1967,7 @@ class TestConfMaster(unittest.TestCase):
                         lambda : util.check_cluster(self.cluster['cluster_name'], self.leader_cm['ip'], self.leader_cm['cm_port'], check_quorum=True)),
                     'failed to recover quorum')
 
+            self.assertTrue(conf_checker.final_check())
         finally:
             # shutdown load generators
             for i in range(len(load_gen_list)):
@@ -1984,9 +1975,7 @@ class TestConfMaster(unittest.TestCase):
                 load_gen_list[i].join()
                 load_gen_list.pop(i, None)
 
-            # shutdown cluster
-            ret = default_cluster.finalize( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+            default_cluster.finalize(self.cluster)
 
     def cluster_on_off_connection_count(self):
         # initial heartbeat connections
@@ -2155,8 +2144,8 @@ class TestConfMaster(unittest.TestCase):
         util.print_frame()
         load_gen_list = {}
         try:
-            ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
             
             # start load generator
             for i in range(len(self.cluster['servers'])):
@@ -2176,23 +2165,19 @@ class TestConfMaster(unittest.TestCase):
             print '\n\n### cluster_on_off_interleaved_fail ###\n'
             self.cluster_on_off_interleaved_fail()
 
-        finally:
-            print '\n\n### release resources ###\n'
-
-            # shutdown load generators
-            for i in range(len(load_gen_list)):
-                load_gen_list[i].quit()
-                load_gen_list[i].join()
-                load_gen_list.pop(i, None)
-
             # cluster_on in order to enable confmaster commands on test cluster
             cinfo = util.cluster_info(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
             if cinfo != None and cinfo['cluster_info']['Mode'] == 2:
                 util.cluster_on(self.leader_cm['ip'], self.leader_cm['cm_port'], self.cluster['cluster_name'])
 
-            # shutdown cluster
-            ret = default_cluster.finalize( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+            self.assertTrue(conf_checker.final_check())
+        finally:
+            # shutdown load generators
+            for i in range(len(load_gen_list)):
+                load_gen_list[i].quit()
+                load_gen_list[i].join()
+                load_gen_list.pop(i, None)
+            default_cluster.finalize(self.cluster)
 
     def test_migrate_mgmt_cluster(self):
         util.print_frame()
@@ -2204,8 +2189,8 @@ class TestConfMaster(unittest.TestCase):
 
         try:
             # install cluster
-            ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
-            self.assertEquals(ret, 0, 'failed to TestConfMaster.initialize')
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # install destination zookeeper 
             self.assertTrue(zk.start(), 'Failed to start ZooKeeper')
@@ -2254,8 +2239,7 @@ class TestConfMaster(unittest.TestCase):
             zk.stop()
             zk.cleanup()
 
+            self.assertTrue(conf_checker.final_check())
         finally:
-            # shutdown cluster
-            ret = default_cluster.finalize( self.cluster )
-            self.assertEquals( ret, 0, 'failed to TestConfMaster.finalize' )
+            default_cluster.finalize(self.cluster)
 

@@ -22,6 +22,7 @@ import util
 import config
 import redis_mgmt
 import gateway_mgmt
+import testbase
 
 class TestProtocolError(unittest.TestCase):
     cluster = config.clusters[2]
@@ -36,14 +37,11 @@ class TestProtocolError(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix( 'TestProtocolError_%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
-        if ret is not 0:
-            util.log('failed to test_basic_op.initialize')
-            default_cluster.finalize(self.cluster)
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize(self.cluster) is not 0:
-            util.log('failed to test_basic_op.finalize')
+        testbase.defaultTearDown(self)
 
     def random_string(self):
         population = 'abcdefghijklmnopqrstuvwxyz'   \

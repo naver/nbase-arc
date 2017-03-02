@@ -43,15 +43,11 @@ class TestQuorumPolicy( unittest.TestCase ):
 
     def setUp( self ):
         util.set_process_logfile_prefix( 'TestQuorumPolicy_%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to TestQuorumPolicy.initialize' )
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown( self ):
-        ret = default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to TestQuorumPolicy.finalize' )
-        return 0
+        testbase.defaultTearDown(self)
 
     def test_quorum( self ):
         util.print_frame()
@@ -192,6 +188,10 @@ class TestQuorumPolicy( unittest.TestCase ):
         self.assertEqual( 1, quorum_of_new_master ,
                           'invalid quorum of new master, expected:%d, but:%d' % (1, quorum_of_new_master) )
         util.log( 'succeeded : quorum of new master=%d' % quorum_of_new_master )
+
+        # Go back to initial configuration
+        # Recover Confmaster
+        self.assertTrue(util.recover_confmaster(self.cluster, [0,1,2], 0), 'failed to recover confmaster')
 
         return 0
 

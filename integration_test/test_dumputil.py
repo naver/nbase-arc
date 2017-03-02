@@ -26,6 +26,7 @@ import time
 import json
 import subprocess
 import crc16
+import testbase
 
 BASE32    = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
 BASE32HEX = '0123456789ABCDEFGHIJKLMNOPQRSTUV'
@@ -36,15 +37,11 @@ class TestDumpUtil(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix('TestDumpUtil_%s' % self._testMethodName)
-        if default_cluster.initialize_starting_up_smr_before_redis(self.cluster) is not 0:
-            util.log('failed to TestDumpUtil.initialize')
-            return -1
-        return 0
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize(self.cluster) is not 0:
-            util.log('failed to TestDumpUtil.finalize')
-        return 0
+        testbase.defaultTearDown(self)
 
     def b32hexdecode(self, s):
         s = s.encode('ascii')

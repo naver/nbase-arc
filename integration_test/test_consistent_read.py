@@ -33,10 +33,8 @@ class TestConsistentRead( unittest.TestCase ):
 
     @classmethod
     def setUpClass( cls ):
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
-        if ret is not 0:
-            default_cluster.finalize( cls.cluster )
-            return -1
+        cls.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
+        assert cls.conf_checker != None, 'failed to initialize cluster'
 
         slave = util.get_server_by_role( cls.cluster['servers'], 'slave' )
 
@@ -51,7 +49,7 @@ class TestConsistentRead( unittest.TestCase ):
         for i in range( len( cls.load_gen_thrd_list ) ):
             cls.load_gen_thrd_list[i].join()
 
-        default_cluster.finalize( cls.cluster )
+        testbase.defaultTearDown(cls)
 
     def setUp( self ):
         util.set_process_logfile_prefix( 'TestConsistentRead_%s' % self._testMethodName )

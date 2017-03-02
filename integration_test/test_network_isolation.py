@@ -124,8 +124,8 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+        conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster )
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         # Print initial state of cluster
         util.log('\n\n\n ### INITIAL STATE OF CLUSTER ### ')
@@ -214,9 +214,10 @@ class TestNetworkIsolation(unittest.TestCase):
         self.assertNotEqual(initial_state, None, 'initial_state is None')
         self.assertNotEqual(final_state, None, 'final_state is None')
 
+        self.assertTrue(conf_checker.final_check())
+
         # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
+        default_cluster.finalize(cluster)
 
     def test_2_some_pgs_is_isolated(self):
         util.print_frame()
@@ -243,8 +244,8 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+        conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster )
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         # Place master on virtual ip address in order to cause master election.
         pg_id = 0
@@ -327,16 +328,17 @@ class TestNetworkIsolation(unittest.TestCase):
             util.log(msg)
             self.assertNotEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
 
-        # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
-
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+
+        self.assertTrue(conf_checker.final_check())
+
+        # Shutdown cluster
+        default_cluster.finalize(cluster)
 
     def test_3_some_pgs_is_isolated_2copy(self):
         util.print_frame()
@@ -363,8 +365,8 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+        conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster )
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         # Place master on real ip address
         for pg_id in [0, 1]:
@@ -446,16 +448,17 @@ class TestNetworkIsolation(unittest.TestCase):
         self.assertNotEqual(initial_state, None, 'initial_state is None')
         self.assertNotEqual(final_state, None, 'final_state is None')
 
-        # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
-
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
         out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+
+        self.assertTrue(conf_checker.final_check())
+
+        # Shutdown cluster
+        default_cluster.finalize(cluster)
 
     def test_4_mgmt_is_isolated_with_red_failover(self):
         util.print_frame()
@@ -477,8 +480,8 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+        conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster )
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port)
 
@@ -644,9 +647,10 @@ class TestNetworkIsolation(unittest.TestCase):
 
         self.assertTrue(util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, check_quorum=True), 'failed to check cluster state')
 
+        self.assertTrue(conf_checker.final_check())
+
         # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
+        default_cluster.finalize(cluster)
 
     def test_5_mgmt_is_isolated_with_lconn(self):
         util.print_frame()
@@ -668,8 +672,8 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+        conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster )
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         # Print initial state of cluster
         util.log('\n\n\n ### INITIAL STATE OF CLUSTER ### ')
@@ -789,9 +793,10 @@ class TestNetworkIsolation(unittest.TestCase):
 
         self.assertTrue(util.check_cluster(cluster['cluster_name'], mgmt_ip, mgmt_port, check_quorum=True), 'failed to check cluster state')
 
+        self.assertTrue(conf_checker.final_check())
+
         # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
+        default_cluster.finalize(cluster)
 
     def test_6_repeat_isolation_and_no_opinion_linepay(self):
         util.print_frame()
@@ -830,8 +835,8 @@ class TestNetworkIsolation(unittest.TestCase):
         mgmt_port = cluster['servers'][0]['cm_port']
 
         # Create cluster
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cluster )
-        self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+        conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster )
+        self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
         # Print initial state of cluster
         util.log('\n\n\n ### INITIAL STATE OF CLUSTER ### ')
@@ -902,10 +907,6 @@ class TestNetworkIsolation(unittest.TestCase):
 
             self.assertFalse(all_in_f, 'PGS0`s last state remains in F')
 
-        # Shutdown cluster
-        ret = default_cluster.finalize( cluster )
-        self.assertEqual(ret, 0, 'failed to TestMaintenance.finalize')
-
         # Delete forwarding role
         out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
@@ -921,6 +922,11 @@ class TestNetworkIsolation(unittest.TestCase):
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
         out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.102 -p tcp -j DNAT --to-destination 127.0.0.1')
         self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+
+        self.assertTrue(conf_checker.final_check())
+
+        # Shutdown cluster
+        default_cluster.finalize(cluster)
 
     def test_7_dirty_network_fi(self):
         util.print_frame()
@@ -951,9 +957,9 @@ class TestNetworkIsolation(unittest.TestCase):
             mgmt_port = cluster['servers'][0]['cm_port']
 
             # Create cluster
-            ret = default_cluster.initialize_starting_up_smr_before_redis( cluster, 
+            conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cluster, 
                     conf={'cm_context':'applicationContext-fi.xml'})
-            self.assertEqual(0, ret, 'failed to TestMaintenance.initialize')
+            self.assertIsNotNone(conf_checker, 'failed to initialize cluster')
 
             # Print initial state of cluster
             util.log('\n\n\n ### INITIAL STATE OF CLUSTER ### ')
@@ -1071,10 +1077,6 @@ class TestNetworkIsolation(unittest.TestCase):
                 for c in clnts:
                     self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
 
-            # Shutdown cluster
-            ret = default_cluster.finalize( cluster )
-            self.assertEqual(ret, 0, '[%s] failed to TestMaintenance.finalize' % str(fi))
-
             # Delete forwarding role
             out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
             self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
@@ -1083,6 +1085,11 @@ class TestNetworkIsolation(unittest.TestCase):
 
             for c in clnts:
                 self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
+
+            self.assertTrue(conf_checker.final_check())
+
+            # Shutdown cluster
+            default_cluster.finalize(cluster)
 
         finally:
             for c in clnts:

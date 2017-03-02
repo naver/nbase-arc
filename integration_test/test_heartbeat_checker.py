@@ -46,15 +46,11 @@ class TestHeartbeatChecker( unittest.TestCase ):
 
     def setUp( self ):
         util.set_process_logfile_prefix( 'TestHeartbeatChecker_%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to TestHeartbeatChecker.initialize' )
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown( self ):
-        ret = default_cluster.finalize( self.cluster )
-        self.assertEquals( ret, 0, 'failed to TestHeartbeatChecker.finalize' )
-        return 0
+        testbase.defaultTearDown(self)
 
     def getseq_log(self, s):
         smr = smr_mgmt.SMR( s['id'] )

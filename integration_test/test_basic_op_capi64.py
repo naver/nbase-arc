@@ -18,6 +18,7 @@ import basic_op_capi
 import util
 
 class TestBasicOpCAPI64(basic_op_capi.TestBasicOpCAPI):
+    arch = 64
     def test_basic_op_capi(self):
         util.print_frame()
-        basic_op_capi.TestBasicOpCAPI.test_basic_op_capi(self, 64)
+        basic_op_capi.TestBasicOpCAPI.test_basic_op_capi(self)

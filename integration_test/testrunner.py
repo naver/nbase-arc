@@ -1,4 +1,3 @@
-#
 # Copyright 2015 Naver Corp.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,6 +24,7 @@ import sys
 import os
 import signal
 import default_cluster
+import zookeeper
 
 def print_list_and_input(list):
     while True:
@@ -313,7 +313,7 @@ def main():
 
     # When -i flag is on, it exits after setting up a cluster.
     if opt_init is True:
-        if default_cluster.initialize_starting_up_smr_before_redis( config.clusters[0], verbose=2 ) is not 0:
+        if default_cluster.initialize_starting_up_smr_before_redis( config.clusters[0], verbose=2 ) is None:
             util.log('failed setting up servers.')
         else:
             util.log('finished successfully setting up servers.' )
@@ -328,4 +328,8 @@ def main():
     return test_modules(module_list, opt_non_interactive, opt_backup_log_dir)
 
 if __name__ == '__main__':
-    exit(main())
+    try:
+        zookeeper.ZooKeeperCli.start()
+        exit(main())
+    finally:
+        zookeeper.ZooKeeperCli.stop()

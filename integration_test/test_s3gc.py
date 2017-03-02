@@ -30,17 +30,12 @@ class TestS3GC( unittest.TestCase ):
 
     @classmethod
     def setUpClass( cls ):
-        ret = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
-        if ret is not 0:
-            default_cluster.finalize( cls.cluster )
-        assert (ret == 0)
-        return 0
+        cls.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( cls.cluster )
+        assert cls.conf_checker != None, 'failed to initialize cluster'
 
     @classmethod
     def tearDownClass( cls ):
-        ret = default_cluster.finalize( cls.cluster )
-        assert (ret == 0)
-        return 0
+        testbase.defaultTearDown(cls)
 
     def setUp( self ):
         util.set_process_logfile_prefix( 'TestS3GC_%s' % self._testMethodName )

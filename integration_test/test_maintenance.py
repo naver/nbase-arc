@@ -46,10 +46,8 @@ class TestMaintenance(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix( 'TestMaintenance_%s' % self._testMethodName )
-        if default_cluster.initialize_starting_up_smr_before_redis( self.cluster ) is not 0:
-            util.log('failed to TestMaintenance.initialize')
-            return -1
-        return 0
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
         # shutdown load generators
@@ -58,10 +56,7 @@ class TestMaintenance(unittest.TestCase):
             load_gen.join()
             self.load_gen_list.pop(load_gen_id, None)
 
-        if default_cluster.finalize( self.cluster ) is not 0:
-            util.log('failed to TestMaintenance.finalize')
-
-        return 0
+        testbase.defaultTearDown(self)
 
     def __del_server(self, server_to_del):
         # backup data
@@ -266,6 +261,10 @@ class TestMaintenance(unittest.TestCase):
             # Cheeck Consistency
             for load_gen_id, load_gen in self.load_gen_list.items():
                 self.assertTrue(load_gen.isConsistent(), 'Data inconsistency after role_change')
+
+        # Go back to initial configuration
+        self.assertTrue(util.install_pgs(self.cluster, self.cluster['servers'][0], self.leader_cm, rm_ckpt=False),
+                'failed to recover pgs.')
 
     def role_change_with_hanging_pgs(self, hanging_servers, running_servers, target_id, master):
         util.log('hanging_servers:%s' % hanging_servers)

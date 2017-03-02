@@ -23,21 +23,18 @@ import util
 import subprocess
 import copy
 import time
+import testbase
 
 class TestFreeClient(unittest.TestCase):
     cluster = config.clusters[0]
 
     def setUp(self):
         util.set_process_logfile_prefix( 'TestFreeClient_%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
-        if ret is not 0:
-            default_cluster.finalize( self.cluster )
-        return 0
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis( self.cluster )
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize( self.cluster ) is not 0:
-            util.log('failed to TestFreeClient.finalize')
-        return 0
+        testbase.defaultTearDown(self)
 
     def numOpenFds(self, pid):
         p = util.exec_proc_async(util.cluster_util_dir(0), 'ls /proc/%s/fd | wc -l' % pid,
@@ -90,3 +87,9 @@ class TestFreeClient(unittest.TestCase):
 
         num2 = self.numOpenFds(pid)
         self.assertEquals(num1, num2)
+
+        # Go back to initial configuration
+        self.assertTrue(util.shutdown_pgs(server, self.cluster['servers'][0]),
+                'recover pgs fail. (shutdown_pgs)')
+        self.assertTrue(util.recover_pgs(server, self.cluster['servers'][0]),
+                'recover pgs fail. (shutdown_pgs)')

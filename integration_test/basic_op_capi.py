@@ -39,17 +39,13 @@ class TestBasicOpCAPI(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix( 'TestBasicOp_%s' % self._testMethodName )
-        ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
-        if ret is not 0:
-            util.log('failed to test_basic_op.initialize')
-            default_cluster.finalize(self.cluster)
-        self.assertEquals( ret, 0, 'failed to test_basic_op.initialize' )
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster, arch=self.arch)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize(self.cluster) is not 0:
-            util.log('failed to test_basic_op.finalize')
+        testbase.defaultTearDown(self)
 
-    def run_capi_server(self, arch=64):
+    def run_capi_server(self):
         # run capi test server
         _capi_server_conf = """
 zookeeper 127.0.0.1:2181
@@ -73,7 +69,7 @@ local_proxy_query_timeout_millis 10000
         f.close()
         os.chdir(old_cwd)
 
-        if arch is 32:
+        if self.arch is 32:
             cmd = "./%s capi_server.conf" % constant.CAPI32_TEST_SERVER
         else:
             cmd = "./%s capi_server.conf" % constant.CAPI_TEST_SERVER
@@ -100,11 +96,11 @@ local_proxy_query_timeout_millis 10000
         capi_server.send_signal(signal.SIGTERM)
         capi_server.wait()
 
-    def test_basic_op_capi(self, arch = 64):
+    def test_basic_op_capi(self):
 
-        capi_server = self.run_capi_server(arch)
+        capi_server = self.run_capi_server()
 
-        f = open("%s/test_basicop_output_capi%d" % (constant.logdir, arch), 'w')
+        f = open("%s/test_basicop_output_capi%d" % (constant.logdir, self.arch), 'w')
         p = util.exec_proc_async("../redis-%s" % constant.REDISVER,
                             "./runtest_gw --accurate --gw-port 6200",
                             True, None, f, None)

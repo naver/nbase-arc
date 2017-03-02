@@ -25,6 +25,7 @@ import time
 import telnetlib
 import signal
 import constant
+import testbase
 
 class TestLocalProxy(unittest.TestCase):
     cluster = config.clusters[2]
@@ -40,16 +41,13 @@ class TestLocalProxy(unittest.TestCase):
 
     def setUp(self):
         util.set_process_logfile_prefix('TestLocalProxy_%s' % self._testMethodName)
-        ret = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
-        if ret is not 0:
-            util.log('failed to test_local_proxy.initialize')
-            default_cluster.finalize(self.cluster)
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster, arch=self.arch)
+        self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
 
     def tearDown(self):
-        if default_cluster.finalize(self.cluster) is not 0:
-            util.log('failed to test_local_proxy.finalize')
+        testbase.defaultTearDown(self)
 
-    def run_test_server(self, arch=64):
+    def run_test_server(self):
         # run test server
         _capi_server_conf = """
 zookeeper 127.0.0.1:2181
@@ -73,7 +71,7 @@ local_proxy_query_timeout_millis 1000
         f.close()
         os.chdir(old_cwd)
 
-        if arch is 32:
+        if self.arch is 32:
             cmd = "./%s capi_server.conf" % constant.CAPI32_TEST_SERVER
         else:
             cmd = "./%s capi_server.conf" % constant.CAPI_TEST_SERVER
@@ -88,7 +86,7 @@ local_proxy_query_timeout_millis 1000
         capi_server.send_signal(signal.SIGTERM)
         capi_server.wait()
 
-    def test_local_proxy(self, arch=64):
+    def test_local_proxy(self):
         util.print_frame()
 
         # Clean server log file
@@ -99,7 +97,7 @@ local_proxy_query_timeout_millis 1000
         p.wait()
 
         # run test server
-        capi_server = self.run_test_server(arch)
+        capi_server = self.run_test_server()
 
         # ping check
         while True:
@@ -168,11 +166,11 @@ local_proxy_query_timeout_millis 1000
         # Terminate test server
         self.stop_test_server(capi_server)
 
-    def test_local_proxy_be_timeout(self, arch=64):
+    def test_local_proxy_be_timeout(self):
         util.print_frame()
 
         # run test server
-        capi_server = self.run_test_server(arch)
+        capi_server = self.run_test_server()
 
         # ping check
         while True:
