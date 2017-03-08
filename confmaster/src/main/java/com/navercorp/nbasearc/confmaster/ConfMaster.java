@@ -83,8 +83,7 @@ public class ConfMaster {
 
     public void initialize() throws InterruptedException,
             MgmtZooKeeperException, KeeperException, Exception {
-        terminator = new GracefulTerminator(
-                context.getBean(LeaderElectionSupport.class));
+        terminator = new GracefulTerminator(context);
         
         Statistics.initialize(config, jobExecutor);
         
@@ -109,15 +108,16 @@ public class ConfMaster {
     }
     
     public void release() throws InterruptedException, ExecutionException,
-            IOException {
-        terminator.await();
-        
+            IOException, MgmtZooKeeperException {
         // Service layer
         server.relase();
         leaderElection.release();
         
         // Controller layer
         jobExecutor.release();
+
+        // Mgmt release
+        confmasterService.release();
         
         // Database layer
         zk.release();
@@ -161,17 +161,14 @@ public class ConfMaster {
             Runtime.getRuntime().addShutdownHook(cc.terminator);
 
             cc.run();
-
-            cc.release();
-            context.close();
         } catch (Exception e) {
             Logger.error("Exception propagated to the main.", e);
             Logger.flush(DEBUG);
         }
     }
 
-    public void terminate() {
-        terminator.terminate();;
+    public void terminate() throws InterruptedException, ExecutionException, IOException, MgmtZooKeeperException {
+        terminator.terminate();
         terminator.await();
     }
 
