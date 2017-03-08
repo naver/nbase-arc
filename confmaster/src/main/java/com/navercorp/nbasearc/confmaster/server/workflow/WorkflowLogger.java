@@ -60,8 +60,8 @@ public class WorkflowLogger {
     private Integer numLogs;
     private Long numOfStartLog = 1L;
 
-    private final String LOG = "LOG";
-    private final String rootPathForLog = PathUtil.ccRootPath() + "/" + LOG;
+    private static final String LOG = "LOG";
+    private static final String rootPathForLog = PathUtil.ccRootPath() + "/" + LOG;
 
     private final MemoryObjectMapper mapper = new MemoryObjectMapper();
     
@@ -265,11 +265,11 @@ public class WorkflowLogger {
         return null;
     }
     
-    public String rootPathOfLog() {
+    public static String rootPathOfLog() {
         return rootPathForLog; 
     }
     
-    public String pathOfLog(long logID) {
+    public static String pathOfLog(long logID) {
         return rootPathOfLog() + "/" + logID;
     }
 

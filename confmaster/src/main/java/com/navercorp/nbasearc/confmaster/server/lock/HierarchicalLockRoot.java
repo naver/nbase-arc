@@ -16,6 +16,9 @@
 
 package com.navercorp.nbasearc.confmaster.server.lock;
 
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
+
 public class HierarchicalLockRoot extends HierarchicalLock {
     
     public HierarchicalLockRoot() {
@@ -32,14 +35,13 @@ public class HierarchicalLockRoot extends HierarchicalLock {
 
     @Override
     protected void _lock() {
+        ThreadLocalVariableHolder.addPermission(PathUtil.rcRootPath(), getLockType());
         switch (getLockType()) {
         case READ:
             getHlh().acquireLock(getHlh().rootReadLock());
             break;
         case WRITE:
             getHlh().acquireLock(getHlh().rootWriteLock());
-            break;
-        case SKIP:
             break;
         }
     }

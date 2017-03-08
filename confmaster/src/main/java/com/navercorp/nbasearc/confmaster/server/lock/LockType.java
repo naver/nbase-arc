@@ -17,5 +17,15 @@
 package com.navercorp.nbasearc.confmaster.server.lock;
 
 public enum LockType {
-    READ, WRITE, SKIP
+    READ(1), WRITE(2);
+    
+    private int level;
+    
+    private LockType(int l) {
+        level = l;
+    }
+    
+    public int getLevel() {
+        return level;
+    }
 }

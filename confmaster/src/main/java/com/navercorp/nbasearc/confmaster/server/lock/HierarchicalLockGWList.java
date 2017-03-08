@@ -18,8 +18,10 @@ package com.navercorp.nbasearc.confmaster.server.lock;
 
 import static com.navercorp.nbasearc.confmaster.Constant.EXCEPTIONMSG_CLUSTER_DOES_NOT_EXIST;
 
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 
 public class HierarchicalLockGWList extends HierarchicalLock {
     
@@ -48,15 +50,14 @@ public class HierarchicalLockGWList extends HierarchicalLock {
             Logger.error(message);
             throw new IllegalArgumentException();
         }
-        
+
+        ThreadLocalVariableHolder.addPermission(PathUtil.gwRootPath(cluster.getName()), getLockType());
         switch (getLockType()) {
         case READ: 
             getHlh().acquireLock(cluster.gwListReadLock());
             break;
-        case WRITE: 
+        case WRITE:
             getHlh().acquireLock(cluster.gwListWriteLock());
-            break;
-        case SKIP:
             break;
         }
     }
