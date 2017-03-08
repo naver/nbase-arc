@@ -1077,14 +1077,23 @@ class TestNetworkIsolation(unittest.TestCase):
                 for c in clnts:
                     self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
 
-            # Delete forwarding role
-            out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-            out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
             for c in clnts:
                 self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
+
+            # Go back to initial configuration
+            cmfi.init()
+            for fi in cmfi:
+                try:
+                    self.assertTrue(fi_confmaster.fi_add(fi, 0, mgmt_ip, mgmt_port),
+                            "Confmaster command fail. fi: %s" % str(fi))
+                except ValueError as e:
+                    self.fail("Confmaster command error. cmd: \"%s\", reply: \"%s\"" % (cmd, reply))
+
+            # Wait until workflows done
+            ret = util.await(60, True)(
+                    lambda cinfo: cinfo['wf'] == 0,
+                    lambda : util.cluster_info(mgmt_ip, mgmt_port, cluster['cluster_name']))
+            self.assertTrue(ret, 'There are still some workflows.')
 
             self.assertTrue(conf_checker.final_check())
 
@@ -1096,6 +1105,12 @@ class TestNetworkIsolation(unittest.TestCase):
                 c.quit()
             for c in clnts:
                 c.join()
+
+            # Delete forwarding role
+            out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
+            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+            out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
+            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
 
 def checkLastState(mgmt_ip, mgmt_port, cluster_name, pgs_id, state):
     pgs = util.get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id)
