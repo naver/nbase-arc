@@ -373,7 +373,7 @@ def uninstall_pgs(cluster_name, pgs_id, remain_data, remain_mgmt_conf):
     # Change master
     pgs_count = cm.get_joined_pgs_count(cluster_name, pg_id)
     if pgs_count > 1 and pgs_data['smr_role'] == 'M':
-        if util.change_master(cluster_name, pg_id, host) != True:
+        if change_master(cluster_name, pg_id, host) != True:
             warn(red("[%s] Change master fail. PGS_ID:%d, PG_ID:%d" % (host, pgs_id, pg_id)))
             return
 
@@ -788,6 +788,70 @@ def get_supplement_pm():
 
     return (suppl_pm_name, suppl_pm_ip)
 
+class PortAllocator():
+    def __init__(self, host, path, start_port):
+        self.host = host
+        self.path = path
+        self.port = start_port
+
+        self.index = 0
+        ports = execute(remote.get_ports, self.path, hosts=[self.host])[self.host]
+        if len(ports) == 0:
+            self.max_port = start_port - 10
+        else:
+            self.max_port = max(ports)
+
+        if self.max_port < start_port:
+            self.max_port = start_port - 10
+
+    def set_max_port(self, port):
+        self.max_port = port
+
+    def get_max_port(self):
+        return self.max_port
+
+    def next(self):
+        self.max_port += 10
+        return self.max_port
+
+"""
+Preface supplement pgs information.
+This function looks for smr_base_port and pgs_id, Add pgs info to mgmt-cc for preoccupancy.
+
+Returns:
+    dict: {"pgs_id" : <int>, "smr_base_port" : <int>, "redis_port" : <int>}
+"""
+def prepare_suppl_pgsinfo(cluster_name, pg_id, pm_name, pm_ip):
+    # Set host
+    host = config.USERNAME + '@' + pm_ip.encode('ascii')
+    env.hosts = [host]
+
+    # Get port
+    port = PortAllocator(host, config.REMOTE_PGS_DIR, config.PGS_BASE_PORT).next()
+
+    # Get pgs_id
+    pm = cm.pm_info(pm_name)
+    if pm != None:
+        pgs_id = -1
+        for cluster in pm['cluster_list']:
+            for name, data in cluster.items():
+                if name == cluster_name:
+                    pgs_id = max(int(x) for x in data['pgs_ID_List']) + 1
+                    print yellow("[%s] Use max pgs_id in cluster. PGS_ID:%d, PM_NAME:%s, PM_IP:%s" % 
+                            (host, pgs_id, pm_name, pm_ip))
+                    break
+
+    if pgs_id == -1:
+        pgs_ids = cm.pgs_ls(cluster_name) 
+        if pgs_ids == None:
+            return None 
+        pgs_id = max(int(x) for x in pgs_ids['data']['list'])
+        pgs_id += 1
+        print yellow("[%s] Use max pgs_id in cluster. PGS_ID:%d, PM_NAME:%s, PM_IP:%s" % 
+                (host, pgs_id, pm_name, pm_ip))
+
+    return {"pgs_id" : pgs_id, "smr_base_port" : port, "redis_port" : port + 9}
+
 """
 Add a PGS to a PG in order to make a 1-copy replication a 2-copy replication.
 When a PG is already 2-copy or more, this function should not be called.
@@ -825,7 +889,7 @@ def supplement_pgs(cluster_name, pg_id, pm_name, pm_ip, redis_port, cronsave_num
             suppl_pm_name, suppl_pm_ip = get_supplement_pm()
 
     # Prepare PGS info
-    suppl_pgs = util.prepare_suppl_pgsinfo(cluster_name, pg_id, suppl_pm_name, suppl_pm_ip)
+    suppl_pgs = prepare_suppl_pgsinfo(cluster_name, pg_id, suppl_pm_name, suppl_pm_ip)
     if suppl_pgs == None:
         warn(red("[%s] Get supplement pgs info fail. PG:%d" % (suppl_host, pg_id)))
         return False, None
@@ -994,7 +1058,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
             ping_workers.append(util.PingpongWorker(temp_pgs_json['ip'], temp_pgs_json['redis_port'], 'ping', None, try_cnt=3))
 
         # Role change
-        if util.change_master(cluster_name, pg_id, host) != True:
+        if change_master(cluster_name, pg_id, host) != True:
             warn(red("[%s] Change master fail. PGS:%d, PG:%d" % (host, pgs_id, pg_id)))
             return False
 
@@ -1081,7 +1145,7 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
         print magenta("\n[%s] Delete supplement pgs. SPGS:%d, SPORT:%d, PG:%d\n" % (host, suppl_pgs['pgs_id'], suppl_pgs['smr_base_port'], pg_id))
 
         # Role change
-        if util.change_master(cluster_name, pg_id, host) != True:
+        if change_master(cluster_name, pg_id, host) != True:
             warn(red("[%s] Change master fail. PGS:%d, PG:%d" % (host, suppl_pgs['pgs_id'], pg_id)))
             return False
 
@@ -1114,6 +1178,38 @@ def upgrade_pgs(cluster_name, pgs_id, new_cronsave_num):
 
     return True
 
+# On success, change_master() returns pgs_id of new master; on error, it returns -1.
+def change_master(cluster_name, pg_id, host):
+    print magenta("\n[%s] Change master, PG:%d" % (host ,pg_id))
+
+    # Get candidates for master
+    candidates = []
+
+    pgs_list = cm.get_pgs_list(cluster_name, pg_id)
+    for id, data in pgs_list.items():
+        if data['smr_role'] == 'S' and data['hb'] == 'Y':
+            active_role = util.get_role_of_smr(data['ip'], data['mgmt_port'], verbose=False)
+            if active_role != data['smr_role']:
+                warn(red("[%s] Change master fail, PGS '%d' has invalid state. %s(%s)" % 
+                          (host, id, data['smr_role'], active_role )))
+                return False
+
+            candidates.append(data)
+
+    # Check candidates
+    if len(candidates) == 0:
+        warn(red("[%s] Change master fail, PG '%d' doesn't have any slave." % (host, pg_id)))
+        return False
+
+    pgs_id = random.choice(candidates)['pgs_id']
+
+    master_id = cm.role_change(cluster_name, pgs_id, host)
+    if master_id == -1:
+        warn(red("[%s] Change master fail." % host))
+        return False
+
+    print green("[%s] Change master success, PG:%d, MASTER:%d" % (host, pg_id, master_id))
+    return True
 
 def menu_upgrade_gw():
     # Check local binary
@@ -1539,7 +1635,7 @@ def install_cluster(cluster_name, quorum_policy, pg_count, rep_num, pm_list_str,
                 # Make PGS port allocator
                 host = config.USERNAME + '@' + pm[IP].encode('ascii')
                 if pgs_port_allocators.has_key(host) == False:
-                    pgs_port_allocators[host] = util.PortAllocator(host, config.REMOTE_PGS_DIR, config.PGS_BASE_PORT)
+                    pgs_port_allocators[host] = PortAllocator(host, config.REMOTE_PGS_DIR, config.PGS_BASE_PORT)
                     if pgs_max_port < pgs_port_allocators[host].get_max_port():
                         pgs_max_port = pgs_port_allocators[host].get_max_port()
 
@@ -1548,7 +1644,7 @@ def install_cluster(cluster_name, quorum_policy, pg_count, rep_num, pm_list_str,
     for gw_pm in gw_pm_list:
         host = config.USERNAME + '@' + gw_pm[IP].encode('ascii')
         if gw_port_allocators.has_key(host) == False:
-            gw_port_allocators[host] = util.PortAllocator(host, config.REMOTE_GW_DIR, config.GW_BASE_PORT)
+            gw_port_allocators[host] = PortAllocator(host, config.REMOTE_GW_DIR, config.GW_BASE_PORT)
             if gw_max_port < gw_port_allocators[host].get_max_port():
                 gw_max_port = gw_port_allocators[host].get_max_port()
 
