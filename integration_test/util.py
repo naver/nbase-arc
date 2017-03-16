@@ -2418,6 +2418,16 @@ def cm_state(ip, port):
 def cm_start(ip, port):
     return cm_success(cm_command(ip, port, 'cm_start'))[0]
 
+def pm_ls(ip, port):
+    ok, data = cm_success(cm_command(ip, port, 'pm_ls'))
+    if ok:
+        return True, data['list']
+    else:
+        return False, None
+
+def pm_info(ip, port, pm_name):
+    return cm_success(cm_command(ip, port, 'pm_info %s' % pm_name))
+
 def cluster_on(ip, port, cluster_name):
     return cm_success(cm_command(ip, port, 'cluster_on %s' % cluster_name))[0]
 
