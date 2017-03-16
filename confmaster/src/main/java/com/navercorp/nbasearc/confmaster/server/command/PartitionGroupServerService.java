@@ -176,7 +176,7 @@ public class PartitionGroupServerService {
 
         if (null != pmCluster) {
         	PhysicalMachineCluster.PmClusterData cimDataClon = pmCluster.clonePersistentData();
-            cimDataClon.addGwId(Integer.valueOf(pgs.getName()));
+            cimDataClon.addPgsId(Integer.valueOf(pgs.getName()));
             ops.add(Op.setData(pmCluster.getPath(),
                     mapper.writeValueAsBytes(cimDataClon), -1));
         } else {
