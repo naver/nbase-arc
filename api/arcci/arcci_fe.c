@@ -2291,6 +2291,7 @@ arc_do_request (arc_t * arc, arc_request_t * rqst, int timeout_millis,
       timeout_millis = INT_MAX;
     }
   job->to = currtime_millis () + timeout_millis;
+  aj->to_ms = timeout_millis;
 
   ret = fe_preproc_job (fe, job);
   if (ret < 0)
