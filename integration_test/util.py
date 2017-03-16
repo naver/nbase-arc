@@ -826,6 +826,10 @@ def pm_add(name, ip, mgmt_ip, mgmt_port):
     return True
 
 
+def pm_del(ip, port, pm_name):
+    return cm_success(cm_command(ip, port, 'pm_del %s' % pm_name))[0]
+
+
 def uninstall_pg(cluster, servers, leader_cm, stop_gw=True):
     for server in servers:
         if testbase.finalize_info_of_cm_about_pgs(cluster, server, leader_cm) is not 0:

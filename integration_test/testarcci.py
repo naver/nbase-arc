@@ -910,6 +910,10 @@ class TestARCCI(unittest.TestCase):
         self.assertTrue(ok, 'load balancing fail - all gateways after unblocking network')
         util.log('load balancing success - all gateways after unblocking network')
 
+        # Go back to initial configuration
+        self.assertTrue(util.pm_del(MGMT_IP, MGMT_PORT, VIRTUAL_HOST_NAME), 
+                'failed to pm_del to go back to initial configuration.')
+
     def test_a_pg_delay(self):
         util.print_frame()
 
