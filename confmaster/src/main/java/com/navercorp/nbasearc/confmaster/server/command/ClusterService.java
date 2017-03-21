@@ -854,7 +854,7 @@ public class ClusterService {
     @LockMapping(name="mig2pc")
     public void mig2pcLock(HierarchicalLockHelper lockHelper,
             String clusterName, String srcPgId, String destPgId) {
-        lockHelper.root(READ).cluster(READ, clusterName).pgList(READ).pgsList(READ)
+        lockHelper.root(READ).cluster(WRITE, clusterName).pgList(READ).pgsList(READ)
             .pg(WRITE, srcPgId).pg(WRITE, destPgId).pgs(READ, ALL_IN_PG)
             .gwList(READ).gw(WRITE, ALL);
     }
@@ -954,7 +954,7 @@ public class ClusterService {
     @LockMapping(name="slot_set_pg")
     public void slotSetPgLock(HierarchicalLockHelper lockHelper,
             String clusterName, String range, Integer pgid) {
-        lockHelper.root(READ).cluster(READ, clusterName).pgList(READ)
+        lockHelper.root(READ).cluster(WRITE, clusterName).pgList(READ)
                 .pgsList(READ).pg(WRITE, String.valueOf(pgid)).gwList(READ);
     }
     
@@ -1079,6 +1079,7 @@ public class ClusterService {
     public void clusterPurgeLock(HierarchicalLockHelper lockHelper,
             String clusterName) {
         lockHelper.root(READ).cluster(WRITE, clusterName);
+        lockHelper.pmList(WRITE);
     }
 
     @CommandMapping(
@@ -1238,8 +1239,8 @@ public class ClusterService {
     @LockMapping(name="cluster_load")
     public void clusterLoadLock(HierarchicalLockHelper lockHelper,
             String clusterName) {
-        lockHelper.pmList(WRITE);
         lockHelper.root(WRITE);
+        lockHelper.pmList(WRITE);
     }
     
 }

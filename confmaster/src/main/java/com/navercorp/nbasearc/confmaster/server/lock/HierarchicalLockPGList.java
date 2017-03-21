@@ -16,7 +16,9 @@
 
 package com.navercorp.nbasearc.confmaster.server.lock;
 
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 
 public class HierarchicalLockPGList extends HierarchicalLock {
     
@@ -42,14 +44,13 @@ public class HierarchicalLockPGList extends HierarchicalLock {
 
     @Override
     protected void _lock() {
+        ThreadLocalVariableHolder.addPermission(PathUtil.pgRootPath(cluster.getName()), getLockType());
         switch (getLockType()) {
         case READ:
             getHlh().acquireLock(cluster.pgListReadLock());
             break;
         case WRITE:
             getHlh().acquireLock(cluster.pgListWriteLock());
-            break;
-        case SKIP:
             break;
         }
     }

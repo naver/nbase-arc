@@ -18,8 +18,10 @@ package com.navercorp.nbasearc.confmaster.server.lock;
 
 import static com.navercorp.nbasearc.confmaster.Constant.*;
 
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 
 public class HierarchicalLockCluster extends HierarchicalLock {
     
@@ -55,14 +57,14 @@ public class HierarchicalLockCluster extends HierarchicalLock {
 
     @Override
     protected void _lock() {
+        ThreadLocalVariableHolder.addPermission(cluster.getPath(), getLockType());
+        ThreadLocalVariableHolder.addPermission(PathUtil.pathOfGwLookupCluster(cluster.getName()), getLockType());
         switch (this.getLockType()) {
         case READ:
             getHlh().acquireLock(cluster.readLock());
             break;
         case WRITE:
             getHlh().acquireLock(cluster.writeLock());
-            break;
-        case SKIP:
             break;
         }
     }

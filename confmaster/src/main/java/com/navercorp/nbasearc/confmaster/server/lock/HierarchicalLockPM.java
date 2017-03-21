@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.navercorp.nbasearc.confmaster.Constant;
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachine;
 
@@ -58,14 +59,13 @@ public class HierarchicalLockPM extends HierarchicalLock {
         }
         
         for (PhysicalMachine pm : pmList) {
+            ThreadLocalVariableHolder.addPermission(pm.getPath(), getLockType());
             switch (getLockType()) {
             case READ: 
                 getHlh().acquireLock(pm.readLock());
                 break;
-            case WRITE: 
+            case WRITE:
                 getHlh().acquireLock(pm.writeLock());
-                break;
-            case SKIP:
                 break;
             }
         }

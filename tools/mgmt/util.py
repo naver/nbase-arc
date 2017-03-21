@@ -31,8 +31,6 @@ from fabric.colors import *
 from fabric.contrib.console import *
 from gw_cmd import *
 from redis_cmd import *
-import remote
-import cm
 
 config = None
 
@@ -166,46 +164,6 @@ class PingpongWorker(threading.Thread):
 
     def get_port(self):
         return self.port
-
-class IostatWorker(threading.Thread):
-    def __init__(self, host, logger, io_util_boundary=3.0):
-        threading.Thread.__init__(self)
-        self.exit = False 
-
-        self.host = host
-        self.logger = logger
-        self.io_util_boundary = io_util_boundary
- 
-    def quit(self):
-        self.exit = True
-        return
-
-    def iostat(self):
-        # Get iostat
-        iostat_map = execute(remote.iostat, hosts=[self.host])[self.host]
-        if iostat_map == None:
-            warn(red("[%s] Get iostat fail." % self.host))
-
-        self.handleResult(iostat_map)
-
-    def handleResult(self, iostat):
-        # Check IO utilization
-        io_util = ''
-        log = None
-        for device, stat in iostat.items():
-            if len(io_util) > 0:
-                io_util = io_util + ' '
-            io_util = io_util + device + '=' + stat['%util']
-            if float(stat['%util']) >= self.io_util_boundary:
-                log = 'IO UTIL'
-
-        if log != None:
-            self.logger.critical(CHECK_MACHINE_LOG_COLUMN % (
-                self.host, log, io_util))
-
-    def run(self):
-        while self.exit == False:
-            self.iostat()
 
 def command(ip, port, cmd, verbose=True, timeout=5):
     t = None
@@ -521,70 +479,11 @@ def redis_tps(ip, port):
         warn(red(e))
         return -1
 
-# On success, change_master() returns pgs_id of new master; on error, it returns -1.
-def change_master(cluster_name, pg_id, host):
-    print magenta("\n[%s] Change master, PG:%d" % (host ,pg_id))
-
-    # Get candidates for master
-    candidates = []
-
-    pgs_list = cm.get_pgs_list(cluster_name, pg_id)
-    for id, data in pgs_list.items():
-        if data['smr_role'] == 'S' and data['hb'] == 'Y':
-            active_role = get_role_of_smr(data['ip'], data['mgmt_port'], verbose=False)
-            if active_role != data['smr_role']:
-                warn(red("[%s] Change master fail, PGS '%d' has invalid state. %s(%s)" % 
-                          (host, id, data['smr_role'], active_role )))
-                return False
-
-            candidates.append(data)
-
-    # Check candidates
-    if len(candidates) == 0:
-        warn(red("[%s] Change master fail, PG '%d' doesn't have any slave." % (host, pg_id)))
-        return False
-
-    pgs_id = random.choice(candidates)['pgs_id']
-
-    master_id = cm.role_change(cluster_name, pgs_id, host)
-    if master_id == -1:
-        warn(red("[%s] Change master fail." % host))
-        return False
-
-    print green("[%s] Change master success, PG:%d, MASTER:%d" % (host, pg_id, master_id))
-    return True
-
 def json_to_str(json_data):
     return json.dumps(json_data, sort_keys=True, indent=4, separators=(',', ' : '), default=handle_not_json_format_object)
 
 def handle_not_json_format_object(o):
     return None
-
-class PortAllocator():
-    def __init__(self, host, path, start_port):
-        self.host = host
-        self.path = path
-        self.port = start_port
-
-        self.index = 0
-        ports = execute(remote.get_ports, self.path, hosts=[self.host])[self.host]
-        if len(ports) == 0:
-            self.max_port = start_port - 10
-        else:
-            self.max_port = max(ports)
-
-        if self.max_port < start_port:
-            self.max_port = start_port - 10
-
-    def set_max_port(self, port):
-        self.max_port = port
-
-    def get_max_port(self):
-        return self.max_port
-
-    def next(self):
-        self.max_port += 10
-        return self.max_port
 
 def print_script(cluster_name, quorum_policy, pg_list, pgs_list, gw_list):
     print yellow("\n[SCRIPT]")
@@ -620,103 +519,11 @@ def cont():
         config.confirm_mode = confirm(cyan("Confirm Mode?"))
     return True
 
-"""
-Preface supplement pgs information.
-This function looks for smr_base_port and pgs_id, Add pgs info to mgmt-cc for preoccupancy.
-
-Returns:
-    dict: {"pgs_id" : <int>, "smr_base_port" : <int>, "redis_port" : <int>}
-"""
-def prepare_suppl_pgsinfo(cluster_name, pg_id, pm_name, pm_ip):
-    # Set host
-    host = config.USERNAME + '@' + pm_ip.encode('ascii')
-    env.hosts = [host]
-
-    # Get port
-    port = PortAllocator(host, config.REMOTE_PGS_DIR, config.PGS_BASE_PORT).next()
-
-    # Get pgs_id
-    pm = cm.pm_info(pm_name)
-    if pm != None:
-        pgs_id = -1
-        for cluster in pm['cluster_list']:
-            for name, data in cluster.items():
-                if name == cluster_name:
-                    pgs_id = max(int(x) for x in data['pgs_ID_List']) + 1
-                    print yellow("[%s] Use max pgs_id in cluster. PGS_ID:%d, PM_NAME:%s, PM_IP:%s" % 
-                            (host, pgs_id, pm_name, pm_ip))
-                    break
-
-    if pgs_id == -1:
-        pgs_ids = cm.pgs_ls(cluster_name) 
-        if pgs_ids == None:
-            return None 
-        pgs_id = max(int(x) for x in pgs_ids['data']['list'])
-        pgs_id += 1
-        print yellow("[%s] Use max pgs_id in cluster. PGS_ID:%d, PM_NAME:%s, PM_IP:%s" % 
-                (host, pgs_id, pm_name, pm_ip))
-
-    return {"pgs_id" : pgs_id, "smr_base_port" : port, "redis_port" : port + 9}
-
 def make_smr_path_str(smr_base_port):
     return '%s/%d/smr' % (config.REMOTE_PGS_DIR, smr_base_port)
 
 def make_smr_log_path_str(smr_base_port):
     return '%s/log' % make_smr_path_str(smr_base_port)
-
-class Traverser:
-    def __init__(self, d, lift, op):
-        self.d = d
-        self.lift = lift
-        self.op   = op
-
-    def __call__(self, arg):
-        self.d = self.lift(self.d)
-        result = self.op(self.d, arg)
-        return Traverser(result, self.lift, self.op)
-
-    def v(self):
-        return self.d
-
-def make_dict_traverser(dictionary):
-    return Traverser(dictionary,
-            lambda d: d if isinstance(d, dict) else {},
-            lambda d, k: d[k] if d.has_key(k) else None)
-
-class DeployedPgsInfoReader(threading.Thread):
-    """
-    All pgs in pgs_list must have the same ip.
-    """
-    def __init__(self, pgs_list, memlog):
-        threading.Thread.__init__(self)
-        self.pgs_list = pgs_list
-        self.memlog = memlog
-
-    def run(self):
-        smr_base_port_list = map(lambda pgs : pgs['smr_base_port'], self.pgs_list)
-
-        host = config.USERNAME + '@' + self.pgs_list[0]['ip']
-        with settings(hide('running', 'stdout', 'user')):
-            # Get memlog info
-            if self.memlog == True:
-                memlog_info = execute(remote.exist_smr_list_memlog, smr_base_port_list, hosts=[host])[host]
-                for pgs in self.pgs_list:
-                    pgs['memlog'] = memlog_info[pgs['smr_base_port']]
-            else:
-                for pgs in self.pgs_list:
-                    pgs['memlog'] = 'Skip'
-
-            # Get active role
-            for pgs in self.pgs_list:
-                try:
-                    pgs['active_role'] = get_role_of_smr(pgs['ip'], pgs['mgmt_port'], verbose=False)
-                    if pgs['active_role'] == 'M':
-                        pgs['quorum'] = remote.get_quorum(pgs)
-                    else:
-                        pgs['quorum'] = ''
-                except:
-                    warn(red("[%s:%d] Failed to get active role. %s" % (pgs['ip'], pgs['smr_base_port'], sys.exc_info()[0])))
-
 
 """
 return : { ip : [pgs, ...], ...  }
@@ -731,51 +538,6 @@ def classify_by_ip(result, pgs):
         result[pgs['ip']] = [pgs]
 
     return result
-
-def get_all_pgs_info(cluster_name, memlog):
-    # Get cluster information
-    pgs_ls_json = cm.pgs_ls(cluster_name)
-    if pgs_ls_json  == None: 
-        warn(red("Failed to load list of pgs in %s" % cluster_name)) 
-        return None
-
-    # Get pgs id list
-    pgs_id_list = map(lambda pgs_id: int(pgs_id), pgs_ls_json['data']['list'])
-    if len(pgs_id_list) == 0:
-        return None
-
-    # Get pgs information
-    pgs_list = get_deployed_pgs_info(cluster_name, pgs_id_list, memlog)
-    if pgs_list == None:
-        return None
-
-    return sorted(pgs_list, key=lambda x: int(x['pgs_id']))
-
-def get_deployed_pgs_info(cluster_name, pgs_id_list, memlog):
-    if len(pgs_id_list) == 0:
-        return None
-
-    # Get pgs info
-    pgs_list = []
-    for pgs_id in pgs_id_list:
-        try:
-            pgs_list.append(cm.pgs_info(cluster_name, pgs_id)['data'])
-        except:
-            warn(red("Failed to get pgs info from confmaster. %s" % sys.exc_info()[0]))
-            return None
-
-    # Run threads to get memlog and active-role
-    pgs_readers = []
-    pgs_list_by_ip = reduce(classify_by_ip, pgs_list, None)
-    for ip, pl in pgs_list_by_ip.items():
-        reader = DeployedPgsInfoReader(pl, memlog)
-        reader.start()
-        pgs_readers.append(reader)
-
-    for r in pgs_readers:
-        r.join()
-
-    return pgs_list
 
 def alloc_cronsave_times(port, cronsave_num, table, base_port, base_hour, base_min):
     """

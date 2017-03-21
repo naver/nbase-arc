@@ -120,26 +120,37 @@ zone_conf = {
             'gwList' : [<dict>, ...],
             'gwLookup' : <dict>
         }, ...
+    ],
+    'pm': [
+        {
+            'pmName' : <string>,
+            'pmInfo' : <dict>,
+            'clusterList' : [<dict>, ...]
+        }, ...
     ]
 }
 """
 def get_zone_conf_from_cm(servers):
-    zone_conf = {'cm' : None, 'cluster' : []}
+    zone_conf = {'cm' : None, 'cluster' : [], 'pm' : []}
 
     # Confmaster
-    cm_conf = classify_cm(servers)
-    cm_conf['heartbeat'] = sorted(map(lambda x: {'ip' : '0.0.0.0', 'port' : x['cm_port']}, servers), key = lambda x: x['port'])
-    zone_conf['cm'] = cm_conf
+    zone_conf['cm'] = classify_cm(servers)
+    zone_conf['cm']['heartbeat'] = sorted(map(lambda x: {'ip' : '0.0.0.0', 'port' : x['cm_port']}, servers), key = lambda x: x['port'])
 
     # Cluster
-    leader_cm = cm_conf['leader'][0]
-    cluster_conf = []
+    leader_cm = zone_conf['cm']['leader'][0]
     for cluster_name in util.cluster_ls(leader_cm['ip'], leader_cm['port'])[1]:
-        cluster_conf.append(
+        zone_conf['cluster'].append(
                 get_cluster_conf_from_cm(
                     leader_cm['ip'], leader_cm['port'], cluster_name.encode('ascii')))
 
-    zone_conf['cluster'] = sorted(cluster_conf, key=lambda x: x['clusterName'])
+    zone_conf['cluster'] = sorted(zone_conf['cluster'], key=lambda x: x['clusterName'])
+
+    # PM
+    for pm_name in sorted(util.pm_ls(leader_cm['ip'], leader_cm['port'])[1]):
+        zone_conf['pm'].append(
+                get_pm_conf_from_cm(
+                    leader_cm['ip'], leader_cm['port'], pm_name.encode('ascii')))
 
     return zone_conf
 
@@ -151,8 +162,23 @@ def get_cluster_conf_from_cm(cm_ip, cm_port, cluster_name):
     dump['gwLookup'] = [{'gwId' : gw['gwId'], 'ip' : gw['pm_IP'], 'port' : gw['port']} for gw in dump['gwList']]
     return dump
 
+def get_pm_conf_from_cm(cm_ip, cm_port, pm_name):
+    pi = util.pm_info(cm_ip, cm_port, pm_name)[1]
+    return {
+        'pmName' : pm_name,
+        'pmInfo' : pi['pm_info'],
+        'clusterList' : sorted(
+            map(lambda x: {'name' : x.keys()[0], 'data' : sort_pm_data(x.values()[0])}, pi['cluster_list']),
+            lambda x: x['name'])
+    }
+
+def sort_pm_data(pm_data):
+    pm_data['gw_ID_List'] = sorted(pm_data['gw_ID_List'])
+    pm_data['pgs_ID_List'] = sorted(pm_data['pgs_ID_List'])
+    return pm_data
+
 def get_zone_conf_from_zk():
-    zone_conf = {'cm' : None, 'cluster' : []}
+    zone_conf = {'cm' : None, 'cluster' : [], 'pm' : []}
 
     # Confmaster
     zone_conf['cm'] = get_confmaster_conf_from_zk()
@@ -160,6 +186,10 @@ def get_zone_conf_from_zk():
     # Cluster
     for cluster_name in util.zk_get_children('/RC/CLUSTER')[1]:
         zone_conf['cluster'].append(get_cluster_conf_from_zk(cluster_name))
+
+    # PM
+    for pm_name in sorted(util.zk_get_children('/RC/PM')[1]):
+        zone_conf['pm'].append(get_pm_conf_from_zk(pm_name))
 
     return zone_conf
 
@@ -173,6 +203,16 @@ def get_confmaster_conf_from_zk():
         'heartbeat' : sorted(map(
             lambda x: {'ip':x['name'].split(':')[0], 'port':int(x['name'].split(':')[1])}, 
             util.zk_get_children_with_data('/RC/CC/FD')), key = lambda x: (x['ip'], x['port'])),
+    }
+
+def get_pm_conf_from_zk(pm_name):
+    return {
+        'pmName' : pm_name, 
+        'pmInfo' : json.loads(util.zk_cmd('get /RC/PM/%s' % pm_name)['data']),
+        'clusterList' : sorted(
+            map(lambda x: {'name' : x['name'] , 'data' : sort_pm_data(json.loads(x['data']))}, 
+                util.zk_get_children_with_data('/RC/PM/%s' % pm_name)), 
+            key = lambda x: x['name'])
     }
 
 def get_cluster_conf_from_zk(cluster_name):
@@ -260,13 +300,20 @@ def compare_zone_conf(servers, zone_conf1, zone_conf2):
 
     # Cluster
     if len(zone_conf1['cluster']) != len(zone_conf2['cluster']):
-        return [('cluster.count', len(conf1), len(conf2))]
+        return [('cluster.count', len(zone_conf1['cluster']), len(zone_conf2['cluster']))]
 
     conf1 = sorted(zone_conf1['cluster'], lambda x: x['clusterName'])
     conf2 = sorted(zone_conf2['cluster'], lambda x: x['clusterName'])
 
     for i in xrange(len(conf1)):
         diffs.extend(compare_cluster_conf(conf1[i], conf2[i]))
+
+    # PM
+    if len(zone_conf1['pm']) != len(zone_conf2['pm']):
+        return [('pm.count', len(zone_conf1['pm']), len(zone_conf2['pm']))]
+
+    for i in xrange(len(zone_conf1['pm'])):
+        diffs.extend(compare_pm_conf(zone_conf1['pm'][i], zone_conf2['pm'][i]))
 
     return diffs
 
@@ -374,6 +421,18 @@ def compare_cluster_smr_role(conf1, conf2):
     for x, y in itertools.izip_longest(conf1['pgsList'], conf2['pgsList']):
         diffs.extend(map(lambda t: ('%s.pgs.%d.%s' % (conf1[i]['clusterName'], x['pgsId'], t[0]), t[1], t[2]), 
             compare_dict(x, y)))
+
+    return diffs
+
+def compare_pm_conf(conf1, conf2):
+    """
+    return: list of differences between conf1 and conf2 in the form of tuple(key, v1, v2)
+    """
+
+    diffs = map(lambda t: ('pm.%s' % t[0], t[1], t[2]), compare_dict(conf1, conf2, ['clusterList']))
+
+    for x, y in itertools.izip_longest(conf1['clusterList'], conf2['clusterList']):
+        diffs.extend(map(lambda t: ('%s.clusterList.%s' % (conf1['pmName'], t[0]), t[1], t[2]), compare_dict(x, y)))
 
     return diffs
 

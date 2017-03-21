@@ -219,7 +219,7 @@ def show_all(cluster_name, memlog):
         prompt("Press <Enter> to continue...")
     print ''
 
-    pgs_list = util.get_all_pgs_info(cluster_name, memlog)
+    pgs_list = get_all_pgs_info(cluster_name, memlog)
 
     print yellow(PG_PGS_HEADER)
     for pg in sorted(cluster_json['data']['pg_list'], key=lambda x: int(x['pg_id'])):
@@ -383,7 +383,7 @@ def show_pgs_list(cluster_name, pg_id, print_header, cluster_json=None, memlog=F
     pg = pg[0]
 
     # Get pgs info
-    pgs_list = util.get_deployed_pgs_info(cluster_name, pg['pg_data']['pgs_ID_List'], memlog)
+    pgs_list = get_deployed_pgs_info(cluster_name, pg['pg_data']['pgs_ID_List'], memlog)
 
     # Print
     print yellow(PG_PGS_HEADER)
@@ -427,7 +427,7 @@ def menu_show_pgs(cluster_name):
 
 def show_pgs(cluster_json, pgs_id, memlog=False):
     # Get pgs information
-    pgs_unit_set = util.get_deployed_pgs_info(cluster_json['data']['cluster_name'], [pgs_id], memlog)
+    pgs_unit_set = get_deployed_pgs_info(cluster_json['data']['cluster_name'], [pgs_id], memlog)
     if pgs_unit_set == None:
         warn(red("PGS '%d' doesn't exist." % pgs_id))
         return None
@@ -437,11 +437,91 @@ def show_pgs(cluster_json, pgs_id, memlog=False):
     print yellow(PG_PGS_PARTITION)
     print ''
 
+class DeployedPgsInfoReader(threading.Thread):
+    """
+    All pgs in pgs_list must have the same ip.
+    """
+    def __init__(self, pgs_list, memlog):
+        threading.Thread.__init__(self)
+        self.pgs_list = pgs_list
+        self.memlog = memlog
+
+    def run(self):
+        smr_base_port_list = map(lambda pgs : pgs['smr_base_port'], self.pgs_list)
+
+        host = config.USERNAME + '@' + self.pgs_list[0]['ip']
+        with settings(hide('running', 'stdout', 'user')):
+            # Get memlog info
+            if self.memlog == True:
+                memlog_info = execute(remote.exist_smr_list_memlog, smr_base_port_list, hosts=[host])[host]
+                for pgs in self.pgs_list:
+                    pgs['memlog'] = memlog_info[pgs['smr_base_port']]
+            else:
+                for pgs in self.pgs_list:
+                    pgs['memlog'] = 'Skip'
+
+            # Get active role
+            for pgs in self.pgs_list:
+                try:
+                    pgs['active_role'] = util.get_role_of_smr(pgs['ip'], pgs['mgmt_port'], verbose=False)
+                    if pgs['active_role'] == 'M':
+                        pgs['quorum'] = remote.get_quorum(pgs)
+                    else:
+                        pgs['quorum'] = ''
+                except:
+                    warn(red("[%s:%d] Failed to get active role. %s" % (pgs['ip'], pgs['smr_base_port'], sys.exc_info()[0])))
+
+
+def get_all_pgs_info(cluster_name, memlog):
+    # Get cluster information
+    pgs_ls_json = cm.pgs_ls(cluster_name)
+    if pgs_ls_json  == None: 
+        warn(red("Failed to load list of pgs in %s" % cluster_name)) 
+        return None
+
+    # Get pgs id list
+    pgs_id_list = map(lambda pgs_id: int(pgs_id), pgs_ls_json['data']['list'])
+    if len(pgs_id_list) == 0:
+        return None
+
+    # Get pgs information
+    pgs_list = get_deployed_pgs_info(cluster_name, pgs_id_list, memlog)
+    if pgs_list == None:
+        return None
+
+    return sorted(pgs_list, key=lambda x: int(x['pgs_id']))
+
+def get_deployed_pgs_info(cluster_name, pgs_id_list, memlog):
+    if len(pgs_id_list) == 0:
+        return None
+
+    # Get pgs info
+    pgs_list = []
+    for pgs_id in pgs_id_list:
+        try:
+            pgs_list.append(cm.pgs_info(cluster_name, pgs_id)['data'])
+        except:
+            warn(red("Failed to get pgs info from confmaster. %s" % sys.exc_info()[0]))
+            return None
+
+    # Run threads to get memlog and active-role
+    pgs_readers = []
+    pgs_list_by_ip = reduce(util.classify_by_ip, pgs_list, None)
+    for ip, pl in pgs_list_by_ip.items():
+        reader = DeployedPgsInfoReader(pl, memlog)
+        reader.start()
+        pgs_readers.append(reader)
+
+    for r in pgs_readers:
+        r.join()
+
+    return pgs_list
+
 def menu_check_memlog_option(cluster_name):
     opt_memlog = config.get_cluster_opt(cluster_name)('smr')('use_memlog').v()
     pgs_readers = []
 
-    pgs_list = util.get_all_pgs_info(cluster_name, True)
+    pgs_list = get_all_pgs_info(cluster_name, True)
     unmatched_list = filter(lambda pgs : pgs['memlog'] != opt_memlog, pgs_list)
 
     # Print

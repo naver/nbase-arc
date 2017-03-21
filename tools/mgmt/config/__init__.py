@@ -26,7 +26,6 @@ from conf_cluster import *
 from conf_redis import *
 from conf_gateway import *
 from conf_smr import *
-import util
 
 TELNET_TIMEOUT = 300
 
@@ -144,6 +143,25 @@ def get_cluster_conf(cluster_name):
         return None
     return conf[0]
 
+class Traverser:
+    def __init__(self, d, lift, op):
+        self.d = d
+        self.lift = lift
+        self.op   = op
+
+    def __call__(self, arg):
+        self.d = self.lift(self.d)
+        result = self.op(self.d, arg)
+        return Traverser(result, self.lift, self.op)
+
+    def v(self):
+        return self.d
+
+def make_dict_traverser(dictionary):
+    return Traverser(dictionary,
+            lambda d: d if isinstance(d, dict) else {},
+            lambda d, k: d[k] if d.has_key(k) else None)
+
 def get_cluster_opt(cluster_name):
     conf = get_cluster_conf(cluster_name)
 
@@ -160,7 +178,7 @@ def get_cluster_opt(cluster_name):
             if conf["smr"].has_key(k) == False:
                 conf["smr"][k] = v
 
-    return util.make_dict_traverser(conf)
+    return make_dict_traverser(conf)
 
 def get_gw_additional_option():
     if GW_ADDITIONAL_OPTION.has_key("opt"):

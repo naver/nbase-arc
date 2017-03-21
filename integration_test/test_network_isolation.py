@@ -32,9 +32,8 @@ import load_generator_crc16
 
 def block_network(cluster, mgmt_ip, mgmt_port):
     # Block
-    out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
-    if out.succeeded == False:
-        util.log('add a bloking role to iptables fail. output:%s' % out)
+    if util.iptables_drop('A', '127.0.0.100') == False:
+        util.log('add a bloking role to iptables fail.')
         return False
 
     for i in range(4):
@@ -50,9 +49,8 @@ def block_network(cluster, mgmt_ip, mgmt_port):
 
 def unblock_network(cluster, mgmt_ip, mgmt_port, final_state):
     # Unblock
-    out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-    if out.succeeded == False:
-        util.log('delete a bloking role to iptables fail. output:%s' % out)
+    if util.iptables_drop('D', '127.0.0.100') == False:
+        util.log('delete a bloking role to iptables fail.')
         return False
 
     # Check cluster state
@@ -77,44 +75,25 @@ class TestNetworkIsolation(unittest.TestCase):
 
     def cleanup_iptables(self):
         while True:
-            out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            util.log(out)
-            if out.succeeded == False:
+            if util.iptables_redirect('D', '127.0.0.100', '127.0.0.1') == False:
                 break
 
         while True:
-            out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            util.log(out)
-            if out.succeeded == False:
+            if util.iptables_drop('D', '127.0.0.100') == False:
                 break
 
         while True:
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-            util.log(out)
-            if out.succeeded == False:
+            if util.iptables_drop('D', '127.0.0.101') == False:
                 break
 
         while True:
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.101 -j DROP')
-            util.log(out)
-            if out.succeeded == False:
-                break
-
-        while True:
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.102 -j DROP')
-            util.log(out)
-            if out.succeeded == False:
+            if util.iptables_drop('D', '127.0.0.102') == False:
                 break
 
     def test_1_mgmt_is_isolated(self):
         util.print_frame()
 
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
-        util.log('out.succeeded : %s' % out.succeeded)
+        util.iptables_print_list()
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1', config.clusters)[0]
         util.log(util.json_to_str(cluster))
@@ -150,7 +129,6 @@ class TestNetworkIsolation(unittest.TestCase):
             # Block network
             util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % cnt)
             for s in cluster['servers']:
-                out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -p tcp --dport %d -j DROP' % (s['smr_mgmt_port']))
                 """Loopback Address Range (Reference : RFC3330)
 
                 127.0.0.0/8 - This block is assigned for use as the Internet host
@@ -160,7 +138,7 @@ class TestNetworkIsolation(unittest.TestCase):
                   but no addresses within this block should ever appear on any network
                   anywhere [RFC1700, page 5].
                 """
-                self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+                self.assertTrue(util.iptables_drop('A', '127.0.0.100', s['smr_mgmt_port']), 'add a bloking role to iptables fail.')
 
             for i in range(4):
                 util.log('waiting... %d' % (i + 1))
@@ -190,8 +168,7 @@ class TestNetworkIsolation(unittest.TestCase):
             # Unblock network
             util.log('\n\n\n ### UNBLOCK NETWORK, %d ### ' % cnt)
             for s in cluster['servers']:
-                out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -p tcp --dport %d -j DROP' % (s['smr_mgmt_port']))
-                self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+                self.assertTrue(util.iptables_drop('D', '127.0.0.100', s['smr_mgmt_port']), 'delete a bloking role to iptables fail.')
 
             # Check cluster state
             ok = False
@@ -222,19 +199,10 @@ class TestNetworkIsolation(unittest.TestCase):
     def test_2_some_pgs_is_isolated(self):
         util.print_frame()
 
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
-        util.log('out.succeeded : %s' % out.succeeded)
+        util.iptables_print_list()
 
         # Add forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('A', '127.0.0.100', '127.0.0.1'), 'add a forwarding role to iptables fail.')
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_2', config.clusters)[0]
         util.log(util.json_to_str(cluster))
@@ -264,8 +232,7 @@ class TestNetworkIsolation(unittest.TestCase):
         for cnt in range(3):
             # Block network
             util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % cnt)
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('A', '127.0.0.100'), 'add a bloking role to iptables fail.')
 
             for i in range(4):
                 util.log('waiting... %d' % (i + 1))
@@ -294,8 +261,7 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Unblock network
             util.log('\n\n\n ### UNBLOCK NETWORK, %d ### ' % cnt)
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('D', '127.0.0.100'), 'delete a bloking role to iptables fail.')
 
             # Check cluster state
             ok = False
@@ -329,11 +295,7 @@ class TestNetworkIsolation(unittest.TestCase):
             self.assertNotEqual(initial_state[i]['active_ts'], final_state[i]['active_ts'], msg)
 
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('D', '127.0.0.100', '127.0.0.1'), 'delete a forwarding role to iptables fail')
 
         self.assertTrue(conf_checker.final_check())
 
@@ -351,11 +313,7 @@ class TestNetworkIsolation(unittest.TestCase):
         util.log('out.succeeded : %s' % out.succeeded)
 
         # Add forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('A', '127.0.0.100', '127.0.0.1'), 'add a forwarding role to iptables fail.')
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1_2copy', config.clusters)[0]
         util.log(util.json_to_str(cluster))
@@ -386,8 +344,7 @@ class TestNetworkIsolation(unittest.TestCase):
         for cnt in range(3):
             # Block network
             util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % cnt)
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('A', '127.0.0.100'), 'add a bloking role to iptables fail.')
 
             for i in range(4):
                 util.log('waiting... %d' % (i + 1))
@@ -419,8 +376,7 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Unblock network
             util.log('\n\n\n ### UNBLOCK NETWORK, %d ### ' % cnt)
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('D', '127.0.0.100'), 'delete a bloking role to iptables fail.')
 
             # Check cluster state
             ok = False
@@ -449,11 +405,7 @@ class TestNetworkIsolation(unittest.TestCase):
         self.assertNotEqual(final_state, None, 'final_state is None')
 
         # Delete forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('D', '127.0.0.100', '127.0.0.1'), 'delete a forwarding role to iptables fail.')
 
         self.assertTrue(conf_checker.final_check())
 
@@ -463,12 +415,7 @@ class TestNetworkIsolation(unittest.TestCase):
     def test_4_mgmt_is_isolated_with_red_failover(self):
         util.print_frame()
 
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
-        util.log('out.succeeded : %s' % out.succeeded)
+        util.iptables_print_list()
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1', config.clusters)[0]
         util.log(util.json_to_str(cluster))
@@ -520,8 +467,7 @@ class TestNetworkIsolation(unittest.TestCase):
             # Block network
             util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % loop_cnt)
             for s in cluster['servers']:
-                out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -p tcp --dport %d -j DROP' % (s['smr_mgmt_port']))
-                self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+                self.assertTrue(util.iptables_drop('A', '127.0.0.100', s['smr_mgmt_port']), 'add a bloking role to iptables fail.')
 
             for i in range(4):
                 util.log('waiting... %d' % (i + 1))
@@ -574,8 +520,7 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Unblock network
             for s in cluster['servers']:
-                out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -p tcp --dport %d -j DROP' % (s['smr_mgmt_port']))
-                self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+                self.assertTrue(util.iptables_drop('D', '127.0.0.100', s['smr_mgmt_port']), 'delete a bloking role to iptables fail.')
 
             # Check cluster state
             ok = False
@@ -655,12 +600,7 @@ class TestNetworkIsolation(unittest.TestCase):
     def test_5_mgmt_is_isolated_with_lconn(self):
         util.print_frame()
 
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
-        util.log('out.succeeded : %s' % out.succeeded)
+        util.iptables_print_list()
 
         cluster = filter(lambda x: x['cluster_name'] == 'network_isolation_cluster_1', config.clusters)[0]
         util.log(util.json_to_str(cluster))
@@ -720,8 +660,7 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Block network
             util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % loop_cnt)
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -p tcp --dport %d -j DROP' % (first_slave['smr_mgmt_port']))
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('A', '127.0.0.100', first_slave['smr_mgmt_port']), 'add a bloking role to iptables fail.')
 
             for i in range(6):
                 util.log('waiting... %d' % (i + 1))
@@ -749,8 +688,7 @@ class TestNetworkIsolation(unittest.TestCase):
             self.assertTrue(ok, 'Fail, state transition')
 
             # Unblock network
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -p tcp --dport %d -j DROP' % (first_slave['smr_mgmt_port']))
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('D', '127.0.0.100', first_slave['smr_mgmt_port']), 'delete a bloking role to iptables fail.')
 
             # Check cluster state
             ok = False
@@ -801,28 +739,12 @@ class TestNetworkIsolation(unittest.TestCase):
     def test_6_repeat_isolation_and_no_opinion_linepay(self):
         util.print_frame()
 
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
-        util.log('out.succeeded : %s' % out.succeeded)
+        util.iptables_print_list()
 
         # Add forwarding role
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.101 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.101 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.102 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.102 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('A', '127.0.0.100', '127.0.0.1'), 'add a forwarding role to iptables fail.')
+        self.assertTrue(util.iptables_redirect('A', '127.0.0.101', '127.0.0.1'), 'add a forwarding role to iptables fail.')
+        self.assertTrue(util.iptables_redirect('A', '127.0.0.102', '127.0.0.1'), 'add a forwarding role to iptables fail.')
 
         cluster_name = 'no_opinion'
         cluster = filter(lambda x: x['cluster_name'] == cluster_name, config.clusters)[0]
@@ -849,22 +771,19 @@ class TestNetworkIsolation(unittest.TestCase):
             loop_cnt += 1
             # Block network
             util.log('\n\n\n ### BLOCK NETWORK, %d ### ' % loop_cnt)
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.102 -j DROP')
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('A', '127.0.0.102'), 'add a bloking role to iptables fail.')
 
             for i in range(1):
                 util.log('waiting... %d' % (i + 1))
                 time.sleep(0.1)
 
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('A', '127.0.0.100'), 'add a bloking role to iptables fail.')
 
             for i in range(3):
                 util.log('waiting... %d' % (i + 1))
                 time.sleep(1.2)
 
-            out = util.sudo('iptables -A OUTPUT -d 127.0.0.101 -j DROP')
-            self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('A', '127.0.0.101'), 'add a bloking role to iptables fail.')
 
             for i in range(1):
                 util.log('waiting... %d' % (i + 1))
@@ -872,18 +791,15 @@ class TestNetworkIsolation(unittest.TestCase):
 
             # Unblock network
             util.log('\n\n\n ### UNBLOCK NETWORK, %d ### ' % loop_cnt)
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.102 -j DROP')
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('D', '127.0.0.102'), 'delete a bloking role to iptables fail.')
             for i in range(0):
                 util.log('waiting... %d' % (i + 1))
                 time.sleep(1)
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('D', '127.0.0.100'), 'delete a bloking role to iptables fail.')
             for i in range(0):
                 util.log('waiting... %d' % (i + 1))
                 time.sleep(1)
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.101 -j DROP')
-            self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_drop('D', '127.0.0.101'), 'delete a bloking role to iptables fail.')
             for i in range(3):
                 util.log('waiting... %d' % (i + 1))
                 time.sleep(1)
@@ -908,20 +824,9 @@ class TestNetworkIsolation(unittest.TestCase):
             self.assertFalse(all_in_f, 'PGS0`s last state remains in F')
 
         # Delete forwarding role
-        out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-        out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.101 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-        out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.101 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.102 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-        out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.102 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('D', '127.0.0.100', '127.0.0.1'), 'delete a forwarding role to iptables fail.')
+        self.assertTrue(util.iptables_redirect('D', '127.0.0.101', '127.0.0.1'), 'delete a forwarding role to iptables fail.')
+        self.assertTrue(util.iptables_redirect('D', '127.0.0.102', '127.0.0.1'), 'delete a forwarding role to iptables fail.')
 
         self.assertTrue(conf_checker.final_check())
 
@@ -933,18 +838,10 @@ class TestNetworkIsolation(unittest.TestCase):
         clnts = []
 
         try:
-            out = util.sudo('iptables -L')
-            util.log('====================================================================')
-            util.log('out : %s' % out)
-            util.log('out.return_code : %d' % out.return_code)
-            util.log('out.stderr : %s' % out.stderr)
-            util.log('out.succeeded : %s' % out.succeeded)
+            util.iptables_print_list()
 
             # Add forwarding role
-            out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-            out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+            self.assertTrue(util.iptables_redirect('A', '127.0.0.100', '127.0.0.1'), 'add a forwarding role to iptables fail.')
 
             cluster_name = 'network_isolation_cluster_1'
             cluster = filter(lambda x: x['cluster_name'] == cluster_name, config.clusters)[0]
@@ -1077,14 +974,23 @@ class TestNetworkIsolation(unittest.TestCase):
                 for c in clnts:
                     self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
 
-            # Delete forwarding role
-            out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-            out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            self.assertTrue(out.succeeded, 'delete a forwarding role to iptables fail. output:%s' % out)
-
             for c in clnts:
                 self.assertTrue(c.is_consistency(), '[%s] data consistency error!' % str(fi))
+
+            # Go back to initial configuration
+            cmfi.init()
+            for fi in cmfi:
+                try:
+                    self.assertTrue(fi_confmaster.fi_add(fi, 0, mgmt_ip, mgmt_port),
+                            "Confmaster command fail. fi: %s" % str(fi))
+                except ValueError as e:
+                    self.fail("Confmaster command error. cmd: \"%s\", reply: \"%s\"" % (cmd, reply))
+
+            # Wait until workflows done
+            ret = util.await(60, True)(
+                    lambda cinfo: cinfo['wf'] == 0,
+                    lambda : util.cluster_info(mgmt_ip, mgmt_port, cluster['cluster_name']))
+            self.assertTrue(ret, 'There are still some workflows.')
 
             self.assertTrue(conf_checker.final_check())
 
@@ -1096,6 +1002,9 @@ class TestNetworkIsolation(unittest.TestCase):
                 c.quit()
             for c in clnts:
                 c.join()
+
+            # Delete forwarding role
+            self.assertTrue(util.iptables_redirect('D', '127.0.0.100', '127.0.0.1'), 'add a forwarding role to iptables fail.')
 
 def checkLastState(mgmt_ip, mgmt_port, cluster_name, pgs_id, state):
     pgs = util.get_pgs_info_all(mgmt_ip, mgmt_port, cluster_name, pgs_id)

@@ -23,7 +23,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.springframework.context.ApplicationContext;
 
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.server.cluster.ClusterComponentContainer;
+import com.navercorp.nbasearc.confmaster.server.workflow.WorkflowLogger;
 
 public class HierarchicalLockHelper {
 
@@ -55,6 +57,7 @@ public class HierarchicalLockHelper {
         while (!acquiredLockList.isEmpty()) {
             acquiredLockList.pop().unlock();
         }
+        ThreadLocalVariableHolder.clearAllPermission();
     }
 
     public Lock rootReadLock() {

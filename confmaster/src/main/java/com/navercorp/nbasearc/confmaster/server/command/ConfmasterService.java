@@ -188,7 +188,9 @@ public class ConfmasterService {
         workflowLogger.initialize();        
     }
     
-    public void release() {
+    public void release() throws MgmtZooKeeperException {
+        final String path = PathUtil.fdRootPath() + "/" + config.getIp() + ":" + config.getPort();
+        zk.deleteZNode(path, -1);
         container.relase();
     }
 

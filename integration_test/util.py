@@ -254,6 +254,57 @@ def nic_del(vni_name):
     return True
 
 
+def __iptables_out_to_boolean(out):
+    fail_cnt = 0
+    for o in out:
+        if o.succeeded == False:
+            fail_cnt += 1
+    return True if fail_cnt == 0 else False
+
+
+def __iptables_drop_opt(ip, port=None):
+    opt = 'OUTPUT -d %s' % ip
+    if port != None:
+        opt += ' -p tcp --dport %d' % port
+    opt += ' -j DROP'
+    return opt
+
+
+def __iptables_redirect_opt(ip, tip):
+    return ['OUTPUT -d %s -p tcp -j DNAT --to-destination %s' % (ip, tip),
+            'PREROUTING -d %s -p tcp -j DNAT --to-destination %s' % (ip, tip)]
+
+
+def iptables_drop(command, ip, port=None):
+    """
+    commahd: 'A' or 'D'
+    ip: destination ip
+    port: destination port
+    """
+    return __iptables_out_to_boolean(
+            [sudo('iptables -%s %s' % (command, __iptables_drop_opt(ip, port)))])
+
+
+def iptables_redirect(command, ip, tip):
+    """
+    commahd: 'A' or 'D'
+    ip: original destination ip
+    tip: new destination ip
+    """
+    rules = ['iptables -t nat -%s %s' % (command, opt) for opt in __iptables_redirect_opt(ip, tip)]
+    return __iptables_out_to_boolean([sudo(rule) for rule in rules])
+
+
+def iptables_print_list():
+    out = sudo('iptables -L')
+    log('====================================================================')
+    log('out : %s' % out)
+    log('out.return_code : %d' % out.return_code)
+    log('out.stderr : %s' % out.stderr)
+    log('out.succeeded : %s' % out.succeeded)
+    log('====================================================================')
+
+
 def kill_proc( popen ):
     os.killpg( popen.pid, signal.SIGTERM )
     #popen.wait()
@@ -773,6 +824,10 @@ def pm_add(name, ip, mgmt_ip, mgmt_port):
         log('failed to execute. cmd:%s, result:%s' % (cmd, result))
         return False
     return True
+
+
+def pm_del(ip, port, pm_name):
+    return cm_success(cm_command(ip, port, 'pm_del %s' % pm_name))[0]
 
 
 def uninstall_pg(cluster, servers, leader_cm, stop_gw=True):
@@ -2366,6 +2421,16 @@ def cm_state(ip, port):
 
 def cm_start(ip, port):
     return cm_success(cm_command(ip, port, 'cm_start'))[0]
+
+def pm_ls(ip, port):
+    ok, data = cm_success(cm_command(ip, port, 'pm_ls'))
+    if ok:
+        return True, data['list']
+    else:
+        return False, None
+
+def pm_info(ip, port, pm_name):
+    return cm_success(cm_command(ip, port, 'pm_info %s' % pm_name))
 
 def cluster_on(ip, port, cluster_name):
     return cm_success(cm_command(ip, port, 'cluster_on %s' % cluster_name))[0]

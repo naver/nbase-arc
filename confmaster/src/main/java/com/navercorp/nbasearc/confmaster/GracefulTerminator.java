@@ -16,35 +16,43 @@
 
 package com.navercorp.nbasearc.confmaster;
 
-import java.util.concurrent.CountDownLatch;
 
+import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+      
+import org.springframework.context.ApplicationContext;
+
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderElectionSupport;
 
 public class GracefulTerminator extends Thread {
 
-    private LeaderElectionSupport electionSupport;
+    private ConfMaster cm;
     private volatile boolean terminated = false;
     private final CountDownLatch latch = new CountDownLatch(1);
     
-    public GracefulTerminator(LeaderElectionSupport electionSupport) {
-        this.electionSupport = electionSupport;
+    public GracefulTerminator(ApplicationContext context) {
+        this.cm = context.getBean(ConfMaster.class);
     }
         
     public boolean isTerminated() {
         return terminated;
     }
 
-    public void terminate() {
-        // Yield the leader
-        electionSupport.stop();
-        
+    public void terminate() throws InterruptedException, ExecutionException, IOException, MgmtZooKeeperException {
+        cm.release();
         latch.countDown();
     }
 
     @Override
     public void run() {
-        terminate();
+        try {
+            terminate();
+        } catch (Exception e) {
+            Logger.error("Termination error", e);
+        }
     }
     
     public void await() {

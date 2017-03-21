@@ -48,7 +48,7 @@ public class ClusterComponentContainer {
         return map.get(path);
     }
 
-    private class PathComparator implements Comparator<String> {
+    static class PathComparator implements Comparator<String> {
         public int compare(String s1, String s2) {
             final int d = depth(s1).compareTo(depth(s2));
             if (d == 0) {
@@ -58,7 +58,7 @@ public class ClusterComponentContainer {
             }
         }
 
-        public Integer depth(String s) {
+        public static Integer depth(String s) {
             final char delimiter = '/';
             Integer cnt = 0;
             int fromIdx = -1;

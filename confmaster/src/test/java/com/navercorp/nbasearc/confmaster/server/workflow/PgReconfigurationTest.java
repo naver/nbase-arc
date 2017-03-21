@@ -134,14 +134,8 @@ public class PgReconfigurationTest extends BasicSetting {
         
         cc.terminate();
         cmThread.join();
-        
-        if (cc != null) {
-            cc.release();
-        }
 
         executor.release();
-        
-        confmasterService.release();
         
         LeaderState.init();
     }

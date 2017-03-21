@@ -61,6 +61,7 @@ import com.navercorp.nbasearc.confmaster.server.cluster.PhysicalMachineCluster;
 import com.navercorp.nbasearc.confmaster.server.cluster.RedisServer;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockHelper;
+import com.navercorp.nbasearc.confmaster.server.lock.HierarchicalLockPGSList;
 import com.navercorp.nbasearc.confmaster.server.mapping.CommandMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.LockMapping;
 import com.navercorp.nbasearc.confmaster.server.mapping.Param;
@@ -175,7 +176,7 @@ public class PartitionGroupServerService {
 
         if (null != pmCluster) {
         	PhysicalMachineCluster.PmClusterData cimDataClon = pmCluster.clonePersistentData();
-            cimDataClon.addGwId(Integer.valueOf(pgs.getName()));
+            cimDataClon.addPgsId(Integer.valueOf(pgs.getName()));
             ops.add(Op.setData(pmCluster.getPath(),
                     mapper.writeValueAsBytes(cimDataClon), -1));
         } else {
@@ -597,7 +598,7 @@ public class PartitionGroupServerService {
     public void pgsJoinLock(HierarchicalLockHelper lockHelper,
             String clusterName, String pgsid) {
         lockHelper.root(READ).cluster(READ, clusterName).pgList(READ).pgsList(READ)
-                .pg(READ, null).pgs(WRITE, pgsid)
+                .pg(WRITE, null).pgs(WRITE, pgsid)
                 .gwList(READ).gw(WRITE, ALL);
     }
     
@@ -678,8 +679,9 @@ public class PartitionGroupServerService {
     @LockMapping(name="pgs_lconn")
     public void pgsLconnLock(HierarchicalLockHelper lockHelper,
             String clusterName, String pgsid) {
-        lockHelper.root(READ).cluster(READ, clusterName).pgList(READ).pgsList(READ)
-                .pg(WRITE, null).pgs(WRITE, pgsid);
+        HierarchicalLockPGSList lock = lockHelper.root(READ).cluster(READ, clusterName).pgList(READ).pgsList(READ);
+        PartitionGroupServer pgs = container.getPgs(clusterName, pgsid);
+        lock.pg(WRITE, String.valueOf(pgs.getPgId())).pgs(WRITE, ALL_IN_PG);
     }
 
     @CommandMapping(

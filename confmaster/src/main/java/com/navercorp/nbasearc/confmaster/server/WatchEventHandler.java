@@ -37,6 +37,7 @@ import org.apache.zookeeper.data.Stat;
 import org.springframework.context.ApplicationContext;
 
 import com.navercorp.nbasearc.confmaster.Constant;
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.Cluster;
@@ -244,6 +245,9 @@ public class WatchEventHandler implements Watcher {
         case CLUSTER:
             lockHelper.root(READ).cluster(WRITE, wt.clusterName);
             break;
+        case CLUSTER_ROOT:
+            lockHelper.root(WRITE);
+            break;
         default:
             // Ignore
             break;
@@ -251,6 +255,7 @@ public class WatchEventHandler implements Watcher {
     }
     
     public void unlock() {
+        ThreadLocalVariableHolder.clearAllPermission();
         lockHelper.releaseAllLock();
     }
     

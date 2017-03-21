@@ -16,6 +16,9 @@
 
 package com.navercorp.nbasearc.confmaster.server;
 
+import static org.apache.zookeeper.ZooDefs.OpCode.*;
+import static com.navercorp.nbasearc.confmaster.server.lock.LockType.*;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -41,6 +44,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Repository;
 
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.config.Config;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 
@@ -111,6 +115,7 @@ public class ZooKeeperHolder {
             throws MgmtZooKeeperException {
         try {
             final byte[] data = mapper.writeValueAsBytes(dataObject);
+            ThreadLocalVariableHolder.checkPermission(path, WRITE);
             return zk.setData(path, data, -1);
         } catch (KeeperException e) {
             Logger.error("Set data from memory into ZooKeeper fail. path: {}", path, e);
@@ -125,6 +130,7 @@ public class ZooKeeperHolder {
     public <T> T getData(String path, Stat stat, Watcher watcher,
             TypeReference<T> typeRef) throws MgmtZooKeeperException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, READ);
             final byte[] data = zk.getData(path, watcher, stat);
             return (T)mapper.readValue(data, typeRef);
         } catch (KeeperException e) {
@@ -172,6 +178,7 @@ public class ZooKeeperHolder {
             throws MgmtZooKeeperException, NodeExistsException {
         String createdPath = null;
         try {
+            ThreadLocalVariableHolder.checkPermission(path, WRITE);
             createdPath = zk.create(path, data, acl, createMode);
         } catch (KeeperException.NodeExistsException e) {
             // Do not logging this exception. error handling depends on a caller.
@@ -277,6 +284,7 @@ public class ZooKeeperHolder {
     public Stat setData(final String path, final byte[] data, final int version)
             throws MgmtZooKeeperException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, WRITE);
             return zk.setData(path, data, version);
         } catch (KeeperException.NoNodeException e) {
             Logger.warn("Set znode fail. path: {}, data: {}", path, data, e);
@@ -293,6 +301,7 @@ public class ZooKeeperHolder {
     public byte[] getData(final String path, Stat stat, Watcher watcher)
             throws MgmtZooKeeperException, NoNodeException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, READ);
             return zk.getData(path, watcher, stat);
         } catch (KeeperException.NoNodeException e) {
             Logger.warn("Get data fail. path: {}", path, e);
@@ -309,6 +318,7 @@ public class ZooKeeperHolder {
     public byte[] getData(final String path, Stat stat, boolean watch)
             throws MgmtZooKeeperException, NoNodeException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, READ);
             return zk.getData(path, watch, stat);
         } catch (KeeperException.NoNodeException e) {
             Logger.warn("Get data fail. path: {}", path, e);
@@ -330,6 +340,7 @@ public class ZooKeeperHolder {
     public void deleteZNode(final String path, final int version)
             throws MgmtZooKeeperException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, WRITE);
             zk.delete(path, version);
         } catch (KeeperException.NoNodeException e) {
             Logger.warn("Delete znode fail. path: {}", path, e);
@@ -417,6 +428,7 @@ public class ZooKeeperHolder {
     public List<String> getChildren(final String path, final boolean watch)
             throws MgmtZooKeeperException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, READ);
             return zk.getChildren(path, watch);
         } catch (KeeperException e) {
             Logger.error("Get children of znode fail. path: {} ", path, e);
@@ -430,6 +442,7 @@ public class ZooKeeperHolder {
     public List<String> getChildren(final String path, final Watcher watcher)
             throws MgmtZooKeeperException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, READ);
             return zk.getChildren(path, watcher);
         } catch (KeeperException e) {
             Logger.error("Get children of znode fail. path: {} ", path, e);
@@ -448,6 +461,7 @@ public class ZooKeeperHolder {
     
     public boolean isExists(final String path) throws MgmtZooKeeperException {
         try {
+            ThreadLocalVariableHolder.checkPermission(path, READ);
             return (zk.exists(path, true) != null);
         } catch (KeeperException e) {
             Logger.error("Check znode fail. path: {}", path, e);
@@ -460,6 +474,13 @@ public class ZooKeeperHolder {
     
     public List<OpResult> multi(Iterable<Op> ops) throws MgmtZooKeeperException {
         try {
+            for (Op op : ops) {
+                if (op.getType() == create || op.getType() == delete || op.getType() == setData) {
+                    ThreadLocalVariableHolder.checkPermission(op.getPath(), WRITE);
+                } else if (op.getType() == getData || op.getType() ==  exists || op.getType() == getChildren) {
+                    ThreadLocalVariableHolder.checkPermission(op.getPath(), READ);
+                }
+            }
             return zk.multi(ops);
         } catch (KeeperException e) {
             Logger.error("Multi operation fail. {}, {}", e.getPath(), ops, e);

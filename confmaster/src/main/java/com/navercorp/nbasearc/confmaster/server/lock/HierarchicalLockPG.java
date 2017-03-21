@@ -22,8 +22,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.navercorp.nbasearc.confmaster.Constant;
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroup;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 
 public class HierarchicalLockPG extends HierarchicalLock {
     
@@ -56,10 +58,6 @@ public class HierarchicalLockPG extends HierarchicalLock {
     
     @Override
     protected void _lock() {
-        if (getLockType() == LockType.SKIP) {
-            return;
-        }
-        
         if (locked == true || pgID == null) {
             return;
         }
@@ -82,14 +80,13 @@ public class HierarchicalLockPG extends HierarchicalLock {
         }
         
         for (PartitionGroup pg : pgList) {
+            ThreadLocalVariableHolder.addPermission(PathUtil.pgPath(pg.getName(), pg.getClusterName()), getLockType());
             switch (getLockType()) {
             case READ: 
                 getHlh().acquireLock(pg.readLock());
                 break;
             case WRITE: 
                 getHlh().acquireLock(pg.writeLock());
-                break;
-            case SKIP:
                 break;
             }
         }

@@ -21,8 +21,10 @@ import static com.navercorp.nbasearc.confmaster.Constant.*;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.navercorp.nbasearc.confmaster.ThreadLocalVariableHolder;
 import com.navercorp.nbasearc.confmaster.logger.Logger;
 import com.navercorp.nbasearc.confmaster.server.cluster.Gateway;
+import com.navercorp.nbasearc.confmaster.server.cluster.PathUtil;
 
 public class HierarchicalLockGW extends HierarchicalLock {
     
@@ -59,14 +61,14 @@ public class HierarchicalLockGW extends HierarchicalLock {
         }
         
         for (Gateway gw : gateways) {
+            ThreadLocalVariableHolder.addPermission(gw.getPath(), getLockType());
+            ThreadLocalVariableHolder.addPermission(PathUtil.pathOfGwLookup(gw.getClusterName(), gw.getName()), getLockType());
             switch (getLockType()) {
             case READ: 
                 getHlh().acquireLock(gw.readLock());
                 break;
             case WRITE: 
                 getHlh().acquireLock(gw.writeLock());
-                break;
-            case SKIP:
                 break;
             }
         }

@@ -238,8 +238,9 @@ struct arc_job_s
   /* signallig */
   pthread_mutex_t mutex;	// conditional variable mutex
   pthread_cond_t cond;		// conditional variable
-  int pred;			// conditiolan variable predicate
+  int pred;			// conditional variable predicate
   int err;			// 0 means (rs.ncmd = cmd), otherwise it is errno
+  int to_ms;			// timeout milliseconds
 };
 #define init_arc_job(r) do {                     \
   (r)->state = ARCJOB_STATE_NONE;                \
@@ -260,6 +261,7 @@ struct arc_job_s
   pthread_cond_init(&(r)->cond, NULL);           \
   (r)->pred = 0;                                 \
   (r)->err = 0;                                  \
+  (r)->to_ms = 0;                                \
 } while (0)
 
 struct noop_job_s

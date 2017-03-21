@@ -766,30 +766,15 @@ class TestARCCI(unittest.TestCase):
 
         # Clear rules
         while True:
-            out = util.sudo('iptables -t nat -D OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            util.log(out)
-            if out.succeeded == False:
+            if util.iptables_redirect('D', '127.0.0.100', '127.0.0.1') == False:
                 break
 
         while True:
-            out = util.sudo('iptables -t nat -D PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-            util.log(out)
-            if out.succeeded == False:
-                break
-
-        while True:
-            out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-            util.log(out)
-            if out.succeeded == False:
+            if util.iptables_drop('D', '127.0.0.100') == False:
                 break
 
         # Print rules
-        out = util.sudo('iptables -L')
-        util.log('====================================================================')
-        util.log(out.succeeded)
-        util.log('out : %s' % out)
-        util.log('out.return_code : %d' % out.return_code)
-        util.log('out.stderr : %s' % out.stderr)
+        util.iptables_print_list()
 
         # Start loadgenerators
         self.load_gen_list = {}
@@ -801,11 +786,7 @@ class TestARCCI(unittest.TestCase):
             self.load_gen_list[i] = load_gen
 
         # Add forwarding role (127.0.0.100 -> 127.0.0.1)
-        out = util.sudo('iptables -t nat -A OUTPUT -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
-
-        out = util.sudo('iptables -t nat -A PREROUTING -d 127.0.0.100 -p tcp -j DNAT --to-destination 127.0.0.1')
-        self.assertTrue(out.succeeded, 'add a forwarding role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_redirect('A', '127.0.0.100', '127.0.0.1'), 'add a forwarding role to iptables fail.')
 
         # Add virtualhost information to MGMT
         VIRTUAL_HOST_NAME = 'virtualhost'
@@ -844,8 +825,7 @@ class TestARCCI(unittest.TestCase):
         util.log('load balancing success')
 
         # Block
-        out = util.sudo('iptables -A OUTPUT -d 127.0.0.100 -j DROP')
-        self.assertTrue(out.succeeded, 'add a bloking role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_drop('A', '127.0.0.100'), 'add a bloking role to iptables fail.')
 
         # Check blocked gateway`s ops
         for i in range(5):
@@ -884,8 +864,7 @@ class TestARCCI(unittest.TestCase):
         util.log('load balancing success - nonblocked gateways')
 
         # Unblock
-        out = util.sudo('iptables -D OUTPUT -d 127.0.0.100 -j DROP')
-        self.assertTrue(out.succeeded, 'delete a bloking role to iptables fail. output:%s' % out)
+        self.assertTrue(util.iptables_drop('D', '127.0.0.100'), 'delete a bloking role to iptables fail.')
 
         # Check load balancing
         ok = False
@@ -930,6 +909,10 @@ class TestARCCI(unittest.TestCase):
 
         self.assertTrue(ok, 'load balancing fail - all gateways after unblocking network')
         util.log('load balancing success - all gateways after unblocking network')
+
+        # Go back to initial configuration
+        self.assertTrue(util.pm_del(MGMT_IP, MGMT_PORT, VIRTUAL_HOST_NAME), 
+                'failed to pm_del to go back to initial configuration.')
 
     def test_a_pg_delay(self):
         util.print_frame()

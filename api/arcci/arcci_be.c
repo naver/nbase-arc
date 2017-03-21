@@ -593,8 +593,8 @@ debug_log_be_job (be_t * be, be_job_t * job, int err)
       int ret;
       arc_job_t *aj = (arc_job_t *) job->data;
 
-      FMT_SEG_PRINTF ("\tARC JOB state:%s pred:%d err:%d\n",
-		      arc_job_state2str (aj->state), aj->pred, aj->err);
+      FMT_SEG_PRINTF ("\tARC JOB state:%s pred:%d err:%d timeout_ms:%d\n",
+		      arc_job_state2str (aj->state), aj->pred, aj->err, aj->to_ms);
       FMT_SEG_PRINTF ("\tRQST ncmd:%d is_write:%d crc:%d sent_cnt:%d\n",
 		      aj->rqst.ncmd, aj->rqst.is_write, aj->rqst.crc,
 		      aj->rqst.sent_cnt);
