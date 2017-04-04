@@ -66,6 +66,11 @@ class TestBeReconf (unittest.TestCase):
 
             P = _init_pgs(2, 'localhost', 1920, cm.dir)
             P.smr.role_slave(P.id, 'localhost', M.base_port, 0)
+            
+            # dirty: there is some time interval between A ~ B
+            # A. replicator has role 
+            # B. backend is notified to be ready and setup listen port for clients
+            time.sleep(1.0)
 
             _attach_client(M, 1024, 1000)
             _attach_client(C, 1024, 1000)

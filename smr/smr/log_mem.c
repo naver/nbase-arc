@@ -1160,7 +1160,6 @@ static int
 mastershm_initialize (masterShm * shm, char *prefix, char *path)
 {
   int ret;
-  key_t sem_key;
   int semid;
   int i;
   union senum
@@ -1170,17 +1169,43 @@ mastershm_initialize (masterShm * shm, char *prefix, char *path)
     unsigned short *array;
   } arg;
 
-  sem_key = ftok (path, MSHM_SEM_PROJ_ID);
-  if (sem_key < 0)
+  // Note: ftok returns a key which is derived from (device #, inode #, proj_id).
+  // The result keys can be same even though two file paths are different.
+  // Try to differentiate proj_id to resolve the collision.
+  for (i = 0; i < 256; i++)
     {
-      ERRNO_POINT ();
-      return -1;
-    }
+      key_t sem_key;
+      unsigned char proj_id = (unsigned char) (MSHM_SEM_PROJ_ID + i);
 
-  semid = semget (sem_key, 1 + MAX_MEMLOG, IPC_CREAT | IPC_EXCL | 0666);
-  if (semid < 0)
+      if (proj_id == 0)
+	{
+	  continue;
+	}
+      sem_key = ftok (path, (int) proj_id);
+      if (sem_key < 0)
+	{
+	  ERRNO_POINT ();
+	  return -1;
+	}
+
+      semid = semget (sem_key, 1 + MAX_MEMLOG, IPC_CREAT | IPC_EXCL | 0666);
+      if (semid < 0)
+	{
+	  if (errno == EEXIST)
+	    {
+	      continue;
+	    }
+	  ERRNO_POINT ();
+	  return -1;
+	}
+      else
+	{
+	  break;
+	}
+    }
+  if (i == 256)
     {
-      ERRNO_POINT ();
+      ERRNO_POINT ();		//EEXIST
       return -1;
     }
 
