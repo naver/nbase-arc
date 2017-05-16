@@ -790,7 +790,7 @@ trac_ops (void)
   arc.lcon_ops_sec_samples[arc.ops_sec_idx] = ops_sec;
   arc.lcon_ops_sec_last_sample_ops = arc.stat_numcommands_lcon;
 
-  arc.ops_sec_last_sample_time = mstime();
+  arc.ops_sec_last_sample_time = mstime ();
   arc.ops_sec_idx = (arc.ops_sec_idx + 1) % STATS_METRIC_SAMPLES;
 }
 
@@ -1152,6 +1152,7 @@ arc_debug_hook (client * c)
 err:
   return 1;
 #else
+  UNUSED (c);
   return 0;
 #endif
 }

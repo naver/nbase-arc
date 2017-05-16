@@ -32,16 +32,44 @@ is_bgdel_obj (robj * o)
 	case OBJ_STRING:
 	  break;
 	case OBJ_LIST:
-	  items = listTypeLength (o);
+	  if (o->encoding == OBJ_ENCODING_QUICKLIST)
+	    {
+	      items = ((quicklist *) o->ptr)->len;
+	    }
+	  //else panic
 	  break;
 	case OBJ_SET:
-	  items = setTypeSize (o);
+	  if (o->encoding == OBJ_ENCODING_HT)
+	    {
+	      items = dictSize ((dict *) o->ptr);
+	    }
+	  else if (o->encoding == OBJ_ENCODING_INTSET)
+	    {
+	      items = 1;
+	    }
+	  //else panic
 	  break;
 	case OBJ_ZSET:
-	  items = zsetLength (o);
+	  if (o->encoding == OBJ_ENCODING_ZIPLIST)
+	    {
+	      items = 1;
+	    }
+	  else if (o->encoding == OBJ_ENCODING_SKIPLIST)
+	    {
+	      items = ((zset *) o->ptr)->zsl->length;
+	    }
+	  //else panic
 	  break;
 	case OBJ_HASH:
-	  items = hashTypeLength (o);
+	  if (o->encoding == OBJ_ENCODING_ZIPLIST)
+	    {
+	      items = 1;
+	    }
+	  else if (o->encoding == OBJ_ENCODING_HT)
+	    {
+	      items = dictSize ((dict *) o->ptr);
+	    }
+	  //else panic
 	  break;
 	case OBJ_SSS:
 	  items = arc_sss_type_value_count (o);

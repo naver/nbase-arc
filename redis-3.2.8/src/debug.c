@@ -126,7 +126,7 @@ void computeDatasetDigest(unsigned char *final) {
         redisDb *db = server.db+j;
 
         if (dictSize(db->dict) == 0) continue;
-        di = dictGetIterator(db->dict);
+        di = dictGetSafeIterator(db->dict);
 
         /* hash the DB id, so the same dataset moved in a different
          * DB will lead to a different digest */
@@ -272,8 +272,9 @@ void debugCommand(client *c) {
         return;
     }
 
+#ifdef NBASE_ARC
     if (arc_debug_hook(c) == 1) return;
-
+#endif
     if (!strcasecmp(c->argv[1]->ptr,"help")) {
         void *blenp = addDeferredMultiBulkLength(c);
         int blen = 0;
