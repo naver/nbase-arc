@@ -864,8 +864,8 @@ pool_create (aeEventLoop * el, int nslot, long long msg_timeout,
 int
 pool_add_partition (redis_pool * pool, const char *pg_id)
 {
-  partition_group *pg;
-  int ret;
+  partition_group *pg, *prev_pg, *cur_pg;
+  int ret, i;
 
   pg = zmalloc (sizeof (partition_group));
   ret = dictAdd (pool->partition_groups, (void *) pg_id, pg);
@@ -878,11 +878,24 @@ pool_add_partition (redis_pool * pool, const char *pg_id)
   ARRAY_PUSH (&pool->idx_to_pg, pg);
 
   pg->id = zstrdup (pg_id);
-  pg->idx = ARRAY_N (&pool->idx_to_pg) - 1;
   ARRAY_INIT (&pg->servers);
   ARRAY_INIT (&pg->remote_conns);
   ARRAY_INIT (&pg->local_conns);
   pg->recent_conn = NULL;
+
+  // Maintain idx_to_pg array in lexical order
+  for (i = ARRAY_N (&pool->idx_to_pg) - 1; i > 0; i--)
+    {
+      prev_pg = ARRAY_GET (&pool->idx_to_pg, i - 1);
+      cur_pg = ARRAY_GET (&pool->idx_to_pg, i);
+      if (strcmp (prev_pg->id, cur_pg->id) > 0)
+	{
+	  ARRAY_SET (&pool->idx_to_pg, i - 1, cur_pg);
+	  ARRAY_SET (&pool->idx_to_pg, i, prev_pg);
+	  continue;
+	}
+      break;
+    }
 
   return OK;
 }
@@ -1587,6 +1600,43 @@ pool_send_query (redis_pool * pool, sbuf * query, int slot_idx,
 }
 
 int
+pool_send_query_partition (redis_pool * pool, sbuf * query, const char *pg_id,
+			   msg_reply_proc * cb, void *cbarg,
+			   redis_msg ** ret_handle)
+{
+  redis_connection *conn;
+  partition_group *pg;
+  redis_msg *msg;
+  int ret;
+
+  msg = msg_create (pool, query, cb, cbarg);
+  *ret_handle = msg;
+
+  pg = dictFetchValue (pool->partition_groups, pg_id);
+  if (!pg)
+    {
+      goto error_return;
+    }
+
+  ret = partition_select_conn (pg, 0, &conn);
+  if (ret == ERR)
+    {
+      goto error_return;
+    }
+
+  return send_msg_conn (pool, conn, msg);
+
+error_return:
+  assert (!msg->reply);
+  msg->reply =
+    stream_create_sbuf_printf (pool->shared_stream,
+			       "-ERR pg_%d unavailable\r\n", pg_id);
+  msg->finished = 1;
+  msg->fail = 1;
+  return ERR;
+}
+
+int
 pool_send_query_all (redis_pool * pool, const char *query_str,
 		     msg_reply_proc * cb, void *cbarg,
 		     array_msg * ret_handles)
@@ -2109,4 +2159,23 @@ pool_available_partition_count (redis_pool * pool)
   dictReleaseIterator (di);
 
   return count;
+}
+
+int
+pool_nth_partition_id (redis_pool * pool, int idx, const char **ret_pg_id)
+{
+  partition_group *pg;
+  if (ARRAY_N (&pool->idx_to_pg) <= idx || 0 > idx)
+    {
+      return ERR;
+    }
+  pg = ARRAY_GET (&pool->idx_to_pg, idx);
+  *ret_pg_id = pg->id;
+  return OK;
+}
+
+int
+pool_partition_count (redis_pool * pool)
+{
+  return ARRAY_N (&pool->idx_to_pg);
 }

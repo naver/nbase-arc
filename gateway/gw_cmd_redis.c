@@ -467,3 +467,111 @@ quit_command (command_context * ctx)
   reply = stream_create_sbuf_str (mgr->shared_stream, "+OK\r\n");
   reply_and_free (ctx, reply);
 }
+
+void
+cscan_command (command_context * ctx)
+{
+  command_manager *mgr = ctx->my_mgr;
+  redis_msg *handle;
+  sbuf *query, *reply;
+  long long ll;
+  int ret, ok, argc, i, pg_idx;
+  const char *pg_id;
+  sbuf_pos start;
+  ssize_t len;
+
+  COROUTINE_BEGIN (ctx->coro_line);
+
+  getArgumentPosition (ctx->parse_ctx, 1, &start, &len);
+  ok = sbuf_string2ll (start, len, &ll);
+  if (!ok)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+  pg_idx = ll;
+
+  if (pg_idx >= pool_partition_count (mgr->pool) || pg_idx < 0)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  ret = pool_nth_partition_id (mgr->pool, pg_idx, &pg_id);
+  if (ret == ERR)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  argc = getArgumentCount (ctx->parse_ctx);
+  stream_append_printf (mgr->shared_stream, "*%d\r\n$4\r\nSCAN\r\n",
+			argc - 1);
+  for (i = 2; i < argc; i++)
+    {
+      getArgumentPosition (ctx->parse_ctx, i, &start, &len);
+      ret = stream_append_printf (mgr->shared_stream, "$%ld\r\n", len);
+      assert (ret == OK);
+      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
+      assert (ret == OK);
+      ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
+      assert (ret == OK);
+    }
+  query =
+    stream_create_sbuf (mgr->shared_stream,
+			stream_last_pos (mgr->shared_stream));
+  assert (query);
+
+  ret =
+    pool_send_query_partition (mgr->pool, query, pg_id,
+			       cmd_redis_coro_invoker, ctx, &handle);
+  ARRAY_PUSH (&ctx->msg_handles, handle);
+
+  if (ret == ERR)
+    {
+      reply = pool_take_reply (handle);
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  COROUTINE_YIELD;
+
+  handle = ARRAY_GET (&ctx->msg_handles, 0);
+  if (pool_msg_fail (handle))
+    {
+      reply = pool_take_reply (handle);
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  if (pool_msg_local (handle))
+    {
+      ctx->local = 1;
+    }
+
+  reply = pool_take_reply (handle);
+  reply_and_free (ctx, reply);
+
+  COROUTINE_END;
+}
+
+void
+cscanlen_command (command_context * ctx)
+{
+  command_manager *mgr = ctx->my_mgr;
+  sbuf *reply;
+  int pg_count;
+
+  pg_count = pool_partition_count (mgr->pool);
+  reply = stream_create_sbuf_printf (mgr->shared_stream, ":%d\r\n", pg_count);
+  reply_and_free (ctx, reply);
+}

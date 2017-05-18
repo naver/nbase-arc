@@ -133,6 +133,8 @@ void dbsize_command (command_context * ctx);
 void info_command (command_context * ctx);
 void ping_command (command_context * ctx);
 void quit_command (command_context * ctx);
+void cscan_command (command_context * ctx);
+void cscanlen_command (command_context * ctx);
 
 // Admin Command function
 void admin_cluster_info_command (command_context * ctx);
