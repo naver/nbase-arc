@@ -23,7 +23,7 @@ import string
 import random
 
 class TestScan(unittest.TestCase):
-    cluster = config.clusters[0]
+    cluster = config.clusters[2]
 
     def setUp(self):
         util.set_process_logfile_prefix('TestScan_%s' % self._testMethodName)
@@ -59,8 +59,61 @@ class TestScan(unittest.TestCase):
             # Check scan result
             unmatched_item  = set(expect.items()) ^ set(result.items())
             if len(unmatched_item) != 0:
-                util.log("SCAN unmatched items = " + unmatched_item)
+                util.log("SCAN unmatched items = " + repr(unmatched_item))
                 self.assertTrue(len(unmatched_item) == 0)
+
+    def insert_key(self, svr, count = 10000):
+        expect = {}
+        for i in range(count):
+            key = self.string_gen()
+            svr.write('SET %s scan_test_value\r\n' % key)
+            svr.read_until('\r\n', 3)
+            expect[key] = 'scan_test_value'
+        return expect
+
+    def scan_key(self, servers):
+        result = {}
+        cursor_order = []
+        cursor = 0
+        while True:
+            svr = random.choice(servers)
+            svr.write('SCAN %d\r\n' % cursor)
+            svr.write('PING\r\n')
+            ret = svr.read_until('+PONG\r\n', 3)
+            sp = ret.split('\r\n')
+
+            for i in range(5, len(sp)-1, 2):
+                key = sp[i]
+                value = 'scan_test_value'
+                result[key] = value
+
+            cursor = int(sp[2])
+            cursor_order.append(cursor)
+            if cursor == 0:
+                break
+        return result, cursor_order
+
+    def cscan_key(self, servers, pg_idx):
+        result = {}
+        cursor_order = []
+        cursor = 0
+        while True:
+            svr = random.choice(servers)
+            svr.write('CSCAN %d %d\r\n' % (pg_idx, cursor))
+            svr.write('PING\r\n')
+            ret = svr.read_until('+PONG\r\n', 3)
+            sp = ret.split('\r\n')
+
+            for i in range(5, len(sp)-1, 2):
+                key = sp[i]
+                value = 'scan_test_value'
+                result[key] = value
+
+            cursor = int(sp[2])
+            cursor_order.append(cursor)
+            if cursor == 0:
+                break
+        return result, cursor_order
 
     def insert_hash(self, svr, count = 10000):
         svr.write('del hscantest\r\n')
@@ -165,7 +218,7 @@ class TestScan(unittest.TestCase):
                 break
         return result, cursor_order
 
-    def test_scan(self):
+    def test_scan_gateway(self):
         util.print_frame()
 
         # Test scan through gateway
@@ -173,6 +226,8 @@ class TestScan(unittest.TestCase):
         for server in self.cluster['servers']:
             gateway_list.append(telnetlib.Telnet(server['ip'], server['gateway_port']))
 
+        util.log("run SCAN test through gateway")
+        self.check_scan(gateway_list, self.insert_key, self.scan_key)
         util.log("run HSCAN test through gateway")
         self.check_scan(gateway_list, self.insert_hash, self.scan_hash)
         util.log("run ZSCAN test through gateway")
@@ -180,9 +235,13 @@ class TestScan(unittest.TestCase):
         util.log("run SSCAN test through gateway")
         self.check_scan(gateway_list, self.insert_set, self.scan_set)
 
+    def test_scan_redis(self):
+        util.print_frame()
+
         # Test scan through redis
         redis_list = []
-        for server in self.cluster['servers']:
+        for i in range(3):
+            server = self.cluster['servers'][i]
             redis_list.append(telnetlib.Telnet(server['ip'], server['redis_port']))
 
         util.log("run HSCAN test through redis")
@@ -191,3 +250,61 @@ class TestScan(unittest.TestCase):
         self.check_scan(redis_list, self.insert_zset, self.scan_zset)
         util.log("run SSCAN test through redis")
         self.check_scan(redis_list, self.insert_set, self.scan_set)
+
+    def test_cscan(self):
+        util.print_frame()
+
+        gateway_list = []
+        for server in self.cluster['servers']:
+            gateway_list.append(telnetlib.Telnet(server['ip'], server['gateway_port']))
+
+        util.log("run CSCAN test")
+
+        svr = random.choice(gateway_list)
+        expect = self.insert_key(svr)
+        svr.write('CSCANLEN\r\n')
+        cscanlen = int(svr.read_until('\r\n', 3)[1:])
+
+        total = {}
+        for i in range(cscanlen):
+            result, cursor_order = self.cscan_key(gateway_list, i)
+            total = dict(total.items() + result.items())
+
+        # Check scan result
+        unmatched_item  = set(expect.items()) ^ set(total.items())
+        if len(unmatched_item) != 0:
+            util.log("CSCAN unmatched items = " + repr(unmatched_item))
+            self.assertTrue(len(unmatched_item) == 0)
+
+    def test_cdigest(self):
+        util.print_frame()
+
+        gateway_list = []
+        for server in self.cluster['servers']:
+            gateway_list.append(telnetlib.Telnet(server['ip'], server['gateway_port']))
+
+        util.log("run CSCAN test")
+
+        svr = random.choice(gateway_list)
+        expect = self.insert_key(svr)
+
+        svr.write('CDIGEST\r\n')
+        svr.read_until('\r\n', 3)
+        digest1 = svr.read_until('\r\n', 3)
+
+        ret = util.migration(self.cluster, 0, 1, 0, 4095, 40000)
+        self.assertEqual(True, ret, 'Migration Fail')
+
+        svr.write('CDIGEST\r\n')
+        svr.read_until('\r\n', 3)
+        digest2 = svr.read_until('\r\n', 3)
+
+        ret = util.migration(self.cluster, 1, 0, 0, 4095, 40000)
+        self.assertEqual(True, ret, 'Migration Fail')
+
+        svr.write('CDIGEST\r\n')
+        svr.read_until('\r\n', 3)
+        digest3 = svr.read_until('\r\n', 3)
+
+        self.assertEqual(digest1, digest3, "Incompatible Cluster Digest")
+        self.assertNotEqual(digest1, digest2, "Incompatible Cluster Digest")

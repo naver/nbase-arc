@@ -468,14 +468,166 @@ quit_command (command_context * ctx)
   reply_and_free (ctx, reply);
 }
 
+/* buf = '<pg_idx>' or '<cursor><pg_idx>'
+ * case 1) <pg_idx> = 1~4 byte length, cursor = 0
+ * case 2) <cursor><pg_idx> = cursor length + fixed 4 byte pg_idx
+ * */
+//static int decode_cursor (char *buf, ssize_t len, unsigned long long *cursor, int *cursor_digits, int *pg_idx) {
+static int
+decode_cursor (command_context * ctx, unsigned long long *cursor,
+	       int *cursor_digits, int *pg_idx)
+{
+  char pg_idx_buf[5], cursor_buf[128];
+  char *buf, *eptr;
+  int ret, ok, i;
+  long long value;
+  sbuf_pos start;
+  ssize_t len;
+
+  ret = getArgumentPosition (ctx->parse_ctx, 1, &start, &len);
+  assert (ret == OK);
+  ret = getParsedStr (ctx->parse_ctx, 1, &buf);
+  assert (ret == OK);
+
+  if (len <= 4)
+    {
+      ok = string2ll (buf, len, &value);
+      if (!ok)
+	{
+	  zfree (buf);
+	  return ERR;
+	}
+      *pg_idx = value;
+      *cursor = 0;
+      *cursor_digits = 1;
+      zfree (buf);
+      return OK;
+    }
+
+  memcpy (cursor_buf, buf, len - 4);
+  cursor_buf[len - 4] = '\0';
+  errno = 0;
+  *cursor = strtoull (cursor_buf, &eptr, 10);
+  if (isspace (cursor_buf[0]) || eptr[0] != '\0' || errno == ERANGE)
+    {
+      zfree (buf);
+      return ERR;
+    }
+  *cursor_digits = len - 4;
+
+  memcpy (pg_idx_buf, buf + len - 4, 4);
+  pg_idx_buf[4] = '\0';
+  value = 0;
+  for (i = 0; i < 4; i++)
+    {
+      if (pg_idx_buf[i] < '0' || pg_idx_buf[i] > '9')
+	{
+	  zfree (buf);
+	  return ERR;
+	}
+      value = value * 10 + pg_idx_buf[i] - '0';
+    }
+  *pg_idx = value;
+  zfree (buf);
+  return OK;
+}
+
+static sbuf *
+create_modified_scan_query (command_context * ctx, unsigned long long cursor,
+			    int cursor_digits, char skip_argc)
+{
+  command_manager *mgr = ctx->my_mgr;
+  sbuf *query;
+  int i, ret, argc;
+  sbuf_pos start;
+  ssize_t len;
+
+  argc = getArgumentCount (ctx->parse_ctx);
+  stream_append_printf (mgr->shared_stream, "*%d\r\n$4\r\nSCAN\r\n",
+			argc - skip_argc + 1);
+  stream_append_printf (mgr->shared_stream, "$%d\r\n%llu\r\n", cursor_digits,
+			cursor);
+  for (i = skip_argc + 1; i < argc; i++)
+    {
+      getArgumentPosition (ctx->parse_ctx, i, &start, &len);
+      ret = stream_append_printf (mgr->shared_stream, "$%ld\r\n", len);
+      assert (ret == OK);
+      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
+      assert (ret == OK);
+      ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
+      assert (ret == OK);
+    }
+  query =
+    stream_create_sbuf (mgr->shared_stream,
+			stream_last_pos (mgr->shared_stream));
+  assert (query);
+  return query;
+}
+
+static sbuf *
+create_modified_scan_reply (command_context * ctx, redis_msg * handle,
+			    int pg_idx)
+{
+  command_manager *mgr = ctx->my_mgr;
+  ParseContext *parse_ctx;
+  char pg_idx_buf[16], *redis_cursor;
+  int i, ret, argc;
+  sbuf *reply;
+  sbuf_pos start;
+  ssize_t len;
+
+  parse_ctx = pool_get_parse_ctx (handle);
+  ret = getParsedStr (parse_ctx, 0, &redis_cursor);
+  assert (ret == OK);
+  argc = getArgumentCount (parse_ctx);
+
+  if (strcmp (redis_cursor, "0") == 0)
+    {
+      if (pg_idx + 1 >= pool_partition_count (mgr->pool))
+	{
+	  sprintf (pg_idx_buf, "0");
+	}
+      else
+	{
+	  sprintf (pg_idx_buf, "%d", pg_idx + 1);
+	}
+      stream_append_printf (mgr->shared_stream, "*2\r\n$%d\r\n%s\r\n",
+			    strlen (pg_idx_buf), pg_idx_buf);
+    }
+  else
+    {
+      stream_append_printf (mgr->shared_stream, "*2\r\n$%d\r\n%s%04d\r\n",
+			    strlen (redis_cursor) + 4, redis_cursor, pg_idx);
+    }
+  zfree (redis_cursor);
+
+  stream_append_printf (mgr->shared_stream, "*%d\r\n", argc - 1);
+  for (i = 1; i < argc; i++)
+    {
+      getArgumentPosition (parse_ctx, i, &start, &len);
+      ret = stream_append_printf (mgr->shared_stream, "$%ld\r\n", len);
+      assert (ret == OK);
+      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
+      assert (ret == OK);
+      ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
+      assert (ret == OK);
+    }
+  reply =
+    stream_create_sbuf (mgr->shared_stream,
+			stream_last_pos (mgr->shared_stream));
+  return reply;
+}
+
 void
 cscan_command (command_context * ctx)
 {
   command_manager *mgr = ctx->my_mgr;
   redis_msg *handle;
   sbuf *query, *reply;
+  unsigned long long cursor;
+  char *cursor_buf, *eptr;
   long long ll;
-  int ret, ok, argc, i, pg_idx;
+  int ret, skip_argc, ok, pg_idx, cursor_digits;
   const char *pg_id;
   sbuf_pos start;
   ssize_t len;
@@ -513,23 +665,26 @@ cscan_command (command_context * ctx)
       return;
     }
 
-  argc = getArgumentCount (ctx->parse_ctx);
-  stream_append_printf (mgr->shared_stream, "*%d\r\n$4\r\nSCAN\r\n",
-			argc - 1);
-  for (i = 2; i < argc; i++)
+  ret = getArgumentPosition (ctx->parse_ctx, 2, &start, &len);
+  assert (ret == OK);
+  ret = getParsedStr (ctx->parse_ctx, 2, &cursor_buf);
+  assert (ret == OK);
+
+  cursor = strtoull (cursor_buf, &eptr, 10);
+  if (isspace (cursor_buf[0]) || eptr[0] != '\0' || errno == ERANGE)
     {
-      getArgumentPosition (ctx->parse_ctx, i, &start, &len);
-      ret = stream_append_printf (mgr->shared_stream, "$%ld\r\n", len);
-      assert (ret == OK);
-      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
-      assert (ret == OK);
-      ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
-      assert (ret == OK);
+      zfree (cursor_buf);
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
     }
-  query =
-    stream_create_sbuf (mgr->shared_stream,
-			stream_last_pos (mgr->shared_stream));
-  assert (query);
+  zfree (cursor_buf);
+  cursor_digits = len;
+
+  skip_argc = 2;
+  query = create_modified_scan_query (ctx, cursor, cursor_digits, skip_argc);
 
   ret =
     pool_send_query_partition (mgr->pool, query, pg_id,
@@ -574,4 +729,116 @@ cscanlen_command (command_context * ctx)
   pg_count = pool_partition_count (mgr->pool);
   reply = stream_create_sbuf_printf (mgr->shared_stream, ":%d\r\n", pg_count);
   reply_and_free (ctx, reply);
+}
+
+void
+cdigest_command (command_context * ctx)
+{
+  command_manager *mgr = ctx->my_mgr;
+  sbuf *reply;
+  sds rle;
+  size_t out_len;
+  unsigned char *encoded;
+
+  rle = get_pg_map_rle (mgr->conf);
+  encoded =
+    base64_encode ((const unsigned char *) rle, sdslen (rle), &out_len);
+  assert (encoded != NULL);
+  sdsfree (rle);
+  encoded[out_len - 1] = '\0';
+
+  reply =
+    stream_create_sbuf_printf (mgr->shared_stream, "$%d\r\n%s\r\n",
+			       out_len - 1, encoded);
+  free (encoded);
+
+  reply_and_free (ctx, reply);
+}
+
+void
+scan_command (command_context * ctx)
+{
+  command_manager *mgr = ctx->my_mgr;
+  redis_msg *handle;
+  sbuf *query, *reply;
+  int ret, skip_argc, pg_idx, cursor_digits;
+  unsigned long long cursor;
+  const char *pg_id;
+
+
+  COROUTINE_BEGIN (ctx->coro_line);
+
+  ret = decode_cursor (ctx, &cursor, &cursor_digits, &pg_idx);
+  if (ret == ERR)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  if (pg_idx >= pool_partition_count (mgr->pool) || pg_idx < 0)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  ret = pool_nth_partition_id (mgr->pool, pg_idx, &pg_id);
+  if (ret == ERR)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  skip_argc = 1;
+  query = create_modified_scan_query (ctx, cursor, cursor_digits, skip_argc);
+
+  ret =
+    pool_send_query_partition (mgr->pool, query, pg_id,
+			       cmd_redis_coro_invoker, ctx, &handle);
+  ARRAY_PUSH (&ctx->msg_handles, handle);
+
+  if (ret == ERR)
+    {
+      reply = pool_take_reply (handle);
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  COROUTINE_YIELD;
+
+  handle = ARRAY_GET (&ctx->msg_handles, 0);
+  if (pool_msg_fail (handle))
+    {
+      reply = pool_take_reply (handle);
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  if (pool_msg_local (handle))
+    {
+      ctx->local = 1;
+    }
+
+  ret = decode_cursor (ctx, &cursor, &cursor_digits, &pg_idx);
+  if (ret == ERR)
+    {
+      reply =
+	stream_create_sbuf_str (mgr->shared_stream,
+				"-ERR invalid cursor\r\n");
+      reply_and_free (ctx, reply);
+      return;
+    }
+
+  reply = create_modified_scan_reply (ctx, handle, pg_idx);
+  reply_and_free (ctx, reply);
+
+  COROUTINE_END;
 }

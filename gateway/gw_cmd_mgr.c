@@ -152,7 +152,7 @@ struct redis_command redis_command_table[] = {
   {"pexpire", single_key_command, 3, "w", 0, 1, 1, 1, 0, 0},
   {"pexpireat", single_key_command, 3, "w", 0, 1, 1, 1, 0, 0},
   {"keys", NULL, 2, "NrS", 0, 0, 0, 0, 0, 0},
-  {"scan", NULL, -2, "NrR", 0, 0, 0, 0, 0, 0},
+  {"scan", scan_command, -2, "rR", 0, 0, 0, 0, 0, 0},
   {"dbsize", dbsize_command, 1, "r", 0, 0, 0, 0, 0, 0},
   {"auth", NULL, 2, "Nrslt", 0, 0, 0, 0, 0, 0},
   {"echo", NULL, 2, "Nr", 0, 0, 0, 0, 0, 0},
@@ -205,6 +205,7 @@ struct redis_command redis_command_table[] = {
   {"quit", quit_command, 1, "r", 0, 0, 0, 0, 0, 0},
   {"cscan", cscan_command, -3, "rR", 0, 0, 0, 0, 0, 0},
   {"cscanlen", cscanlen_command, 1, "rR", 0, 0, 0, 0, 0, 0},
+  {"cdigest", cdigest_command, 1, "rR", 0, 0, 0, 0, 0, 0},
 /* For Test */
   {"crc16", single_key_command, 3, "wm", 0, 1, 1, 1, 0, 0},
 };
