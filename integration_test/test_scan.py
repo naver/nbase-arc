@@ -276,7 +276,7 @@ class TestScan(unittest.TestCase):
             util.log("CSCAN unmatched items = " + repr(unmatched_item))
             self.assertTrue(len(unmatched_item) == 0)
 
-    def test_cdigest(self):
+    def test_cscandigest(self):
         util.print_frame()
 
         gateway_list = []
@@ -288,21 +288,21 @@ class TestScan(unittest.TestCase):
         svr = random.choice(gateway_list)
         expect = self.insert_key(svr)
 
-        svr.write('CDIGEST\r\n')
+        svr.write('CSCANDIGEST\r\n')
         svr.read_until('\r\n', 3)
         digest1 = svr.read_until('\r\n', 3)
 
         ret = util.migration(self.cluster, 0, 1, 0, 4095, 40000)
         self.assertEqual(True, ret, 'Migration Fail')
 
-        svr.write('CDIGEST\r\n')
+        svr.write('CSCANDIGEST\r\n')
         svr.read_until('\r\n', 3)
         digest2 = svr.read_until('\r\n', 3)
 
         ret = util.migration(self.cluster, 1, 0, 0, 4095, 40000)
         self.assertEqual(True, ret, 'Migration Fail')
 
-        svr.write('CDIGEST\r\n')
+        svr.write('CSCANDIGEST\r\n')
         svr.read_until('\r\n', 3)
         digest3 = svr.read_until('\r\n', 3)
 

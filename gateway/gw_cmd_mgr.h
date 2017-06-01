@@ -137,7 +137,7 @@ void ping_command (command_context * ctx);
 void quit_command (command_context * ctx);
 void cscan_command (command_context * ctx);
 void cscanlen_command (command_context * ctx);
-void cdigest_command (command_context * ctx);
+void cscandigest_command (command_context * ctx);
 void scan_command (command_context * ctx);
 
 // Admin Command function

@@ -732,7 +732,7 @@ cscanlen_command (command_context * ctx)
 }
 
 void
-cdigest_command (command_context * ctx)
+cscandigest_command (command_context * ctx)
 {
   command_manager *mgr = ctx->my_mgr;
   sbuf *reply;

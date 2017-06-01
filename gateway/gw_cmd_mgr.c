@@ -205,7 +205,7 @@ struct redis_command redis_command_table[] = {
   {"quit", quit_command, 1, "r", 0, 0, 0, 0, 0, 0},
   {"cscan", cscan_command, -3, "rR", 0, 0, 0, 0, 0, 0},
   {"cscanlen", cscanlen_command, 1, "rR", 0, 0, 0, 0, 0, 0},
-  {"cdigest", cdigest_command, 1, "rR", 0, 0, 0, 0, 0, 0},
+  {"cscandigest", cscandigest_command, 1, "rR", 0, 0, 0, 0, 0, 0},
 /* For Test */
   {"crc16", single_key_command, 3, "wm", 0, 1, 1, 1, 0, 0},
 };
