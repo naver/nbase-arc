@@ -21,20 +21,21 @@ import config
 import default_cluster
 import string
 import random
+import testbase
 
 class TestScan(unittest.TestCase):
     cluster = config.clusters[2]
 
     def setUp(self):
         util.set_process_logfile_prefix('TestScan_%s' % self._testMethodName)
-        if default_cluster.initialize_starting_up_smr_before_redis(self.cluster) is not 0:
+        self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
+        if self.conf_checker is None:
             util.log('failed to TestScan.initialize')
             return -1
         return 0
 
     def tearDown(self):
-        if default_cluster.finalize(self.cluster) is not 0:
-            util.log('failed to TestScan.finalize')
+        testbase.defaultTearDown(self)
         return 0
 
     def string_gen(self, size=6, chars=string.ascii_letters):
