@@ -66,3 +66,4 @@ public class HealthCheckManagerTest {
         manager.shutdown();
     }
 }
+

@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.navercorp.nbasearc.gcp.VirtualConnection;
 import com.navercorp.redis.cluster.pipeline.BuilderFactory;
 
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
@@ -35,7 +36,7 @@ import redis.clients.jedis.Tuple;
  */
 public class RedisCluster extends BinaryRedisCluster implements
         RedisClusterCommands {
-
+    
     /**
      * Instantiates a new redis cluster.
      *
@@ -64,6 +65,10 @@ public class RedisCluster extends BinaryRedisCluster implements
      */
     public RedisCluster(final String host, final int port, final int timeout) {
         super(host, port, timeout);
+    }
+
+    public RedisCluster(final String host, final int port, final int timeout, final boolean async) {
+        super(host, port, timeout, async);
     }
 
     // ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -198,6 +203,11 @@ public class RedisCluster extends BinaryRedisCluster implements
         return client.getStatusCodeReply();
     }
 
+    public String set(final String key, final String value, final String nxxx, final String expx, final long time) {
+        client.set(key, value, nxxx, expx, time);
+        return client.getStatusCodeReply();
+    }
+    
     public Boolean setbit(String key, long offset, boolean value) {
         client.setbit(key, offset, value);
         return client.getIntegerReply() == 1;
@@ -704,6 +714,10 @@ public class RedisCluster extends BinaryRedisCluster implements
      */
     public void disconnect() {
         client.disconnect();
+    }
+
+    public void passivate() {
+        client.passivate();
     }
 
     /**

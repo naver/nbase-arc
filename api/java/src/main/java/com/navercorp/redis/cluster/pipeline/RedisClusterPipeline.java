@@ -16,6 +16,8 @@
  */
 package com.navercorp.redis.cluster.pipeline;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.toByteArray;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,15 +27,13 @@ import java.util.concurrent.TimeUnit;
 import com.navercorp.redis.cluster.RedisCluster;
 import com.navercorp.redis.cluster.RedisClusterClient;
 import com.navercorp.redis.cluster.gateway.AffinityState;
-import com.navercorp.redis.cluster.gateway.GatewayPartitionNumber;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.navercorp.redis.cluster.gateway.Gateway;
 import com.navercorp.redis.cluster.gateway.GatewayException;
+import com.navercorp.redis.cluster.gateway.GatewayPartitionNumber;
 import com.navercorp.redis.cluster.gateway.GatewayServer;
 
-import static com.navercorp.redis.cluster.connection.RedisProtocol.toByteArray;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
@@ -206,6 +206,7 @@ public class RedisClusterPipeline extends Queable {
             if (server == null || redis == null || client == null) {
                 final GatewayServer server = gateway.getServer(partitionNumber, state);
                 setServer(server);
+                this.client.allocPc(partitionNumber, state, true);
             }
         }
     }
@@ -950,6 +951,23 @@ public class RedisClusterPipeline extends Queable {
         });
     }
 
+    public Response<String> set(final String key, final String value, final String nxxx, final String expx, final long time) {
+        return this.executeCallback(new PipelineCallback<Response<String>>() {
+            public Response<String> doInPipeline() {
+                client.set(key, value, nxxx, expx, time);
+                return getResponse(BuilderFactory.STRING);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     public Response<String> set(final byte[] key, final byte[] value) {
         return this.executeCallback(new PipelineCallback<Response<String>>() {
             public Response<String> doInPipeline() {
@@ -967,6 +985,23 @@ public class RedisClusterPipeline extends Queable {
         });
     }
 
+    public Response<String> set(final byte[] key, final byte[] value, final byte[] nxxx, final byte[] expx, final long time) {
+        return this.executeCallback(new PipelineCallback<Response<String>>() {
+            public Response<String> doInPipeline() {
+                client.set(key, value, nxxx, expx, time);
+                return getResponse(BuilderFactory.STRING);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     public Response<Boolean> setbit(final String key, final long offset, final boolean value) {
         return this.executeCallback(new PipelineCallback<Response<Boolean>>() {
             public Response<Boolean> doInPipeline() {
@@ -2695,7 +2730,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrange(key, start, end);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -2729,7 +2764,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrangeByScore(key, min, max);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -2763,7 +2798,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrangeByScore(key, min, max);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -2798,7 +2833,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrangeByScore(key, min, max, offset, count);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -2834,7 +2869,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrangeByScore(key, min, max, offset, count);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -3213,7 +3248,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrevrange(key, start, end);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -3281,7 +3316,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrevrangeByScore(key, max, min);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -3315,7 +3350,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrevrangeByScore(key, max, min);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -3350,7 +3385,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrevrangeByScore(key, max, min, offset, count);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {
@@ -3492,7 +3527,7 @@ public class RedisClusterPipeline extends Queable {
         return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
             public Response<Set<String>> doInPipeline() {
                 client.zrevrangeByScore(key, max, min, offset, count);
-                return getResponse(BuilderFactory.STRING_SET);
+                return getResponse(BuilderFactory.STRING_ZSET);
             }
 
             public int getPartitionNumber() {

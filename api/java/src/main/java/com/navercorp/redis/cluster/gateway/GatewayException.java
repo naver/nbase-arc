@@ -44,11 +44,11 @@ public class GatewayException extends RuntimeException {
      * @param message the message
      * @param ex      the ex
      */
-    public GatewayException(String message, Exception ex) {
+    public GatewayException(String message, Throwable ex) {
         super(message, ex);
     }
 
-    public GatewayException(String message, Exception ex, boolean retryable) {
+    public GatewayException(String message, Throwable ex, boolean retryable) {
         super(message, ex);
         this.retryable = retryable;
     }

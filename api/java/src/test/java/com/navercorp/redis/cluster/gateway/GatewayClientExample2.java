@@ -75,3 +75,4 @@ public class GatewayClientExample2 {
         System.out.println(result);
     }
 }
+

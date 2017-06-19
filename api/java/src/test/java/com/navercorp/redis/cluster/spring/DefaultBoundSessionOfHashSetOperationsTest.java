@@ -196,3 +196,4 @@ public class DefaultBoundSessionOfHashSetOperationsTest {
         assertEquals(3, ops.values().size());
     }
 }
+

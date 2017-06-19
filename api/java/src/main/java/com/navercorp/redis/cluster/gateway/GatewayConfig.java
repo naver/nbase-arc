@@ -62,6 +62,12 @@ public class GatewayConfig {
     public static final int DEFAULT_ZK_SESSION_TIMEOUT = 60 * 1000;
 
     public static final int DEFAULT_ZK_CONNECT_TIMEOUT = 1000;
+    
+    public static final int DEFAULT_PHYSICAL_CONNECTION_COUNT = 2;
+
+    public static final int DEFAULT_PHYSICAL_CONNECTION_RECONNECT_INTERVAL = 2000;
+
+    public static final int DEFAULT_EVENT_LOOP_THREAD_COUNT = 1;
 
     /**
      * The ip address.
@@ -128,6 +134,12 @@ public class GatewayConfig {
     private int zkSessionTimeout = DEFAULT_ZK_SESSION_TIMEOUT;
 
     private int zkConnectTimeout = DEFAULT_ZK_CONNECT_TIMEOUT;
+    
+    private int physicalConnectionCount = DEFAULT_PHYSICAL_CONNECTION_COUNT;
+    
+    private int physicalConnectionReconnectInterval = DEFAULT_PHYSICAL_CONNECTION_RECONNECT_INTERVAL;
+    
+    private int eventLoopThreadCount = DEFAULT_EVENT_LOOP_THREAD_COUNT;
 
     /**
      * Gets the ip address.
@@ -367,6 +379,30 @@ public class GatewayConfig {
 
     public void setZkConnectTimeout(int zkConnectTimeout) {
         this.zkConnectTimeout = zkConnectTimeout;
+    }
+
+    public int getPhysicalConnectionCount() {
+        return physicalConnectionCount;
+    }
+
+    public void setPhysicalConnectionCount(int physicalConnectionCount) {
+        this.physicalConnectionCount = physicalConnectionCount;
+    }
+
+    public int getPhysicalConnectionReconnectInterval() {
+        return physicalConnectionReconnectInterval;
+    }
+
+    public void setPhysicalConnectionReconnectInterval(int physicalConnectionReconnectInterval) {
+        this.physicalConnectionReconnectInterval = physicalConnectionReconnectInterval;
+    }
+
+    public int getEventLoopThreadCount() {
+        return eventLoopThreadCount;
+    }
+
+    public void setEventLoopThreadCount(int eventLoopThreadCount) {
+        this.eventLoopThreadCount = eventLoopThreadCount;
     }
 
     /**

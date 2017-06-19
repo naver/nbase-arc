@@ -135,3 +135,4 @@ public class RedisClusterTemplateExample1 {
         System.out.println(stringResult);
     }
 }
+

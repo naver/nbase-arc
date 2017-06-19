@@ -43,3 +43,4 @@ public class RedisClusterTemplateExample2 {
         System.out.println(value);
     }
 }
+

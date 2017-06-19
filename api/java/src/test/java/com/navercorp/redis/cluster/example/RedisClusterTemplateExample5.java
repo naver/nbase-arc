@@ -54,3 +54,4 @@ public class RedisClusterTemplateExample5 {
         }
     }
 }
+

@@ -87,6 +87,18 @@ public class BinaryTriplesRedisCluster implements BinaryTriplesRedisClusterComma
         client.setTimeout(timeout);
     }
 
+    /**
+     * Instantiates a new binary triples redis cluster.
+     *
+     * @param host    the host
+     * @param port    the port
+     * @param timeout the timeout
+     */
+    public BinaryTriplesRedisCluster(final String host, final int port, final int timeout, boolean async) {
+        client = new RedisClusterClient(host, port, async);
+        client.setTimeout(timeout);
+    }
+
     public RedisConnection getConnection() {
         return client;
     }

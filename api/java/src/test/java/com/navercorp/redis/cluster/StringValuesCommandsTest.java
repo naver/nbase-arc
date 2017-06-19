@@ -43,6 +43,62 @@ public class StringValuesCommandsTest extends RedisClusterTestBase {
     }
 
     @Test
+    public void setNxExAndGet() {
+        String status = redis.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_NX, REDIS_EX, 2);
+        assertTrue("OK".equalsIgnoreCase(status));
+
+        String value = redis.get(REDIS_KEY_0);
+        assertTrue(REDIS_VALUE_0.equals(value));
+        assertNull(redis.get(REDIS_BKEY_1));
+    }
+
+    @Test
+    public void setIfNotExistAndGet() {
+        String status = redis.set(REDIS_KEY_0, REDIS_VALUE_0);
+        assertTrue("OK".equalsIgnoreCase(status));
+        String statusFail = redis.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_NX, REDIS_EX, 2);
+        assertNull(statusFail);
+
+        String value = redis.get(REDIS_KEY_0);
+        assertTrue(REDIS_VALUE_0.equals(value));
+        assertNull(redis.get(REDIS_KEY_1));
+    }
+
+    @Test
+    public void setIfExistAndGet() {
+        String status = redis.set(REDIS_KEY_0, REDIS_VALUE_0);
+        assertTrue("OK".equalsIgnoreCase(status));
+        String statusSuccess = redis.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_XX, REDIS_EX, 2);
+        assertTrue("OK".equalsIgnoreCase(statusSuccess));
+
+        String value = redis.get(REDIS_KEY_0);
+        assertTrue(REDIS_VALUE_0.equals(value));
+        assertNull(redis.get(REDIS_KEY_1));
+    }
+
+    @Test
+    public void setFailIfNotExistAndGet() {
+        String statusFail = redis.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_XX, REDIS_EX, 2);
+        assertNull(statusFail);
+    }
+
+    @Test
+    public void setAndExpireMillis() {
+        String status = redis.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_NX, REDIS_PX, 2000);
+        assertTrue("OK".equalsIgnoreCase(status));
+        long ttl = redis.ttl(REDIS_KEY_0);
+        assertTrue(ttl > 0 && ttl <= 2);
+    }
+
+    @Test
+    public void setAndExpire() {
+        String status = redis.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_NX, REDIS_EX, 2);
+        assertTrue("OK".equalsIgnoreCase(status));
+        long ttl = redis.ttl(REDIS_KEY_0);
+        assertTrue(ttl > 0 && ttl <= 2);
+    }
+ 
+    @Test
     public void getSet() {
         String value = redis.getSet(REDIS_KEY_0, REDIS_VALUE_0);
         assertEquals(null, value);

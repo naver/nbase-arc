@@ -70,3 +70,4 @@ public class GatewayAddressTest {
         assertEquals(true, list.size() > 0);
     }
 }
+

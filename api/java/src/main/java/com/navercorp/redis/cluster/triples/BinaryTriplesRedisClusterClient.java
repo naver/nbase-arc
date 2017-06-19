@@ -44,8 +44,12 @@ public class BinaryTriplesRedisClusterClient extends RedisConnection {
     public BinaryTriplesRedisClusterClient(String host, final int port) {
         super(host, port);
     }
-
+    
     // Hashes of Lists ////////////////////
+
+    public BinaryTriplesRedisClusterClient(String host, int port, boolean async) {
+        super(host, port, async);
+    }
 
     /**
      * Slget.

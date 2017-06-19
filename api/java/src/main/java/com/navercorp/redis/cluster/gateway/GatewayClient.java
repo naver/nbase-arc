@@ -28,6 +28,7 @@ import com.navercorp.redis.cluster.async.BackgroundPool;
 import com.navercorp.redis.cluster.pipeline.RedisClusterPipeline;
 import com.navercorp.redis.cluster.triples.BinaryTriplesRedisClusterCommands;
 import com.navercorp.redis.cluster.triples.TriplesRedisClusterCommands;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,11 +43,11 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
  * <p>
  * <b>Spring Bean</b><br>
  * <pre>
- * &lt;bean id="gatewayConfig" class="com.nhncorp.redis.cluster.GatewayConfig"&gt;
+ * &lt;bean id="gatewayConfig" class="com.navercorp.redis.cluster.GatewayConfig"&gt;
  * &lt;property name="ipAddress" value="10.96.250.205:6379,10.96.250.207:6379,10.96.250.209:6379"/&gt;
  * &lt;/bean&gt;
  *
- * &lt;bean id="gatewayClient" class="com.nhncorp.redis.cluster.GatewayClient" destroy-method="destroy"&gt;
+ * &lt;bean id="gatewayClient" class="com.navercorp.redis.cluster.GatewayClient" destroy-method="destroy"&gt;
  *  &lt;constructor-arg ref="gatewayConfig"/&gt;
  * &lt;/bean&gt;
  *
@@ -177,11 +178,13 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
 
     private <T> T executeCallback(final RedisClusterCallback<T> action, final int count) {
         final long startedTime = System.currentTimeMillis();
-        final GatewayServer server = gateway.getServer(action.getPartitionNumber(), action.getState());
+        final int hash = action.getPartitionNumber();
+        final GatewayServer server = gateway.getServer(hash, action.getState());
 
         RedisCluster redis = null;
         try {
             redis = server.getResource(); // JedisConnectionException
+            redis.getConnection().allocPc(hash, action.getState(), false);
             final T result = action.doInRedisCluster(redis); // JedisConnectionException, JedisDataException, JedisException or RuntimeException.
             server.returnResource(redis);
             return result;
@@ -656,6 +659,22 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public String set(final String key, final String value, final String nxxx, final String expx, final long time) {
+        return this.execute(new RedisClusterCallback<String>() {
+            public String doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.set(key, value, nxxx, expx, time);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     /* 
 	 * @see BinaryRedisClusterCommands#set(byte[], byte[])
 	 */
@@ -675,6 +694,22 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public String set(final byte[] key, final byte[] value, final byte[] nxxx, final byte[] expx, final long time) {
+        return this.execute(new RedisClusterCallback<String>() {
+            public String doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.set(key, value, nxxx, expx, time);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     /* 
 	 * @see RedisClusterCommands#getSet(java.lang.String, java.lang.String)
 	 */

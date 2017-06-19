@@ -24,6 +24,7 @@ import java.util.Set;
 
 import com.navercorp.redis.cluster.connection.RedisProtocol;
 import com.navercorp.redis.cluster.triples.TriplesRedisCluster;
+
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
 import redis.clients.jedis.Tuple;
 import redis.clients.util.JedisByteHashMap;
@@ -65,6 +66,12 @@ public class BinaryRedisCluster extends TriplesRedisCluster implements BinaryRed
     public BinaryRedisCluster(final String host, final int port, final int timeout) {
         super(host, port, timeout);
         client = new RedisClusterClient(host, port);
+        client.setTimeout(timeout);
+    }
+    
+    public BinaryRedisCluster(final String host, final int port, final int timeout, boolean async) {
+        super(host, port, timeout);
+        client = new RedisClusterClient(host, port, async);
         client.setTimeout(timeout);
     }
 
@@ -204,6 +211,11 @@ public class BinaryRedisCluster extends TriplesRedisCluster implements BinaryRed
         return client.getStatusCodeReply();
     }
 
+    public String set(final byte[] key, final byte[] value, final byte[] nxxx, final byte[] expx, final long time) {
+        client.set(key, value, nxxx, expx, time);
+        return client.getStatusCodeReply();
+    }
+    
     public Boolean setbit(byte[] key, long offset, byte[] value) {
         client.setbit(key, offset, value);
         return client.getIntegerReply() == 1;

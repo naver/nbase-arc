@@ -15,19 +15,21 @@
  */
 package com.navercorp.redis.cluster;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.*;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 
-import com.navercorp.redis.cluster.connection.RedisProtocol;
-import com.navercorp.redis.cluster.triples.TriplesRedisClusterClient;
 import redis.clients.jedis.BinaryClient;
 import redis.clients.jedis.DebugParams;
 import redis.clients.jedis.ScanParams;
 
+import com.navercorp.redis.cluster.connection.RedisProtocol;
 import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
 import com.navercorp.redis.cluster.connection.RedisProtocol.Keyword;
+import com.navercorp.redis.cluster.triples.TriplesRedisClusterClient;
 
 /**
  * The Class BinaryRedisClusterClient.
@@ -53,6 +55,10 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
      */
     public BinaryRedisClusterClient(final String host, final int port) {
         super(host, port);
+    }
+
+    public BinaryRedisClusterClient(String host, int port, boolean async) {
+        super(host, port, async);
     }
 
     /**
@@ -98,6 +104,10 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
         sendCommand(Command.SET, key, value);
     }
 
+    public void set(final byte[] key, final byte[] value, final byte[] nxxx, final byte[] expx, final long time) {
+        sendCommand(Command.SET, key, value, nxxx, expx, toByteArray(time));
+    }
+    
     /**
      * Gets the.
      *

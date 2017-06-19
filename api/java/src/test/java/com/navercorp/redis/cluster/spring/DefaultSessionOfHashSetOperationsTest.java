@@ -238,3 +238,4 @@ public class DefaultSessionOfHashSetOperationsTest {
         assertEquals(3, ops.values("s001", "f001").size());
     }
 }
+

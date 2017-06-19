@@ -119,10 +119,14 @@ public class GatewayServerSelector {
      * @return the gateway server
      */
     GatewayServer roundrobin(List<GatewayServer> list) {
-        this.seq.compareAndSet(MAX_SEQ, 0);
-        int index = seq.getAndIncrement();
+        int index = this.seq.getAndIncrement();
+        if(index < 0) {
+            this.seq.set(0);
+            index = 0;
+        }
+
         final int size = list.size();
-        if (index >= size) {
+        if (index != 0 && index >= size) {
             index = index % size;
         }
 

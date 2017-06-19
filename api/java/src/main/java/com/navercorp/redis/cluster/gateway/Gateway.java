@@ -21,9 +21,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.navercorp.nbasearc.gcp.GatewayConnectionPool;
 
 /**
  *
@@ -52,17 +57,13 @@ public class Gateway implements GatewayServerData {
     private GatewayConfig config;
 
     /**
-     * The health checker.
-     */
-    private HealthCheckManager healthChecker;
-
-    /**
      * The selector.
      */
     private GatewayServerSelector selector;
     private NodeWatcher nodeWatcher;
-    private GatewayServerClear clear;
     private GatewayAffinity affinity = new GatewayAffinity();
+    
+    private final GatewayConnectionPool gcp;
 
     /**
      * Instantiates a new gateway.
@@ -72,8 +73,8 @@ public class Gateway implements GatewayServerData {
     public Gateway(GatewayConfig config) {
         this.config = config;
         log.info("[Gateway] Starting " + config);
-
-        this.clear = new GatewayServerClear(1);
+        
+        gcp = new GatewayConnectionPool(config.getEventLoopThreadCount(), config.isHealthCheckUsed());
 
         List<GatewayAddress> addresses = null;
         if (config.getDomainAddress() != null) {
@@ -103,11 +104,6 @@ public class Gateway implements GatewayServerData {
 
         init(addresses);
 
-        if (config.isHealthCheckUsed()) {
-            this.healthChecker = new HealthCheckManager(this, config.getHealthCheckPeriodSeconds(),
-                    config.getHealthCheckThreadSize());
-        }
-
         this.selector = new GatewayServerSelector(config.getGatewaySelectorMethod());
     }
 
@@ -136,9 +132,12 @@ public class Gateway implements GatewayServerData {
                     log.info("[Gateway] Reuse gateway server " + gatewayServer);
                 } else {
                     final GatewayServer gatewayServer = new GatewayServer(address, config.getPoolConfig(),
-                            config.getTimeoutMillisec(), config.getKeyspace());
+                            config.getTimeoutMillisec(), config.getKeyspace(), gcp);
                     final int count = gatewayServer.preload(config.getClientSyncTimeUnitMillis(),
                             config.getConnectPerDelayMillis(), config.getPoolConfig());
+                    this.gcp.addGw(address.getId(), address.getHost(), address.getPort(),
+                            config.getPhysicalConnectionCount(), config.getPhysicalConnectionReconnectInterval())
+                            .get(config.getTimeoutMillisec(), TimeUnit.MILLISECONDS);
                     gatewayServer.setValid(count > 0);
                     gatewayServer.setExist(true);
                     this.servers.put(address.getName(), gatewayServer);
@@ -174,7 +173,7 @@ public class Gateway implements GatewayServerData {
             if (this.servers.remove(server.getAddress().getName()) == null) {
                 log.error("[Gateway] Not found deleted gateway server " + server + ", list=" + this.servers);
             }
-            this.clear.add(server);
+            gcp.delGw(server.getAddress().getId());
             log.info("[Gateway] Delete gateway server " + server);
         }
     }
@@ -182,6 +181,7 @@ public class Gateway implements GatewayServerData {
     @Override
     public void reload(GatewayAffinity affinity) {
         this.affinity = affinity;
+        this.gcp.updateAffinity(affinity.getTable());
     }
 
     /**
@@ -193,11 +193,22 @@ public class Gateway implements GatewayServerData {
     private void init(List<GatewayAddress> redisGatewayList) {
         for (GatewayAddress redisGateway : redisGatewayList) {
             final GatewayServer server = new GatewayServer(redisGateway, config.getPoolConfig(),
-                    config.getTimeoutMillisec(), config.getKeyspace());
+                    config.getTimeoutMillisec(), config.getKeyspace(), gcp);
             final int count = server.preload(0, config.getConnectPerDelayMillis(), config.getPoolConfig());
             server.setValid(count > 0);
 
             this.servers.put(redisGateway.getName(), server);
+            try {
+                this.gcp.addGw(redisGateway.getId(), redisGateway.getHost(), redisGateway.getPort(),
+                        config.getPhysicalConnectionCount(), config.getPhysicalConnectionReconnectInterval())
+                        .get(config.getTimeoutMillisec(), TimeUnit.MILLISECONDS);
+            } catch (InterruptedException e) {
+                log.error("[GatewayServer] Failed to connect ", e);
+            } catch (ExecutionException e) {
+                log.error("[GatewayServer] Failed to connect ", e);
+            } catch (TimeoutException e) {
+                log.error("[GatewayServer] Failed to connect ", e);
+            }
         }
         buildIndex();
 
@@ -219,17 +230,17 @@ public class Gateway implements GatewayServerData {
             nodeWatcher.stop();
         }
 
-        if (this.healthChecker != null) {
-            this.healthChecker.shutdown();
-        }
-
         for (GatewayServer server : this.servers.values()) {
             server.destroy();
         }
         this.servers.clear();
-
-        if (this.clear != null) {
-            this.clear.shutdown();
+        
+        try {
+            this.gcp.close().get();
+        } catch (InterruptedException e) {
+            throw new GatewayException("Failed to gracefully close gateway connection pool.", e);
+        } catch (ExecutionException e) {
+            throw new GatewayException("Failed to gracefully close gateway connection pool.", e);
         }
     }
 
