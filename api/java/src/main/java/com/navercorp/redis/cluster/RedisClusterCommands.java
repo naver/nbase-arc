@@ -433,6 +433,19 @@ public interface RedisClusterCommands {
      */
     String set(String key, String value);
 
+
+    /**
+     * Set the string value as value of the key. The string can't be longer than 1073741824 bytes (1 GB).
+     * @param key
+     * @param value
+     * @param nxxx NX|XX, NX -- Only set the key if it does not already exist. XX -- Only set the key
+     *          if it already exist.
+     * @param expx EX|PX, expire time units: EX = seconds; PX = milliseconds
+     * @param time expire time in the units of <code>expx</code>
+     * @return Status code reply
+     */
+    String set(String key, String value, String nxxx, String expx, long time);
+ 
     /**
      * Sets or clears the bit at offset in the string value stored at key.
      *

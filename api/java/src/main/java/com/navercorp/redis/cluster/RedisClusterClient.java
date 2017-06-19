@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.navercorp.redis.cluster.connection.RedisProtocol;
+
 import redis.clients.jedis.BinaryClient;
 import redis.clients.jedis.ScanParams;
 import redis.clients.util.SafeEncoder;
@@ -53,6 +54,10 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         super(host, port);
     }
 
+    public RedisClusterClient(final String host, final int port, final boolean async) {
+        super(host, port, async);
+    }
+
     /**
      * Sets the.
      *
@@ -63,6 +68,10 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         set(SafeEncoder.encode(key), SafeEncoder.encode(value));
     }
 
+    public void set(final String key, final String value, final String nxxx, final String expx, final long time) {
+        set(SafeEncoder.encode(key), SafeEncoder.encode(value), SafeEncoder.encode(nxxx), SafeEncoder.encode(expx), time);
+    }
+    
     /**
      * Gets the.
      *

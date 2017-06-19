@@ -63,6 +63,22 @@ public class RedisClusterPipelineTest extends RedisClusterTestBase {
         pipeline.exists(REDIS_BKEY_0);
         expect.add(Boolean.FALSE);
 
+        // set if not exist.
+        pipeline.set(REDIS_BKEY_0, REDIS_BVALUE_0, REDIS_BNX, REDIS_BEX, 2);
+        expect.add("OK");
+
+        pipeline.set(REDIS_BKEY_0, REDIS_BVALUE_0, REDIS_BNX, REDIS_BEX, 2);
+        expect.add(null);
+
+        // set if exist.
+        pipeline.set(REDIS_BKEY_0, REDIS_BVALUE_0, REDIS_BXX, REDIS_BEX, 2);
+        expect.add("OK");
+
+        pipeline.del(REDIS_BKEY_0);
+        expect.add(1L);
+        pipeline.set(REDIS_BKEY_0, REDIS_BVALUE_0, REDIS_BXX, REDIS_BEX, 2);
+        expect.add(null);
+
         // type, ttl
         pipeline.set(REDIS_BKEY_0, REDIS_BVALUE_0);
         expect.add("OK");
@@ -108,6 +124,22 @@ public class RedisClusterPipelineTest extends RedisClusterTestBase {
         expect.add(1L);
         pipeline.exists(REDIS_KEY_0);
         expect.add(Boolean.FALSE);
+
+        // set if not exist.
+        pipeline.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_NX, REDIS_EX, 2);
+        expect.add("OK");
+
+        pipeline.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_NX, REDIS_EX, 2);
+        expect.add(null);
+
+        // set if exist.
+        pipeline.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_XX, REDIS_EX, 2);
+        expect.add("OK");
+
+        pipeline.del(REDIS_KEY_0);
+        expect.add(1L);
+        pipeline.set(REDIS_KEY_0, REDIS_VALUE_0, REDIS_XX, REDIS_EX, 2);
+        expect.add(null);
 
         // set, type, expire.
         pipeline.set(REDIS_KEY_0, REDIS_VALUE_0);

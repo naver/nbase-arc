@@ -149,3 +149,4 @@ public class PipelinePerformanceTestMain {
         System.out.println("async&pipeline count=" + count + ", time=" + time);
     }
 }
+

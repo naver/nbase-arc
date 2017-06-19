@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
-import com.navercorp.redis.cluster.pipeline.Response;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.DataType;
@@ -41,6 +40,7 @@ import redis.clients.jedis.exceptions.JedisDataException;
 
 import com.navercorp.redis.cluster.gateway.GatewayClient;
 import com.navercorp.redis.cluster.pipeline.RedisClusterPipeline;
+import com.navercorp.redis.cluster.pipeline.Response;
 
 /**
  * The Class RedisClusterConnection.

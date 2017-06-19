@@ -10,12 +10,12 @@
 	</appender>
 
 	<!-- logger ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////// -->
-	<logger name="com.nhncorp.redis.cluster" additivity="false">
+	<logger name="com.navercorp.redis.cluster" additivity="false">
 		<level value="INFO" />
 		<appender-ref ref="console" />
 	</logger>
 	
-	<logger name="com.nhncorp.redis.cluster.connection" additivity="false">
+	<logger name="com.navercorp.redis.cluster.connection" additivity="false">
 		<level value="INFO" />
 		<appender-ref ref="console" />
 	</logger>

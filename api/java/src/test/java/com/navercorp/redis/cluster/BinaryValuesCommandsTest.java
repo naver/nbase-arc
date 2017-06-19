@@ -60,6 +60,59 @@ public class BinaryValuesCommandsTest extends RedisClusterTestBase {
     }
 
     @Test
+    public void setNxExAndGet() {
+        String status = redis.set(REDIS_BKEY_0, binaryValue, REDIS_BNX, REDIS_BEX, 2);
+        assertTrue("OK".equalsIgnoreCase(status));
+
+        byte[] value = redis.get(REDIS_BKEY_0);
+        assertTrue(Arrays.equals(binaryValue, value));
+    }
+
+    @Test
+    public void setIfNotExistAndGet() {
+        String status = redis.set(REDIS_BKEY_0, binaryValue);
+        assertTrue("OK".equalsIgnoreCase(status));
+        String statusFail = redis.set(REDIS_BKEY_0, binaryValue, REDIS_BNX, REDIS_BEX, 2);
+        assertNull(statusFail);
+
+        byte[] value = redis.get(REDIS_BKEY_0);
+        assertTrue(Arrays.equals(binaryValue, value));
+    }
+
+    @Test
+    public void setIfExistAndGet() {
+        String status = redis.set(REDIS_BKEY_0, binaryValue);
+        assertTrue("OK".equalsIgnoreCase(status));
+        String statusSuccess = redis.set(REDIS_BKEY_0, binaryValue, REDIS_BXX, REDIS_BEX, 2);
+        assertTrue("OK".equalsIgnoreCase(statusSuccess));
+
+        byte[] value = redis.get(REDIS_BKEY_0);
+        assertTrue(Arrays.equals(binaryValue, value));
+    }
+
+    @Test
+    public void setFailIfNotExistAndGet() {
+        String statusFail = redis.set(REDIS_BKEY_0, binaryValue, REDIS_BXX, REDIS_BEX, 2);
+        assertNull(statusFail);
+    }
+
+    @Test
+    public void setAndExpireMillis() {
+        String status = redis.set(REDIS_BKEY_0, binaryValue, REDIS_BNX, REDIS_BPX, 2000);
+        assertTrue("OK".equalsIgnoreCase(status));
+        long ttl = redis.ttl(REDIS_BKEY_0);
+        assertTrue(ttl > 0 && ttl <= 2);
+    }
+
+    @Test
+    public void setAndExpire() {
+        String status = redis.set(REDIS_BKEY_0, binaryValue, REDIS_BNX, REDIS_BEX, 2);
+        assertTrue("OK".equalsIgnoreCase(status));
+        long ttl = redis.ttl(REDIS_BKEY_0);
+        assertTrue(ttl > 0 && ttl <= 2);
+    }
+        
+    @Test
     public void getSet() {
         byte[] value = redis.getSet(REDIS_BKEY_0, binaryValue);
         assertNull(value);

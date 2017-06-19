@@ -20,10 +20,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.navercorp.redis.cluster.util.RedisInputStream;
-import com.navercorp.redis.cluster.util.RedisOutputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.navercorp.redis.cluster.util.RedisInputStream;
+import com.navercorp.redis.cluster.util.RedisOutputStream;
 
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisDataException;

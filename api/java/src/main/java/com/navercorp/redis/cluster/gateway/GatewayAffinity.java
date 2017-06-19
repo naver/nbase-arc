@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
+import com.navercorp.redis.cluster.gateway.GatewayAffinity.AffinityInfo;
+
 /**
  * @author jaehong.kim
  */
@@ -62,11 +64,15 @@ public class GatewayAffinity {
         info.put(gatewayId, state);
     }
 
+    ConcurrentHashMap<Integer, AffinityInfo> getTable() {
+        return table;
+    }
+
     public String toString() {
         return table.toString();
     }
 
-    private class AffinityInfo {
+    static public class AffinityInfo {
         // for performance
         private final List<Integer> writeIds = new ArrayList<Integer>();
         private final List<Integer> otherIds = new ArrayList<Integer>();

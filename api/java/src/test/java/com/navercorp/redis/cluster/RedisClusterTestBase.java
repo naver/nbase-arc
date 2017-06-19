@@ -24,6 +24,7 @@ import java.util.Set;
 import com.navercorp.redis.cluster.gateway.GatewayAddress;
 import com.navercorp.redis.cluster.gateway.GatewayServer;
 import com.navercorp.redis.cluster.util.TestEnvUtils;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -45,7 +46,11 @@ public abstract class RedisClusterTestBase extends Assert {
     public final String REDIS_VALUE_1 = "redis_value_1";
     public final String REDIS_VALUE_2 = "redis_value_2";
     public final String REDIS_VALUE_3 = "redis_value_3";
-
+    public final String REDIS_XX = "XX";
+    public final String REDIS_NX = "NX";
+    public final String REDIS_EX = "EX";
+    public final String REDIS_PX = "PX";
+    
     public final byte[] REDIS_BKEY_0 = {0x01, 0x02, 0x03, 0x04};
     public final byte[] REDIS_BKEY_1 = {0x01, 0x02, 0x03, 0x04, 0x0A};
     public final byte[] REDIS_BKEY_2 = {0x01, 0x02, 0x03, 0x04, 0x0B};
@@ -58,7 +63,11 @@ public abstract class RedisClusterTestBase extends Assert {
     public final byte[] REDIS_BVALUE_1 = {0x05, 0x06, 0x07, 0x08, 0x0A};
     public final byte[] REDIS_BVALUE_2 = {0x05, 0x06, 0x07, 0x08, 0x0B};
     public final byte[] REDIS_BVALUE_3 = {0x05, 0x06, 0x07, 0x08, 0x0C};
-
+    public final byte[] REDIS_BXX = {0x78, 0x78};
+    public final byte[] REDIS_BNX = {0x6E, 0x78};
+    public final byte[] REDIS_BEX = {0x65, 0x78};
+    public final byte[] REDIS_BPX = {0x70, 0x78};
+    
     public final byte[] REDIS_BKEY_VALUE_0 = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
     public final byte[] REDIS_BKEY_STAR = {0x01, 0x02, 0x03, 0x04, '*'};
     public final byte[] REDIS_BVALUE_STAR = {0x05, 0x06, 0x07, 0x08, '*'};

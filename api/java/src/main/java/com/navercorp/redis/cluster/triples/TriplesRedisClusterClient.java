@@ -45,6 +45,10 @@ public class TriplesRedisClusterClient extends BinaryTriplesRedisClusterClient {
 
     // Hashes of Lists ////////////////////
 
+    public TriplesRedisClusterClient(String host, int port, boolean async) {
+        super(host, port, async);
+    }
+
     /**
      * Slget.
      *

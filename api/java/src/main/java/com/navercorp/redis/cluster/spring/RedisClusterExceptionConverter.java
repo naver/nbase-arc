@@ -25,11 +25,11 @@ import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
 
+import com.navercorp.redis.cluster.gateway.GatewayException;
+
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.exceptions.JedisException;
-
-import com.navercorp.redis.cluster.gateway.GatewayException;
 
 /**
  * @author jaehong.kim
