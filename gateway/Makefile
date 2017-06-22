@@ -30,7 +30,7 @@ INCLUDES=-I$(DEPS) -I$(JEMALLOC)/include
 CFLAGS += $(OPT) $(DEBUG) $(INCLUDES) $(DEFS) $(GCOV_FLAGS)
 LIBS=$(JEMALLOC)/lib/libjemalloc.a -lpthread
 
-DEPS_SOURCE=ae.c zmalloc.c dict.c util.c anet.c sds.c
+DEPS_SOURCE=ae.c zmalloc.c dict.c util.c anet.c sds.c base64.c
 GATEWAY_SOURCE=gw_main.c gw_config.c gw_worker.c gw_redis_pool.c gw_client.c gw_cmd_mgr.c gw_cmd_redis.c gw_cmd_admin.c gw_cmd_stat.c gw_redis_parser.c gw_stream_buf.c gw_util.c gw_async_chan.c gw_log.c
 SOURCE=$(GATEWAY_SOURCE) $(addprefix $(DEPS)/,$(DEPS_SOURCE))
 OBJECT=$(SOURCE:.c=.o)

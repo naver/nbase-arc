@@ -93,6 +93,9 @@ int pool_redirect_slot (redis_pool * pool, int from, int to,
 int pool_send_query (redis_pool * pool, sbuf * query, int slot_idx,
 		     msg_reply_proc * cb, void *cbarg,
 		     redis_msg ** ret_handle);
+int pool_send_query_partition (redis_pool * pool, sbuf * query,
+			       const char *pg_id, msg_reply_proc * cb,
+			       void *cbarg, redis_msg ** ret_handle);
 int pool_send_query_all (redis_pool * pool, const char *query,
 			 msg_reply_proc * cb, void *cbarg,
 			 array_msg * ret_handles);
@@ -111,6 +114,11 @@ int pool_slot_idx (redis_pool * pool, int keyhash);
 void pool_get_latency_histogram (redis_pool * pool, long long *histo);
 int pool_available_redis_count (redis_pool * pool);
 int pool_available_partition_count (redis_pool * pool);
+
+// Get configuration info
+int pool_nth_partition_id (redis_pool * pool, int idx,
+			   const char **ret_pg_id);
+int pool_partition_count (redis_pool * pool);
 
 /* --------------- PRIVATE --------------- */
 #define SLOT_NORMAL     0
@@ -211,7 +219,6 @@ struct redis_pool
 struct partition_group
 {
   const char *id;
-  int idx;
 
   array_server servers;
   array_conn remote_conns;

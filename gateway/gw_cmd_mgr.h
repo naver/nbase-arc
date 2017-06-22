@@ -24,6 +24,7 @@
 #include <assert.h>
 #include <string.h>
 #include <strings.h>
+#include <stdlib.h>
 
 #include "gw_config.h"
 #include "gw_redis_pool.h"
@@ -38,6 +39,7 @@
 #include "zmalloc.h"
 #include "dict.h"
 #include "util.h"
+#include "base64.h"
 #include "ae.h"
 #include "sds.h"
 
@@ -133,6 +135,10 @@ void dbsize_command (command_context * ctx);
 void info_command (command_context * ctx);
 void ping_command (command_context * ctx);
 void quit_command (command_context * ctx);
+void cscan_command (command_context * ctx);
+void cscanlen_command (command_context * ctx);
+void cscandigest_command (command_context * ctx);
+void scan_command (command_context * ctx);
 
 // Admin Command function
 void admin_cluster_info_command (command_context * ctx);
