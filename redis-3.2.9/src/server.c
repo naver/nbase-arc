@@ -4014,7 +4014,9 @@ int main(int argc, char **argv) {
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
+#ifndef NBASE_ARC
     dictSetHashFunctionSeed(tv.tv_sec^tv.tv_usec^getpid());
+#endif
     server.sentinel_mode = checkForSentinelMode(argc,argv);
     initServerConfig();
 
