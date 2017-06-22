@@ -67,7 +67,7 @@ def check_connection():
 
 def ping():
     try:
-        cm_conn.write('ping\r\n' % cluster_name)
+        cm_conn.write('ping\r\n')
         ret = cm_conn.read_until('\r\n', 3)
         json_data = json.loads(ret)
         if json_data['state'] != 'success' or json_data['msg'] != '+PONG':
