@@ -12,7 +12,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    BGREWRITEAOF     | X | |
 |    BGSAVE           | X | |
 |    BITCOUNT         | O | |
-|    BITFIELD         | O | TBD |
+|    BITFIELD         | O | Available since 1.4 |
 |    BITOP            | X | |
 |    BITPOS           | O | |
 |    BLPOP            | X | |
@@ -39,12 +39,12 @@ Following table summarizes the supported Redis commands and differences supporte
 |    EXPIREAT         | O | |
 |    FLUSHALL         | X | |
 |    FLUSHDB          | X | |
-|    GEOADD           | O | TBD |
-|    GEODIST          | O | TBD |
-|    GEOHASH          | O | TBD |
-|    GEOPOS           | O | TBD |
-|    GEORADIUS        | O | TBD |
-|   GEORADIUSBYMEMBER | O | TBD |
+|    GEOADD           | O | Available since 1.4 |
+|    GEODIST          | O | Available since 1.4 |
+|    GEOHASH          | O | Available since 1.4 |
+|    GEOPOS           | O | Available since 1.4 |
+|    GEORADIUS        | O | Available since 1.4 (no store option) |
+|   GEORADIUSBYMEMBER | O | Available since 1.4 (no store option) |
 |    GET              | O | |
 |    GETBIT           | O | |
 |    GETRANGE         | O | |
@@ -60,10 +60,10 @@ Following table summarizes the supported Redis commands and differences supporte
 |    HMGET            | O | |
 |    HMSET            | O | |
 |    HOST:            | X | TBD |
-|    HSCAN            | O | TBD |
+|    HSCAN            | O | Available since 1.4 |
 |    HSET             | O | |
 |    HSETNX           | O | |
-|    HSTRLEN          | O | TBD |
+|    HSTRLEN          | O | Available since 1.4 |
 |    HVALS            | O | |
 |    INCR             | O | |
 |    INCRBY           | O | |
@@ -93,9 +93,9 @@ Following table summarizes the supported Redis commands and differences supporte
 |    PERSIST          | O | |
 |    PEXPIRE          | O | |
 |    PEXPIREAT        | O | |
-|    PFADD            | O | TBD |
-|    PFCOUNT          | O | TBD multi key |
-|    PFDEBUG          | X | TBD expose? |
+|    PFADD            | O | Available since 1.4 |
+|    PFCOUNT          | O | Available since 1.4 (single key only) |
+|    PFDEBUG          | X | TBD |
 |    PFMERGE          | X | TBD |
 |    PFSELFTEST       | X | TBD |
 |    PING             | O | gateway ping |
@@ -123,7 +123,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    RPUSHX           | O | |
 |    SADD             | O | |
 |    SAVE             | X | |
-|    SCAN             | O | TBD |
+|    SCAN             | O | Available since 1.4 |
 |    SCARD            | O | |
 |    SCRIPT           | X | |
 |    SDIFF            | X | |
@@ -146,7 +146,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    SPOP             | X | |
 |    SRANDMEMBER      | O | |
 |    SREM             | O | |
-|    SSCAN            | O | TBD |
+|    SSCAN            | O | Available since 1.4 |
 |    STRLEN           | O | |
 |    SUBSCRIBE        | X | |
 |    SUBSTR           | O | |
@@ -154,7 +154,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    SUNIONSTORE      | X | |
 |    SYNC             | X | |
 |    TIME             | X | |
-|    TOUCH            | O | TBD multi key |
+|    TOUCH            | O | Available since 1.4 (multi key) |
 |    TTL              | O | |
 |    TYPE             | O | |
 |    UNSUBSCRIBE      | X | |
@@ -166,19 +166,19 @@ Following table summarizes the supported Redis commands and differences supporte
 |    ZCOUNT           | O | |
 |    ZINCRBY          | O | |
 |    ZINTERSTORE      | X | |
-|    ZLEXCOUNT        | O | TBD |
+|    ZLEXCOUNT        | O | Available since 1.4 |
 |    ZRANGE           | O | |
-|    ZRANGEBYLEX      | O | TBD |
+|    ZRANGEBYLEX      | O | Available since 1.4 |
 |    ZRANGEBYSCORE    | O | |
 |    ZRANK            | O | |
 |    ZREM             | O | |
-|    ZREMRANGEBYLEX   | O | TBD |
+|    ZREMRANGEBYLEX   | O | Available since 1.4 |
 |    ZREMRANGEBYRANK  | O | |
 |    ZREMRANGEBYSCORE | O | |
 |    ZREVRANGE        | O | |
-|    ZREVRANGEBYLEX   | O | TBD |
+|    ZREVRANGEBYLEX   | O | Available since 1.4 |
 |    ZREVRANGEBYSCORE | O | |
 |    ZREVRANK         | O | |
-|    ZSCAN            | O | TBD |
+|    ZSCAN            | O | Available since 1.4 |
 |    ZSCORE           | O | |
 |    ZUNIONSTORE      | X | |
