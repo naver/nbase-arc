@@ -17,7 +17,7 @@
 homedir = './bin'
 logdir = '%s/log' % (homedir)
 #REDISVER = '2.8.8'
-REDISVER = '3.2.8'
+REDISVER = '3.2.9'
 
 # Binary names
 SMR = 'smr-replicator'
