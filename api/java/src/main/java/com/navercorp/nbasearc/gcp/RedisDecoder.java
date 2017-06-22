@@ -37,9 +37,9 @@ class RedisDecoder {
     private int lookasideBufferLength;
     
     RedisDecoder() {
-        // 16 : 11(bytes of a maximum integer) + 2(\r\n) + 1($ or *)
+        // 32 : 20(bytes of a maximum long) + 2(\r\n) + 1($ or *)
         //      and a power of 2
-        this.lookasideBuffer = new byte[16];
+        this.lookasideBuffer = new byte[32];
     }
 
     void getFrames(ByteBuf in, List<byte[]> out) {

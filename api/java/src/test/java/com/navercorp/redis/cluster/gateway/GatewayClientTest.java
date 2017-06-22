@@ -45,6 +45,7 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
+import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.jedis.Tuple;
 import redis.clients.util.SafeEncoder;
 
@@ -343,6 +344,20 @@ public class GatewayClientTest {
         gatewayClient.set(KEY_NUMBER, String.valueOf(VALUE_NUMBER));
         long incr = gatewayClient.incr(KEY_NUMBER);
         assertEquals(VALUE_NUMBER + 1, incr);
+    }
+
+    @Test
+    public void incrOverFlow() {
+        gatewayClient.set(KEY_NUMBER, String.valueOf(Long.MAX_VALUE - 1));
+        long value = gatewayClient.incr(KEY_NUMBER);
+        assertEquals(Long.MAX_VALUE, value);
+        
+        try {
+            gatewayClient.incr(KEY_NUMBER);
+            fail("incr operation is limited to 64 bit signed integers.");
+        } catch (GatewayException e) {
+            assertTrue(e.getCause() instanceof JedisDataException);
+        }
     }
 
     /**
