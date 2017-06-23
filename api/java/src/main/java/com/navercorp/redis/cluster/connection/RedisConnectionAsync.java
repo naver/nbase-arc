@@ -85,6 +85,7 @@ class RedisConnectionAsync implements RedisConnectionImpl {
      * The timeout.
      */
     private int timeout = RedisProtocol.DEFAULT_TIMEOUT;
+    private int activeTimeout = RedisProtocol.DEFAULT_TIMEOUT;
 
     private Queue<ListenableFuture<byte[]>> pipelinedFutures = new ArrayDeque<ListenableFuture<byte[]>>();
     private long connectedTime = 0;
@@ -124,13 +125,15 @@ class RedisConnectionAsync implements RedisConnectionImpl {
      * @param timeoutMillisec the new timeout
      */
     public void setTimeout(final int timeoutMillisec) {
-        this.timeout = timeoutMillisec;
+        this.activeTimeout = this.timeout = timeoutMillisec;
     }
 
     public void commitActiveTimeout(final int timeoutMillisec) {
+        this.activeTimeout = timeoutMillisec;
     }
 
     public void rollbackActiveTimeout() {
+        this.activeTimeout = this.timeout;
     }
 
     /**
@@ -170,7 +173,7 @@ class RedisConnectionAsync implements RedisConnectionImpl {
         outputBuf.readBytes(cmdBytes);
         outputBuf.discardSomeReadBytes();
         
-        vc.request(cmdBytes, timeout, new RequestCallback() {
+        vc.request(cmdBytes, activeTimeout, new RequestCallback() {
             @Override
             public void onResponse(byte[] response, ErrorCode errCode) {
                 switch (errCode) {
