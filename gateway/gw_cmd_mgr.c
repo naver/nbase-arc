@@ -223,7 +223,7 @@ struct redis_command redis_command_table[] = {
   {"geodist", single_key_command, -4, "r", 0, 1, 1, 1, 0, 0},
   {"pfselftest", NULL, 1, "Na", 0, 0, 0, 0, 0, 0},
   {"pfadd", single_key_command, -2, "wm", 0, 1, 1, 1, 0, 0},
-  {"pfcount", single_key_command, -2, "r", 0, 1, -1, 1, 0, 0},
+  {"pfcount", single_key_command, 2, "r", 0, 1, 1, 1, 0, 0},
   {"pfmerge", NULL, -2, "Nwm", 0, 1, -1, 1, 0, 0},
   {"pfdebug", NULL, -3, "Nw", 0, 0, 0, 0, 0, 0},
   {"post", NULL, -1, "Nlt", 0, 0, 0, 0, 0, 0},
