@@ -539,6 +539,9 @@ void georadiusGeneric(client *c, int type) {
         }
     }
 
+#ifdef NBASE_ARC
+    if (storekey && arc_georadius_store_hook(c)) return;
+#endif
     /* Trap options not compatible with STORE and STOREDIST. */
     if (storekey && (withdist || withhash || withcoords)) {
         addReplyError(c,
