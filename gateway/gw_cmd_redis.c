@@ -290,7 +290,7 @@ merge_reply_mget (command_context * ctx)
 }
 
 static sbuf *
-merge_reply_del (command_context * ctx)
+merge_int_replies (command_context * ctx)
 {
   command_manager *mgr = ctx->my_mgr;
   redis_msg *msg;
@@ -303,14 +303,25 @@ merge_reply_del (command_context * ctx)
   del_count = 0;
   for (i = 0; i < ARRAY_N (&ctx->msg_handles); i++)
     {
+      char ch;
       msg = ARRAY_GET (&ctx->msg_handles, i);
       parse_ctx = pool_get_parse_ctx (msg);
 
       getArgumentPosition (parse_ctx, 0, &start, &len);
-      sbuf_next_pos (&start);	// Skip ':' character
-      ret = sbuf_string2ll (start, len - 1, &ll);
-      assert (ret);		// Redis DEL command always returns in ':<number>\r\n' format.
-      del_count += ll;
+      ch = sbuf_char (start);
+      if (ch == ':')
+	{
+	  sbuf_next_pos (&start);	// Skip ':' character
+	  ret = sbuf_string2ll (start, len - 1, &ll);
+	  if (ret)
+	    {
+	      del_count += ll;
+	      continue;
+	    }
+	}
+      // bad integer response
+      return stream_create_sbuf_printf (mgr->shared_stream,
+					"-ERR bad integer response\r\n");
     }
   return stream_create_sbuf_printf (mgr->shared_stream, ":%lld\r\n",
 				    del_count);
@@ -407,8 +418,8 @@ mget_command (command_context * ctx)
   COROUTINE_END;
 }
 
-void
-del_command (command_context * ctx)
+static void
+multi_key_int_reply_command (command_context * ctx)
 {
   sbuf *reply, *err_reply;
   redis_msg *handle;
@@ -441,10 +452,22 @@ del_command (command_context * ctx)
     }
 
   // Merge reply and send
-  reply = merge_reply_del (ctx);
+  reply = merge_int_replies (ctx);
   reply_and_free (ctx, reply);
 
   COROUTINE_END;
+}
+
+void
+touch_command (command_context * ctx)
+{
+  multi_key_int_reply_command (ctx);
+}
+
+void
+del_command (command_context * ctx)
+{
+  multi_key_int_reply_command (ctx);
 }
 
 void
