@@ -211,15 +211,8 @@ static struct redisCommand redisCommandTable[] = {
   {"s3rem", NULL, 3, "w", 0, NULL, 2, 2, 1, 0, 0},
   {"s3mrem", NULL, -4, "w", 0, NULL, 2, 2, 1, 0, 0},
   {"s3gc", NULL, 2, "w", 0, NULL, 0, 0, 0, 0, 0},
-  {"checkpoint", NULL, 2, "ars", 0, NULL, 0, 0, 0, 0, 0},
-  {"migstart", NULL, 2, "aw", 0, NULL, 0, 0, 0, 0, 0},
-  {"migend", NULL, 1, "aw", 0, NULL, 0, 0, 0, 0, 0},
-  {"migconf", NULL, -2, "aw", 0, NULL, 0, 0, 0, 0, 0},
-  {"migpexpireat", NULL, 3, "w", 0, NULL, 1, 1, 1, 0, 0},
   {"crc16", NULL, 3, "wm", 0, NULL, 1, 1, 1, 0, 0},
-  {"bping", NULL, 1, "r", 0, NULL, 0, 0, 0, 0, 0},
-  {"quit", NULL, 1, "r", 0, NULL, 0, 0, 0, 0, 0},
-  /* from redis-3.0.0-beta8 */
+  /* from redis-3.2.9 */
   {"get", _D, 2, "rF", 0, NULL, 1, 1, 1, 0, 0},
   {"set", _D, -3, "wm", 0, NULL, 1, 1, 1, 0, 0},
   {"setnx", _D, 3, "wmF", 0, NULL, 1, 1, 1, 0, 0},
@@ -231,6 +224,7 @@ static struct redisCommand redisCommandTable[] = {
   {"exists", _D, 2, "rF", 0, NULL, 1, 1, 1, 0, 0},
   {"setbit", _D, 4, "wm", 0, NULL, 1, 1, 1, 0, 0},
   {"getbit", _D, 3, "rF", 0, NULL, 1, 1, 1, 0, 0},
+  {"bitfield", _D, -2, "wm", 0, NULL, 1, 1, 1, 0, 0},
   {"setrange", _D, 4, "wm", 0, NULL, 1, 1, 1, 0, 0},
   {"getrange", _D, 4, "r", 0, NULL, 1, 1, 1, 0, 0},
   {"substr", _D, 4, "r", 0, NULL, 1, 1, 1, 0, 0},
@@ -299,6 +293,7 @@ static struct redisCommand redisCommandTable[] = {
   {"hincrbyfloat", _D, 4, "wmF", 0, NULL, 1, 1, 1, 0, 0},
   {"hdel", _D, -3, "wF", 0, NULL, 1, 1, 1, 0, 0},
   {"hlen", _D, 2, "rF", 0, NULL, 1, 1, 1, 0, 0},
+  {"hstrlen", _D, 3, "rF", 0, NULL, 1, 1, 1, 0, 0},
   {"hkeys", _D, 2, "rS", 0, NULL, 1, 1, 1, 0, 0},
   {"hvals", _D, 2, "rS", 0, NULL, 1, 1, 1, 0, 0},
   {"hgetall", _D, 2, "r", 0, NULL, 1, 1, 1, 0, 0},
@@ -343,6 +338,7 @@ static struct redisCommand redisCommandTable[] = {
   {"info", _D, -1, "rlt", 0, NULL, 0, 0, 0, 0, 0},
   {"monitor", _D, 1, "ars", 0, NULL, 0, 0, 0, 0, 0},
   {"ttl", _D, 2, "rF", 0, NULL, 1, 1, 1, 0, 0},
+  {"touch", _D, -2, "rF", 0, NULL, 1, -1, 1, 0, 0},
   {"pttl", _D, 2, "rF", 0, NULL, 1, 1, 1, 0, 0},
   {"persist", _D, 2, "wF", 0, NULL, 1, 1, 1, 0, 0},
   {"slaveof", _D, 3, "ast", 0, NULL, 0, 0, 0, 0, 0},
@@ -377,11 +373,19 @@ static struct redisCommand redisCommandTable[] = {
   {"bitpos", _D, -3, "r", 0, NULL, 1, 1, 1, 0, 0},
   {"wait", _D, 3, "rs", 0, NULL, 0, 0, 0, 0, 0},
   {"command", _D, 0, "rlt", 0, NULL, 0, 0, 0, 0, 0},
+  {"geoadd", _D, -5, "wm", 0, NULL, 1, 1, 1, 0, 0},
+  {"georadius", _D, -6, "w", 0, NULL, 1, 1, 1, 0, 0},
+  {"georadiusbymember", _D, -5, "w", 0, NULL, 1, 1, 1, 0, 0},
+  {"geohash", _D, -2, "r", 0, NULL, 1, 1, 1, 0, 0},
+  {"geopos", _D, -2, "r", 0, NULL, 1, 1, 1, 0, 0},
+  {"geodist", _D, -4, "r", 0, NULL, 1, 1, 1, 0, 0},
   {"pfselftest", _D, 1, "r", 0, NULL, 0, 0, 0, 0, 0},
   {"pfadd", _D, -2, "wmF", 0, NULL, 1, 1, 1, 0, 0},
   {"pfcount", _D, -2, "w", 0, NULL, 1, 1, 1, 0, 0},
   {"pfmerge", _D, -2, "wm", 0, NULL, 1, -1, 1, 0, 0},
   {"pfdebug", _D, -3, "w", 0, NULL, 0, 0, 0, 0, 0},
+  {"post", _D, -1, "lt", 0, NULL, 0, 0, 0, 0, 0},
+  {"host:", _D, -1, "lt", 0, NULL, 0, 0, 0, 0, 0},
   {"latency", _D, -2, "arslt", 0, NULL, 0, 0, 0, 0, 0}
 };
 
@@ -1402,7 +1406,8 @@ get_cmd_info (fe_t * fe, arc_job_t * aj, cmd_peek_t * peek, int *found,
   return;
 }
 
-static int fe_preproc_job (fe_t * fe, be_job_t * job)
+static int
+fe_preproc_job (fe_t * fe, be_job_t * job)
 {
   arc_job_t *aj;
   dlisth *h;
@@ -1721,7 +1726,9 @@ init_mutex ()
     }
   else if (prev == INIT_STATE_INITIALIZING)
     {
-      while (mutex_init_state != INIT_STATE_INITIALIZED) {}
+      while (mutex_init_state != INIT_STATE_INITIALIZED)
+	{
+	}
     }
 }
 #endif
