@@ -26,7 +26,7 @@ struct dumpState
   rio aof;
   sds readbuf;
   int fd;
-  int aofpos;
+  off_t aofpos;
   int tps_hz, opcount;
   long net_limit_bytes_hz, net_avail;
   int ret, send_done;

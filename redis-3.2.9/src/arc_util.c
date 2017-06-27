@@ -546,7 +546,7 @@ arcx_dumpscan_iterate (dumpScan * ds)
       else
 	{
 	  ds->dt = ARCX_DUMP_DT_KV;
-	  ds->d.kv.type = type;
+	  ds->d.kv.type = val->type;
 	  ds->d.kv.expiretime = expiretime;
 	  ds->d.kv.key = key;
 	  ds->d.kv.val = val;
