@@ -16,6 +16,8 @@
  */
 package com.navercorp.redis.cluster;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.toByteArray;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -23,9 +25,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 
 import com.navercorp.redis.cluster.connection.RedisProtocol;
+import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
 
 import redis.clients.jedis.BinaryClient;
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
+import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -218,6 +225,15 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         bitcount(SafeEncoder.encode(key), start, end);
     }
 
+    public void bitfield(final String key, final String... arguments) {
+        final byte[][] params = new byte[arguments.length + 1][];
+        params[0] = SafeEncoder.encode(key);
+        for (int i = 0; i < arguments.length; i++) {
+            params[i+1] = SafeEncoder.encode(arguments[i]);
+        }
+        sendCommand(Command.BITFIELD, params);
+    }
+
     /**
      * Hset.
      *
@@ -345,8 +361,24 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         hgetAll(SafeEncoder.encode(key));
     }
 
+    public void scan(final String cursor, final ScanParams params) {
+        scan(SafeEncoder.encode(cursor), params);
+    }
+
+    public void cscan(int partitionID, String cursor) {
+        cscan(partitionID, SafeEncoder.encode(cursor), new ScanParams());
+    }
+
+    public void cscan(int partitionID, String cursor, ScanParams params) {
+        cscan(partitionID, SafeEncoder.encode(cursor), params);
+    }
+
     public void hscan(final String key, final String cursor, final ScanParams params) {
         hscan(SafeEncoder.encode(key), SafeEncoder.encode(cursor), params);
+    }
+
+    public void hstrlen(String key, String field) {
+        hstrlen(SafeEncoder.encode(key), SafeEncoder.encode(field));
     }
 
     public void hincrByFloat(final String key, final String field, double increment) {
@@ -580,6 +612,31 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
      */
     public void zrevrank(final String key, final String member) {
         zrevrank(SafeEncoder.encode(key), SafeEncoder.encode(member));
+    }
+
+    public void zlexcount(final String key, final String min, final String max) {
+        zlexcount(SafeEncoder.encode(key), SafeEncoder.encode(min), SafeEncoder.encode(max));
+    }
+
+    public void zrangeByLex(final String key, final String min, final String max) {
+        zrangeByLex(SafeEncoder.encode(key), SafeEncoder.encode(min), SafeEncoder.encode(max));
+    }
+
+    public void zrangeByLex(final String key, final String min, final String max, final int offset, final int count) {
+        zrangeByLex(SafeEncoder.encode(key), SafeEncoder.encode(min), SafeEncoder.encode(max), offset, count);
+    }
+
+    public void zrevrangeByLex(final String key, final String max, final String min) {
+        zrevrangeByLex(SafeEncoder.encode(key), SafeEncoder.encode(max), SafeEncoder.encode(min));
+    }
+
+    public void zrevrangeByLex(final String key, final String max, final String min, final int offset,
+            final int count) {
+        zrevrangeByLex(SafeEncoder.encode(key), SafeEncoder.encode(max), SafeEncoder.encode(min), offset, count);
+    }
+
+    public void zremrangeByLex(String key, String min, String max) {
+        zremrangeByLex(SafeEncoder.encode(key), SafeEncoder.encode(min), SafeEncoder.encode(max));
     }
 
     /**
@@ -1078,4 +1135,81 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         restore(SafeEncoder.encode(key), ttl, serializedValue);
     }
 
+    public void geoadd(String key, double longitude, double latitude, String member) {
+        sendCommand(Command.GEOADD, SafeEncoder.encode(key), toByteArray(longitude), toByteArray(latitude),
+                SafeEncoder.encode(member));
+    }
+
+    public void geoadd(String key, Map<String, GeoCoordinate> memberCoordinateMap) {
+        final List<byte[]> params = new ArrayList<byte[]>();
+        params.add(SafeEncoder.encode(key));
+        params.addAll(convertGeoCoordinateMapToByteArrays(convertMemberCoordinateMapToBinary(memberCoordinateMap)));
+        sendCommand(Command.GEOADD, params.toArray(new byte[params.size()][]));
+    }
+
+    public void geodist(String key, String member1, String member2) {
+        sendCommand(Command.GEODIST, SafeEncoder.encode(key), SafeEncoder.encode(member1), SafeEncoder.encode(member2));
+    }
+
+    public void geodist(String key, String member1, String member2, GeoUnit unit) {
+        sendCommand(Command.GEODIST, SafeEncoder.encode(key), SafeEncoder.encode(member1), SafeEncoder.encode(member2),
+                unit.raw);
+    }
+
+    public void geohash(String key, String... members) {
+        final byte[][] params = new byte[members.length + 1][];
+        params[0] = SafeEncoder.encode(key);
+        for (int i = 0; i < members.length; i++) {
+            params[i + 1] = SafeEncoder.encode(members[i]);
+        }
+        sendCommand(Command.GEOHASH, params);
+    }
+
+    public void geopos(String key, String... members) {
+        final byte[][] params = new byte[members.length + 1][];
+        params[0] = SafeEncoder.encode(key);
+        for (int i = 0; i < members.length; i++) {
+            params[i + 1] = SafeEncoder.encode(members[i]);
+        }
+        sendCommand(Command.GEOPOS, params);
+    }
+
+    public void georadius(String key, double longitude, double latitude, double radius, GeoUnit unit) {
+        sendCommand(Command.GEORADIUS, SafeEncoder.encode(key), toByteArray(longitude), toByteArray(latitude),
+                toByteArray(radius), unit.raw);
+    }
+
+    public void georadius(String key, double longitude, double latitude, double radius, GeoUnit unit,
+            GeoRadiusParam param) {
+        sendCommand(Command.GEORADIUS, param.getByteParams(SafeEncoder.encode(key), toByteArray(longitude),
+                toByteArray(latitude), toByteArray(radius), unit.raw));
+    }
+
+    public void georadiusByMember(String key, String member, double radius, GeoUnit unit) {
+        sendCommand(Command.GEORADIUSBYMEMBER, SafeEncoder.encode(key), SafeEncoder.encode(member), toByteArray(radius),
+                unit.raw);
+    }
+
+    public void georadiusByMember(String key, String member, double radius, GeoUnit unit, GeoRadiusParam param) {
+        sendCommand(Command.GEORADIUSBYMEMBER, param.getByteParams(SafeEncoder.encode(key), SafeEncoder.encode(member),
+                toByteArray(radius), unit.raw));
+    }
+
+    public void pfadd(String key, String... elements) {
+        final byte[][] params = new byte[elements.length + 1][];
+        params[0] = SafeEncoder.encode(key);
+        for (int i = 0; i < elements.length; i++) {
+            params[i + 1] = SafeEncoder.encode(elements[i]);
+        }
+        sendCommand(Command.PFADD, params);
+    }
+    
+    public void pfcount(String key) {
+        sendCommand(Command.PFCOUNT, key);
+    }
+
+    public void touch(String... keys) {
+        sendCommand(Command.TOUCH, keys);
+    }
+    
 }

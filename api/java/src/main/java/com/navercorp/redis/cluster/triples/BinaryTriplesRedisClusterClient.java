@@ -15,9 +15,20 @@
  */
 package com.navercorp.redis.cluster.triples;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.*;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
 import com.navercorp.redis.cluster.connection.RedisConnection;
 import com.navercorp.redis.cluster.connection.RedisProtocol;
 import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
+
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.util.SafeEncoder;
 
 /**
  * The Class BinaryTriplesRedisClusterClient.
@@ -831,4 +842,26 @@ public class BinaryTriplesRedisClusterClient extends RedisConnection {
         return allArgs;
     }
 
+    protected HashMap<byte[], GeoCoordinate> convertMemberCoordinateMapToBinary(
+            Map<String, GeoCoordinate> memberCoordinateMap) {
+        HashMap<byte[], GeoCoordinate> binaryMemberCoordinateMap = new HashMap<byte[], GeoCoordinate>();
+
+        for (Entry<String, GeoCoordinate> entry : memberCoordinateMap.entrySet()) {
+            binaryMemberCoordinateMap.put(SafeEncoder.encode(entry.getKey()), entry.getValue());
+        }
+        return binaryMemberCoordinateMap;
+    }
+    
+    protected List<byte[]> convertGeoCoordinateMapToByteArrays(Map<byte[], GeoCoordinate> memberCoordinateMap) {
+        List<byte[]> args = new ArrayList<byte[]>(memberCoordinateMap.size() * 3);
+
+        for (Entry<byte[], GeoCoordinate> entry : memberCoordinateMap.entrySet()) {
+            GeoCoordinate coordinate = entry.getValue();
+            args.add(toByteArray(coordinate.getLongitude()));
+            args.add(toByteArray(coordinate.getLatitude()));
+            args.add(entry.getKey());
+        }
+
+        return args;
+    }
 }

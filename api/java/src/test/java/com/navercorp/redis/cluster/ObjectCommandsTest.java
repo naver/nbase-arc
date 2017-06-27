@@ -48,11 +48,11 @@ public class ObjectCommandsTest extends RedisClusterTestBase {
     public void objectEncoding() {
         redis.lpush(key, "hello world");
         String encoding = redis.objectEncoding(key);
-        assertEquals("ziplist", encoding);
+        assertEquals("quicklist", encoding);
 
         // Binary
         encoding = SafeEncoder.encode(redis.objectEncoding(binaryKey));
-        assertEquals("ziplist", encoding);
+        assertEquals("quicklist", encoding);
     }
 
     @Test

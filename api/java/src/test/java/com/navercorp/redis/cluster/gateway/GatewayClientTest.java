@@ -16,7 +16,11 @@
 
 package com.navercorp.redis.cluster.gateway;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.INCRBY;
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.OVERFLOW;
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.SAT;
 import static org.junit.Assert.*;
+import static redis.clients.jedis.ScanParams.*;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,13 +30,16 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import com.navercorp.redis.cluster.RedisCluster;
+import com.navercorp.redis.cluster.RedisClusterTestBase;
 import com.navercorp.redis.cluster.async.AsyncAction;
 import com.navercorp.redis.cluster.pipeline.RedisClusterPipeline;
 import com.navercorp.redis.cluster.util.TestEnvUtils;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -45,7 +52,13 @@ import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.jedis.GeoRadiusResponse;
+import redis.clients.jedis.GeoUnit;
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.exceptions.JedisDataException;
+import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.jedis.Tuple;
 import redis.clients.util.SafeEncoder;
 
@@ -65,7 +78,7 @@ public class GatewayClientTest {
      */
     private static final int EXPIRE_SEC = 1;
 
-    private static final String KEY = "key1";
+    private static final String KEY = "key";
     private static final String KEY2 = "key2";
     private static final String KEY3 = "key3";
 
@@ -76,6 +89,23 @@ public class GatewayClientTest {
 
     private static final long VALUE_NUMBER = 1;
 
+    private static final byte[] bbar = { 0x05, 0x06, 0x07, 0x08 };
+    private static final byte[] bcar = { 0x09, 0x0A, 0x0B, 0x0C };
+    
+    private static final byte[] ba = { 0x0A };
+    private static final byte[] bb = { 0x0B };
+    private static final byte[] bc = { 0x0C };
+
+    private static final byte[] bInclusiveB = { 0x5B, 0x0B };
+    private static final byte[] bExclusiveC = { 0x28, 0x0C };
+    private static final byte[] bLexMinusInf = { 0x2D };
+    private static final byte[] bLexPlusInf = { 0x2B };
+
+    private static final byte[] bbar1 = { 0x05, 0x06, 0x07, 0x08, 0x0A };
+    private static final byte[] bbar2 = { 0x05, 0x06, 0x07, 0x08, 0x0B };
+    private static final byte[] bbar3 = { 0x05, 0x06, 0x07, 0x08, 0x0C };
+    private static final byte[] bbarstar = { 0x05, 0x06, 0x07, 0x08, '*' };
+    
     @Autowired
     GatewayClient gatewayClient;
 
@@ -86,6 +116,7 @@ public class GatewayClientTest {
     public void setUp() throws Exception {
         gatewayClient.del(KEY);
         gatewayClient.del(KEY2);
+        gatewayClient.del(KEY3);
         gatewayClient.del("MyList");
         gatewayClient.del("myhash");
         gatewayClient.del("myset");
@@ -1562,6 +1593,368 @@ public class GatewayClientTest {
         log.debug("result : {}", result);
         Object[] expected = {1L, 2L, 3L, 4L};
         assertArrayEquals(expected, result.toArray());
+    }
+
+    @Test
+    public void bitfieldCommands() {
+        List<Long> reply = gatewayClient.bitfield(KEY, INCRBY.toString(), "u2", "100", "1", OVERFLOW.toString(),
+                SAT.toString(), INCRBY.toString(), "u2", "102", "1");
+        assertEquals(2, reply.size());
+        assertTrue(1 == reply.get(0));
+        assertTrue(1 == reply.get(1));
+
+        reply = gatewayClient.bitfield(KEY.getBytes(), INCRBY.raw, "u2".getBytes(), "100".getBytes(), "1".getBytes(),
+                OVERFLOW.raw, SAT.raw, INCRBY.raw, "u2".getBytes(), "102".getBytes(), "1".getBytes());
+        assertEquals(2, reply.size());
+        assertTrue(2 == reply.get(0));
+        assertTrue(2 == reply.get(1));
+    }
+    
+    @Test
+    public void geoCommands() {
+        double longitude = 1.0;
+        double latitude = 2.0;
+        String member = "Seoul";
+        assertEquals(Long.valueOf(1), gatewayClient.geoadd(KEY, longitude, latitude, member));
+
+        Map<String, GeoCoordinate> memberCoordinateMap = new HashMap<String, GeoCoordinate>();
+        memberCoordinateMap.put("Daejon", new GeoCoordinate(2.0, 3.0));
+        memberCoordinateMap.put("Daegu", new GeoCoordinate(30.0, 40.0));
+        assertEquals(Long.valueOf(2), gatewayClient.geoadd(KEY, memberCoordinateMap));
+        assertEquals(157222, gatewayClient.geodist(KEY, "Seoul", "Daejon").intValue());
+        assertEquals(157, gatewayClient.geodist(KEY, "Seoul", "Daejon", GeoUnit.KM).intValue());
+        
+        List<String> hashes = gatewayClient.geohash(KEY, "Seoul", "Daejon");
+        assertEquals("s02equ04ve0", hashes.get(0));
+        assertEquals("s093jd0k720", hashes.get(1));
+        
+        List<GeoCoordinate> coords = gatewayClient.geopos(KEY, "Seoul", "Daejon");
+        assertEquals(2, coords.size());
+        
+        List<GeoRadiusResponse> members = gatewayClient.georadius(KEY, 1.0, 2.0, 1000.0, GeoUnit.KM);
+        assertEquals("Seoul", members.get(0).getMemberByString());
+        assertEquals("Daejon", members.get(1).getMemberByString());
+
+        members = gatewayClient.georadius(KEY, 1.0, 2.0, 1000.0, GeoUnit.KM, GeoRadiusParam.geoRadiusParam());
+        assertEquals("Seoul", members.get(0).getMemberByString());
+        assertEquals("Daejon", members.get(1).getMemberByString());
+        
+        members = gatewayClient.georadiusByMember(KEY, "Seoul", 1000.0, GeoUnit.KM);
+        assertEquals("Seoul", members.get(0).getMemberByString());
+        assertEquals("Daejon", members.get(1).getMemberByString());
+        
+        members = gatewayClient.georadiusByMember(KEY, "Seoul", 1000.0, GeoUnit.KM, GeoRadiusParam.geoRadiusParam());
+        assertEquals("Seoul", members.get(0).getMemberByString());
+        assertEquals("Daejon", members.get(1).getMemberByString());
+    }
+    
+    @Test
+    public void hyperLogLogCommands() {
+        assertEquals(Long.valueOf(1), gatewayClient.pfadd(KEY, "a", "b", "c", "d", "e", "f", "g"));
+        assertEquals(Long.valueOf(7), gatewayClient.pfcount(KEY));
+    }
+    
+    @SuppressWarnings("deprecation")
+    @Test
+    public void hscan() {
+        gatewayClient.hset(KEY, "b", "b");
+        gatewayClient.hset(KEY, "a", "a");
+
+        ScanResult<Map.Entry<String, String>> result = gatewayClient.hscan(KEY, SCAN_POINTER_START);
+
+        assertEquals(0, result.getCursor());
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        gatewayClient.hset(KEY.getBytes(), bbar, bcar);
+
+        ScanResult<Map.Entry<byte[], byte[]>> bResult = gatewayClient.hscan(KEY.getBytes(), SCAN_POINTER_START_BINARY);
+
+        assertArrayEquals(SCAN_POINTER_START_BINARY, bResult.getCursorAsBytes());
+        assertFalse(bResult.getResult().isEmpty());
+    }
+
+    @Test
+    public void scan() {
+        gatewayClient.set(KEY, "b");
+        gatewayClient.set(KEY2, "a");
+
+        ScanResult<String> result = gatewayClient.scan(SCAN_POINTER_START);
+
+        assertNotNull(result.getStringCursor());
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        ScanResult<byte[]> bResult = gatewayClient.scan(SCAN_POINTER_START_BINARY);
+
+        assertNotNull(bResult.getCursorAsBytes());
+        assertFalse(bResult.getResult().isEmpty());
+    }
+
+    @Test
+    public void cscan() {
+        assertTrue(gatewayClient.cscanlen() > 0);
+        assertNotNull(gatewayClient.cscandigest());
+        
+        // String
+        gatewayClient.set(KEY, "b");
+        gatewayClient.set(KEY2, "a");
+
+        ScanResult<String> result = gatewayClient.cscan(0, SCAN_POINTER_START);
+        assertNotNull(result.getStringCursor());
+        assertFalse(result.getResult().isEmpty());
+        
+        result = gatewayClient.cscan(0, SCAN_POINTER_START, new ScanParams().match(KEY + "*").count(10));
+        assertNotNull(result.getStringCursor());
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        ScanResult<byte[]> bResult = gatewayClient.cscan(0, SCAN_POINTER_START_BINARY);
+        assertNotNull(bResult.getCursorAsBytes());
+        assertFalse(bResult.getResult().isEmpty());
+
+        bResult = gatewayClient.cscan(0, SCAN_POINTER_START_BINARY, new ScanParams().match(KEY + "*").count(10));
+        assertNotNull(bResult.getStringCursor());
+        assertFalse(bResult.getResult().isEmpty());
+    }
+    
+    @Test
+    public void sscan() {
+        gatewayClient.sadd(KEY, "a", "b");
+
+        ScanResult<String> result = gatewayClient.sscan(KEY, SCAN_POINTER_START);
+
+        assertEquals(SCAN_POINTER_START, result.getStringCursor());
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        gatewayClient.sadd(KEY.getBytes(), ba, bb);
+
+        ScanResult<byte[]> bResult = gatewayClient.sscan(KEY.getBytes(), SCAN_POINTER_START_BINARY);
+
+        assertArrayEquals(SCAN_POINTER_START_BINARY, bResult.getCursorAsBytes());
+        assertFalse(bResult.getResult().isEmpty());
+    }
+
+    @Test
+    public void zscan() {
+        gatewayClient.zadd(KEY, 1, "a");
+        gatewayClient.zadd(KEY, 2, "b");
+
+        ScanResult<Tuple> result = gatewayClient.zscan(KEY, SCAN_POINTER_START);
+
+        assertEquals(SCAN_POINTER_START, result.getStringCursor());
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        gatewayClient.zadd(KEY.getBytes(), 1, ba);
+        gatewayClient.zadd(KEY.getBytes(), 1, bb);
+
+        ScanResult<Tuple> bResult = gatewayClient.zscan(KEY.getBytes(), SCAN_POINTER_START_BINARY);
+
+        assertArrayEquals(SCAN_POINTER_START_BINARY, bResult.getCursorAsBytes());
+        assertFalse(bResult.getResult().isEmpty());
+    }
+
+    @Test
+    public void zscanMatch() {
+        ScanParams params = new ScanParams();
+        params.match("a*");
+
+        gatewayClient.zadd(KEY, 2, "b");
+        gatewayClient.zadd(KEY, 1, "a");
+        gatewayClient.zadd(KEY, 11, "aa");
+        ScanResult<Tuple> result = gatewayClient.zscan(KEY, SCAN_POINTER_START, params);
+
+        assertEquals(SCAN_POINTER_START, result.getStringCursor());
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        params = new ScanParams();
+        params.match(bbarstar);
+
+        gatewayClient.zadd(KEY.getBytes(), 2, bbar1);
+        gatewayClient.zadd(KEY.getBytes(), 1, bbar2);
+        gatewayClient.zadd(KEY.getBytes(), 11, bbar3);
+        ScanResult<Tuple> bResult = gatewayClient.zscan(KEY.getBytes(), SCAN_POINTER_START_BINARY, params);
+
+        assertArrayEquals(SCAN_POINTER_START_BINARY, bResult.getCursorAsBytes());
+        assertFalse(bResult.getResult().isEmpty());
+    }
+
+    @Test
+    public void zscanCount() {
+        ScanParams params = new ScanParams();
+        params.count(2);
+
+        gatewayClient.zadd(KEY, 1, "a1");
+        gatewayClient.zadd(KEY, 2, "a2");
+        gatewayClient.zadd(KEY, 3, "a3");
+        gatewayClient.zadd(KEY, 4, "a4");
+        gatewayClient.zadd(KEY, 5, "a5");
+
+        ScanResult<Tuple> result = gatewayClient.zscan(KEY, SCAN_POINTER_START, params);
+
+        assertFalse(result.getResult().isEmpty());
+
+        // binary
+        params = new ScanParams();
+        params.count(2);
+
+        gatewayClient.zadd(KEY.getBytes(), 2, bbar1);
+        gatewayClient.zadd(KEY.getBytes(), 1, bbar2);
+        gatewayClient.zadd(KEY.getBytes(), 11, bbar3);
+
+        ScanResult<Tuple> bResult = gatewayClient.zscan(KEY.getBytes(), SCAN_POINTER_START_BINARY, params);
+
+        assertFalse(bResult.getResult().isEmpty());
+    }
+
+    @Test
+    public void zlexcount() {
+        gatewayClient.zadd(KEY, 1, "a");
+        gatewayClient.zadd(KEY, 1, "b");
+        gatewayClient.zadd(KEY, 1, "c");
+        gatewayClient.zadd(KEY, 1, "aa");
+
+        long result = gatewayClient.zlexcount(KEY, "[aa", "(c");
+        assertEquals(2, result);
+
+        result = gatewayClient.zlexcount(KEY, "-", "+");
+        assertEquals(4, result);
+
+        result = gatewayClient.zlexcount(KEY, "-", "(c");
+        assertEquals(3, result);
+
+        result = gatewayClient.zlexcount(KEY, "[aa", "+");
+        assertEquals(3, result);
+    }
+
+    @Test
+    public void zlexcountBinary() {
+        // Binary
+        gatewayClient.zadd(KEY.getBytes(), 1, ba);
+        gatewayClient.zadd(KEY.getBytes(), 1, bc);
+        gatewayClient.zadd(KEY.getBytes(), 1, bb);
+
+        long result = gatewayClient.zlexcount(KEY.getBytes(), bInclusiveB, bExclusiveC);
+        assertEquals(1, result);
+
+        result = gatewayClient.zlexcount(KEY.getBytes(), bLexMinusInf, bLexPlusInf);
+        assertEquals(3, result);
+    }
+
+    @Test
+    public void zremrangeByLex() {
+        gatewayClient.zadd(KEY, 1, "a");
+        gatewayClient.zadd(KEY, 1, "b");
+        gatewayClient.zadd(KEY, 1, "c");
+        gatewayClient.zadd(KEY, 1, "aa");
+
+        long result = gatewayClient.zremrangeByLex(KEY, "[aa", "(c");
+
+        assertEquals(2, result);
+
+        Set<String> expected = new LinkedHashSet<String>();
+        expected.add("a");
+        expected.add("c");
+
+        assertEquals(expected, gatewayClient.zrangeByLex(KEY, "-", "+"));
+    }
+
+    @Test
+    public void zrangeByLexBinary() {
+        // binary
+        gatewayClient.zadd(KEY.getBytes(), 1, ba);
+        gatewayClient.zadd(KEY.getBytes(), 1, bc);
+        gatewayClient.zadd(KEY.getBytes(), 1, bb);
+
+        Set<byte[]> bExpected = new LinkedHashSet<byte[]>();
+        bExpected.add(bb);
+
+        RedisClusterTestBase.assertByteArraySetEquals(bExpected, gatewayClient.zrangeByLex(KEY.getBytes(), bInclusiveB, bExclusiveC));
+
+        bExpected.clear();
+        bExpected.add(ba);
+        bExpected.add(bb);
+
+        // with LIMIT
+        RedisClusterTestBase.assertByteArraySetEquals(bExpected, gatewayClient.zrangeByLex(KEY.getBytes(), bLexMinusInf, bLexPlusInf, 0, 2));
+    }
+
+    @Test
+    public void zremrangeByLexBinary() {
+        gatewayClient.zadd(KEY.getBytes(), 1, ba);
+        gatewayClient.zadd(KEY.getBytes(), 1, bc);
+        gatewayClient.zadd(KEY.getBytes(), 1, bb);
+
+        long bresult = gatewayClient.zremrangeByLex(KEY.getBytes(), bInclusiveB, bExclusiveC);
+
+        assertEquals(1, bresult);
+
+        Set<byte[]> bexpected = new LinkedHashSet<byte[]>();
+        bexpected.add(ba);
+        bexpected.add(bc);
+
+        RedisClusterTestBase.assertByteArraySetEquals(bexpected, gatewayClient.zrangeByLex(KEY.getBytes(), bLexMinusInf, bLexPlusInf));
+    }
+
+    @Test
+    public void zrevrangeByLex() {
+        gatewayClient.zadd(KEY, 1, "aa");
+        gatewayClient.zadd(KEY, 1, "c");
+        gatewayClient.zadd(KEY, 1, "bb");
+        gatewayClient.zadd(KEY, 1, "d");
+
+        Set<String> expected = new LinkedHashSet<String>();
+        expected.add("c");
+        expected.add("bb");
+
+        // exclusive aa ~ inclusive c
+        assertEquals(expected, gatewayClient.zrevrangeByLex(KEY, "[c", "(aa"));
+
+        expected.clear();
+        expected.add("c");
+        expected.add("bb");
+
+        // with LIMIT
+        assertEquals(expected, gatewayClient.zrevrangeByLex(KEY, "+", "-", 1, 2));
+    }
+
+    @Test
+    public void zrevrangeByLexBinary() {
+        // binary
+        gatewayClient.zadd(KEY.getBytes(), 1, ba);
+        gatewayClient.zadd(KEY.getBytes(), 1, bc);
+        gatewayClient.zadd(KEY.getBytes(), 1, bb);
+
+        Set<byte[]> bExpected = new LinkedHashSet<byte[]>();
+        bExpected.add(bb);
+
+        RedisClusterTestBase.assertByteArraySetEquals(bExpected, gatewayClient.zrevrangeByLex(KEY.getBytes(), bExclusiveC, bInclusiveB));
+
+        bExpected.clear();
+        bExpected.add(bb);
+        bExpected.add(ba);
+
+        // with LIMIT
+        RedisClusterTestBase.assertByteArraySetEquals(bExpected,
+                gatewayClient.zrevrangeByLex(KEY.getBytes(), bLexPlusInf, bLexMinusInf, 0, 2));
+    }
+
+    @Test
+    public void hstrlen() {
+        gatewayClient.hset(KEY, "myhash", "k1");
+        Long response = gatewayClient.hstrlen("myhash", "k1");
+        assertEquals(0l, response.longValue());
+    }
+
+    @Test
+    public void touch() {
+        gatewayClient.set(KEY, VALUE);
+        gatewayClient.set(KEY2, VALUE);
+        gatewayClient.set(KEY3, VALUE);
+        assertEquals(Long.valueOf(3), gatewayClient.touch(KEY, KEY2, KEY3));
     }
 
     @Test

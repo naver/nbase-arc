@@ -27,6 +27,8 @@ import java.util.Set;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.geo.Point;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -44,6 +46,7 @@ public class StringRedisClusterTemplateTest {
     private StringRedisClusterTemplate redisTemplate;
 
     @Autowired
+    @Qualifier("redisTemplateJdkSerialization")
     private RedisClusterTemplate<String, String> redisTemplateJdkSerialization;
 
     @Autowired
@@ -149,6 +152,13 @@ public class StringRedisClusterTemplateTest {
         redisTemplate.delete(keys);
         assertNull(redisTemplate.opsForValue().get(KEY));
         assertNull(redisTemplate.opsForValue().get(KEY2));
+    }
+    
+    @Test
+    public void geoCommands() {
+        redisTemplate.delete("foo");
+        assertEquals(Long.valueOf(1), redisTemplate.opsForGeo().geoAdd("foo", new Point(1.0, 2.0), "Seoul"));
+        assertEquals(1, redisTemplate.opsForGeo().geoPos("foo", "Seoul").size());
     }
 
 

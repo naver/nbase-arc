@@ -95,6 +95,23 @@ public abstract class RedisClusterTestBase extends Assert {
     public static final byte[] TRIPLES_BVALUE_0 = {0x07, 0x06, 0x05, 0x04};
     public static final byte[] TRIPLES_BVALUE_1 = {0x07, 0x06, 0x05, 0x04, 0x0A};
     public static final byte[] TRIPLES_BVALUE_2 = {0x07, 0x06, 0x05, 0x04, 0x0B};
+    
+    public static final byte[] bbar = { 0x05, 0x06, 0x07, 0x08 };
+    public static final byte[] bcar = { 0x09, 0x0A, 0x0B, 0x0C };
+    
+    public static final byte[] ba = { 0x0A };
+    public static final byte[] bb = { 0x0B };
+    public static final byte[] bc = { 0x0C };
+
+    public static final byte[] bInclusiveB = { 0x5B, 0x0B };
+    public static final byte[] bExclusiveC = { 0x28, 0x0C };
+    public static final byte[] bLexMinusInf = { 0x2D };
+    public static final byte[] bLexPlusInf = { 0x2B };
+
+    public static final byte[] bbar1 = { 0x05, 0x06, 0x07, 0x08, 0x0A };
+    public static final byte[] bbar2 = { 0x05, 0x06, 0x07, 0x08, 0x0B };
+    public static final byte[] bbar3 = { 0x05, 0x06, 0x07, 0x08, 0x0C };
+    public static final byte[] bbarstar = { 0x05, 0x06, 0x07, 0x08, '*' };
 
     public static RedisCluster redis;
     public static GatewayServer server;
@@ -160,5 +177,22 @@ public abstract class RedisClusterTestBase extends Assert {
             }
         }
         return false;
+    }
+    
+    public static void assertByteArraySetEquals(Set<byte[]> expected, Set<byte[]> actual) {
+        assertEquals(expected.size(), actual.size());
+        Iterator<byte[]> e = expected.iterator();
+        while (e.hasNext()) {
+            byte[] next = e.next();
+            boolean contained = false;
+            for (byte[] element : expected) {
+                if (Arrays.equals(next, element)) {
+                    contained = true;
+                }
+            }
+            if (!contained) {
+                throw new ComparisonFailure("element is missing", Arrays.toString(next), actual.toString());
+            }
+        }
     }
 }

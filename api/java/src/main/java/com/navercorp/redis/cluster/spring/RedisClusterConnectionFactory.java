@@ -21,10 +21,13 @@ import com.navercorp.redis.cluster.gateway.GatewayClient;
 import com.navercorp.redis.cluster.gateway.GatewayConfig;
 import com.navercorp.redis.cluster.gateway.GatewayException;
 
+import javax.naming.OperationNotSupportedException;
+
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisSentinelConnection;
 import org.springframework.data.redis.connection.jedis.JedisConnection;
 
 /**
@@ -134,5 +137,17 @@ public class RedisClusterConnectionFactory implements InitializingBean, Disposab
      */
     public void setConvertPipelineAndTxResults(boolean convertPipelineAndTxResults) {
         this.convertPipelineAndTxResults = convertPipelineAndTxResults;
+    }
+
+    @Deprecated
+    @Override
+    public org.springframework.data.redis.connection.RedisClusterConnection getClusterConnection() {
+        throw new UnsupportedOperationException("nbase-arc doesn't support ClusterConnection.");
+    }
+
+    @Deprecated
+    @Override
+    public RedisSentinelConnection getSentinelConnection() {
+        throw new UnsupportedOperationException("nbase-arc doesn't support SentinelConnection.");
     }
 }

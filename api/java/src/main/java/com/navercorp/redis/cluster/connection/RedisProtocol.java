@@ -18,7 +18,10 @@ package com.navercorp.redis.cluster.connection;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import com.navercorp.redis.cluster.util.RedisInputStream;
 import com.navercorp.redis.cluster.util.RedisOutputStream;
 
+import redis.clients.jedis.Protocol;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.exceptions.JedisDataException;
 import redis.clients.util.SafeEncoder;
@@ -306,6 +310,24 @@ public final class RedisProtocol {
          * The GET.
          */
         GET,
+        
+        GEOADD,
+        
+        GEODIST,
+        
+        GEOHASH,
+        
+        GEOPOS,
+        
+        GEORADIUS,
+        
+        GEORADIUSBYMEMBER,
+        
+        PFADD,
+        
+        PFCOUNT,
+        
+        PFDEBUG,
 
         /**
          * The QUIT.
@@ -458,6 +480,8 @@ public final class RedisProtocol {
         PSETEX,
 
         BITCOUNT,
+        
+        BITFIELD,
 
         /**
          * The HSET.
@@ -520,6 +544,8 @@ public final class RedisProtocol {
         HGETALL,
 
         HSCAN,
+        
+        HSTRLEN,
 
         HINCRBYFLOAT,
 
@@ -669,11 +695,19 @@ public final class RedisProtocol {
          * The ZINCRBY.
          */
         ZINCRBY,
+        
+        ZLEXCOUNT,
 
         /**
          * The ZRANK.
          */
         ZRANK,
+        
+        ZRANGEBYLEX,
+        
+        ZREVRANGEBYLEX,
+        
+        ZREMRANGEBYLEX,
 
         /**
          * The ZREVRANK.
@@ -945,6 +979,14 @@ public final class RedisProtocol {
         DUMP,
 
         RESTORE,
+        
+        SCAN,
+        
+        CSCAN,
+        
+        CSCANDIGEST,
+        
+        CSCANLEN,
 
         /**
          * The S3 rem.
@@ -1108,7 +1150,9 @@ public final class RedisProtocol {
         /**
          * The S3 smadd.
          */
-        S3SMADD;
+        S3SMADD,
+        
+        TOUCH;
 
         /**
          * The raw.
@@ -1286,7 +1330,17 @@ public final class RedisProtocol {
         /**
          * The IDLETIME.
          */
-        IDLETIME;
+        IDLETIME,
+        
+        INCRBY,
+        
+        SAT,
+        
+        OVERFLOW,
+        
+        PX, 
+        
+        XX;
 
         /**
          * The raw.

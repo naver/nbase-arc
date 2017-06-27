@@ -17,7 +17,20 @@
 package com.navercorp.redis.cluster.spring;
 
 import static org.junit.Assert.*;
+import static org.springframework.data.redis.connection.RedisGeoCommands.GeoRadiusCommandArgs.*;
+import static org.springframework.data.geo.Metrics.*;
+import static org.springframework.data.redis.core.ScanOptions.*;
+import static org.hamcrest.CoreMatchers.*;
+import static org.hamcrest.collection.IsCollectionWithSize.*;
+import static org.hamcrest.core.Is.is;
+import static org.hamcrest.Matchers.lessThan;
+import static org.hamcrest.Matchers.*;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.equalTo;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -27,9 +40,9 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 
-import com.navercorp.redis.cluster.gateway.GatewayClient;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Ignore;
@@ -37,17 +50,28 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.data.geo.Circle;
+import org.springframework.data.geo.Distance;
+import org.springframework.data.geo.GeoResults;
+import org.springframework.data.geo.Metrics;
+import org.springframework.data.geo.Point;
 import org.springframework.data.redis.connection.DataType;
 import org.springframework.data.redis.connection.DefaultSortParameters;
 import org.springframework.data.redis.connection.DefaultStringRedisConnection;
 import org.springframework.data.redis.connection.DefaultStringTuple;
 import org.springframework.data.redis.connection.DefaultTuple;
+import org.springframework.data.redis.connection.RedisGeoCommands;
+import org.springframework.data.redis.connection.RedisGeoCommands.GeoLocation;
 import org.springframework.data.redis.connection.RedisListCommands.Position;
 import org.springframework.data.redis.connection.RedisZSetCommands.Aggregate;
+import org.springframework.data.redis.connection.RedisZSetCommands.Range;
 import org.springframework.data.redis.connection.RedisZSetCommands.Tuple;
 import org.springframework.data.redis.connection.SortParameters.Order;
 import org.springframework.data.redis.connection.StringRedisConnection;
 import org.springframework.data.redis.connection.StringRedisConnection.StringTuple;
+import org.springframework.data.redis.connection.jedis.JedisConverters;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationUtils;
@@ -73,6 +97,30 @@ public class RedisClusterConnectionTest {
     private static final byte[] EMPTY_ARRAY = new byte[0];
 
     protected List<Object> actual = new ArrayList<Object>();
+    
+    private final String KEY = "test_key";
+
+    static final String KEY_1 = "key-1";
+    static final String KEY_2 = "key-2";
+    static final String KEY_3 = "key-3";
+    static final String SAME_SLOT_KEY_1 = "{key}-1";
+    static final String SAME_SLOT_KEY_2 = "{key}-2";
+    static final String SAME_SLOT_KEY_3 = "{key}-3";
+    static final String VALUE_1 = "value-1";
+    static final String VALUE_2 = "value-2";
+    static final String VALUE_3 = "value-3";
+    
+    static final byte[] KEY_1_BYTES = JedisConverters.toBytes(KEY_1);
+    static final byte[] KEY_2_BYTES = JedisConverters.toBytes(KEY_2);
+    static final byte[] KEY_3_BYTES = JedisConverters.toBytes(KEY_3);
+
+    static final byte[] SAME_SLOT_KEY_1_BYTES = JedisConverters.toBytes(SAME_SLOT_KEY_1);
+    static final byte[] SAME_SLOT_KEY_2_BYTES = JedisConverters.toBytes(SAME_SLOT_KEY_2);
+    static final byte[] SAME_SLOT_KEY_3_BYTES = JedisConverters.toBytes(SAME_SLOT_KEY_3);
+
+    static final byte[] VALUE_1_BYTES = JedisConverters.toBytes(VALUE_1);
+    static final byte[] VALUE_2_BYTES = JedisConverters.toBytes(VALUE_2);
+    static final byte[] VALUE_3_BYTES = JedisConverters.toBytes(VALUE_3);
 
     /**
      * @throws java.lang.Exception
@@ -116,6 +164,21 @@ public class RedisClusterConnectionTest {
         connection.del("pop2");
         connection.del("testlist");
         connection.del("test_incr_key");
+        connection.del("geo");
+        
+        connection.del(KEY);
+        connection.del(KEY_1);
+        connection.del(KEY_2);
+        connection.del(KEY_3);
+        connection.del(SAME_SLOT_KEY_1);
+        connection.del(SAME_SLOT_KEY_2);
+        connection.del(SAME_SLOT_KEY_3);
+        connection.del(KEY_1_BYTES);
+        connection.del(KEY_2_BYTES);
+        connection.del(KEY_3_BYTES);
+        connection.del(SAME_SLOT_KEY_1_BYTES);
+        connection.del(SAME_SLOT_KEY_2_BYTES);
+        connection.del(SAME_SLOT_KEY_3_BYTES);
     }
 
     @Test
@@ -1099,28 +1162,346 @@ public class RedisClusterConnectionTest {
                         Arrays.asList(new String[]{"foo", "bar"})}), actual);
     }
 
-    @Test
-    public void getNativeConnection() {
-        GatewayClient client = (GatewayClient) connection.getNativeConnection();
-        assertNotNull(client);
-        final String value = client.get("unknown");
-        System.out.println(value);
+    private static final Point POINT_ARIGENTO = new Point(13.583333, 37.316667);
+    private static final Point POINT_CATANIA = new Point(15.087269, 37.502669);
+    private static final Point POINT_PALERMO = new Point(13.361389, 38.115556);
+
+    private static final GeoLocation<String> ARIGENTO = new GeoLocation<String>("arigento", POINT_ARIGENTO);
+    private static final GeoLocation<String> CATANIA = new GeoLocation<String>("catania", POINT_CATANIA);
+    private static final GeoLocation<String> PALERMO = new GeoLocation<String>("palermo", POINT_PALERMO);
+
+    protected List<Object> getResults() {
+        return actual;
     }
 
     @Test
-    public void pipeline() {
-        connection.openPipeline();
-        for (int i = 0; i < 10; i++) {
-            connection.incr("test_incr_key");
-        }
-        List<Object> result = connection.closePipeline();
-        System.out.println(result);
-        for (int i = 0; i < result.size(); i++) {
-            assertEquals(i + 1L, result.get(i));
-        }
+    public void geoAddSingleGeoLocation() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, PALERMO));
+
+        List<Object> result = getResults();
+        assertThat((Long) result.get(0), is(1L));
+    }
+    
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoAddMultipleGeoLocations() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, ARIGENTO, CATANIA, PALERMO)));
+
+        List<Object> result = getResults();
+        assertThat((Long) result.get(0), is(3L));
+    }
+    
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoDist() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, CATANIA)));
+        actual.add(connection.geoDist(key, PALERMO.getName(), CATANIA.getName()));
+
+        List<Object> result = getResults();
+        assertThat(((Distance) result.get(1)).getValue(), is(closeTo(166274.15156960033D, 0.005)));
+        assertThat(((Distance) result.get(1)).getUnit(), is("m"));
+    }
+    
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoDistWithMetric() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, CATANIA)));
+        actual.add(connection.geoDist(key, PALERMO.getName(), CATANIA.getName(), Metrics.KILOMETERS));
+
+        List<Object> result = getResults();
+        assertThat(((Distance) result.get(1)).getValue(), is(closeTo(166.27415156960033D, 0.005)));
+        assertThat(((Distance) result.get(1)).getUnit(), is("km"));
+    }
+    
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoHash() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, CATANIA)));
+        actual.add(connection.geoHash(key, PALERMO.getName(), CATANIA.getName()));
+
+        List<Object> result = getResults();
+        assertThat(((List<String>) result.get(1)).get(0), is("sqc8b49rny0"));
+        assertThat(((List<String>) result.get(1)).get(1), is("sqdtr74hyu0"));
+    }
+    
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoHashNonExisting() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, CATANIA)));
+        actual.add(connection.geoHash(key, PALERMO.getName(), ARIGENTO.getName(), CATANIA.getName()));
+
+        List<Object> result = getResults();
+        assertThat(((List<String>) result.get(1)).get(0), is("sqc8b49rny0"));
+        assertThat(((List<String>) result.get(1)).get(1), is(nullValue()));
+        assertThat(((List<String>) result.get(1)).get(2), is("sqdtr74hyu0"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoPosition() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, CATANIA)));
 
+        actual.add(connection.geoPos(key, PALERMO.getName(), CATANIA.getName()));
+
+        List<Object> result = getResults();
+        assertThat(((List<Point>) result.get(1)).get(0).getX(), is(closeTo(POINT_PALERMO.getX(), 0.005)));
+        assertThat(((List<Point>) result.get(1)).get(0).getY(), is(closeTo(POINT_PALERMO.getY(), 0.005)));
+
+        assertThat(((List<Point>) result.get(1)).get(1).getX(), is(closeTo(POINT_CATANIA.getX(), 0.005)));
+        assertThat(((List<Point>) result.get(1)).get(1).getY(), is(closeTo(POINT_CATANIA.getY(), 0.005)));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoPositionNonExisting() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(PALERMO, CATANIA)));
+
+        actual.add(connection.geoPos(key, PALERMO.getName(), ARIGENTO.getName(), CATANIA.getName()));
+
+        List<Object> result = getResults();
+        assertThat(((List<Point>) result.get(1)).get(0).getX(), is(closeTo(POINT_PALERMO.getX(), 0.005)));
+        assertThat(((List<Point>) result.get(1)).get(0).getY(), is(closeTo(POINT_PALERMO.getY(), 0.005)));
+
+        assertThat(((List<Point>) result.get(1)).get(1), is(nullValue()));
+
+        assertThat(((List<Point>) result.get(1)).get(2).getX(), is(closeTo(POINT_CATANIA.getX(), 0.005)));
+        assertThat(((List<Point>) result.get(1)).get(2).getY(), is(closeTo(POINT_CATANIA.getY(), 0.005)));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    // TODO
+    public void geoRadiusShouldReturnMembersCorrectly() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(ARIGENTO, CATANIA, PALERMO)));
+
+        actual.add(connection.geoRadius(key, new Circle(new Point(15D, 37D), new Distance(200D, KILOMETERS))));
+        actual.add(connection.geoRadius(key, new Circle(new Point(15D, 37D), new Distance(150D, KILOMETERS))));
+
+        List<Object> results = getResults();
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent(), hasSize(3));
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(2)).getContent(), hasSize(2));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoRadiusShouldReturnDistanceCorrectly() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(ARIGENTO, CATANIA, PALERMO)));
+
+        actual.add(connection.geoRadius(key, new Circle(new Point(15D, 37D), new Distance(200D, KILOMETERS)),
+                RedisGeoCommands.GeoRadiusCommandArgs.newGeoRadiusArgs().includeDistance()));
+
+        List<Object> results = getResults();
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent(), hasSize(3));
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent().get(0).getDistance().getValue(),
+                is(closeTo(130.423D, 0.005)));
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent().get(0).getDistance().getUnit(),
+                is("km"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoRadiusShouldApplyLimit() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(ARIGENTO, CATANIA, PALERMO)));
+
+        actual.add(connection.geoRadius(key, new Circle(new Point(15D, 37D), new Distance(200D, KILOMETERS)),
+                newGeoRadiusArgs().limit(2)));
+
+        List<Object> results = getResults();
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent(), hasSize(2));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoRadiusByMemberShouldReturnMembersCorrectly() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(ARIGENTO, CATANIA, PALERMO)));
+
+        actual.add(connection.geoRadiusByMember(key, PALERMO.getName(), new Distance(100, KILOMETERS),
+                newGeoRadiusArgs().sortAscending()));
+
+        List<Object> results = getResults();
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent().get(0).getContent().getName(),
+                is(PALERMO.getName()));
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent().get(1).getContent().getName(),
+                is(ARIGENTO.getName()));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoRadiusByMemberShouldReturnDistanceCorrectly() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(ARIGENTO, CATANIA, PALERMO)));
+
+        actual.add(connection.geoRadiusByMember(key, PALERMO.getName(), new Distance(100, KILOMETERS),
+                newGeoRadiusArgs().includeDistance()));
+
+        List<Object> results = getResults();
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent(), hasSize(2));
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent().get(0).getDistance().getValue(),
+                is(closeTo(90.978D, 0.005)));
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent().get(0).getDistance().getUnit(),
+                is("km"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void geoRadiusByMemberShouldApplyLimit() {
+        String key = "geo";
+        actual.add(connection.geoAdd(key, Arrays.asList(ARIGENTO, CATANIA, PALERMO)));
+
+        actual.add(connection.geoRadiusByMember(key, PALERMO.getName(), new Distance(200, KILOMETERS),
+                newGeoRadiusArgs().limit(2)));
+
+        List<Object> results = getResults();
+        assertThat(((GeoResults<GeoLocation<String>>) results.get(1)).getContent(), hasSize(2));
+    }
+
+    @Test
+    public void pfAddShouldAddValuesCorrectly() {
+        connection.pfAdd(KEY_1_BYTES, VALUE_1_BYTES, VALUE_2_BYTES, VALUE_3_BYTES);
+        
+        assertThat(connection.pfCount(KEY_1_BYTES), is(3L));
+    }
+
+    @Test
+    public void pfCountShouldAllowCountingOnSingleKey() {
+        connection.pfAdd(KEY_1, VALUE_1, VALUE_2, VALUE_3);
+        
+        assertThat(connection.pfCount(KEY_1_BYTES), is(3L));
+    }
+
+    @Test
+    public void pfCountShouldAllowCountingOnSameSlotKeys() {
+        connection.pfAdd(SAME_SLOT_KEY_1, VALUE_1, VALUE_2);
+        connection.pfAdd(SAME_SLOT_KEY_2, VALUE_2, VALUE_3);
+        
+        assertThat(connection.pfCount(SAME_SLOT_KEY_1_BYTES), is(2L));
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void pfMergeShouldWorkWhenAllKeysMapToSameSlot() {
+        connection.pfAdd(SAME_SLOT_KEY_1, VALUE_1, VALUE_2);
+        connection.pfAdd(SAME_SLOT_KEY_2, VALUE_2, VALUE_3);
+
+        connection.pfMerge(SAME_SLOT_KEY_3_BYTES, SAME_SLOT_KEY_1_BYTES, SAME_SLOT_KEY_2_BYTES);
+
+        assertThat(connection.pfCount(SAME_SLOT_KEY_3), is(3L));
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void pfMergeShouldThrowErrorOnDifferentSlotKeys() {
+        connection.pfMerge(KEY_3_BYTES, KEY_1_BYTES, KEY_2_BYTES);
+    }
+
+    @Test
+    public void zRangeByLexShouldReturnResultCorrectly() throws UnsupportedEncodingException {
+        connection.zAdd(KEY_1, 0, "a");
+        connection.zAdd(KEY_1, 0, "b");
+        connection.zAdd(KEY_1, 0, "c");
+        connection.zAdd(KEY_1, 0, "d");
+        connection.zAdd(KEY_1, 0, "e");
+        connection.zAdd(KEY_1, 0, "f");
+        connection.zAdd(KEY_1, 0, "g");
+
+        Set<String> values = connection.zRangeByLex(KEY_1, Range.range().lte("c"));
+        assertEquals(new LinkedHashSet<String>(Arrays.asList(new String[] { "a", "b", "c" })), values);
+
+        values = connection.zRangeByLex(KEY_1, Range.range().lt("c"));
+        assertEquals(new LinkedHashSet<String>(Arrays.asList(new String[] { "a", "b" })), values);
+
+        values = connection.zRangeByLex(KEY_1, Range.range().gte("aaa").lt("g"));
+        assertEquals(new LinkedHashSet<String>(Arrays.asList(new String[] { "b", "c", "d", "e", "f" })), values);
+
+        values = connection.zRangeByLex(KEY_1, Range.range().gte("e"));
+        assertEquals(new LinkedHashSet<String>(Arrays.asList(new String[] { "e", "f", "g" })), values);
+    }
+    @Test
+    public void scanShouldReadEntireValueRange() {
+        Set<String> keys = new HashSet<String>();
+        connection.set("spring", "data");
+
+        int itemCount = 22;
+        for (int i = 0; i < itemCount; i++) {
+            String k = "key_" + i;
+            connection.set(k, ("foo_" + i));
+            keys.add(k);
+        }
+
+        Cursor<byte[]> cursor = connection.scan(scanOptions().count(20).match("ke*").build());
+
+        while (cursor.hasNext()) {
+            byte[] value = cursor.next();
+            assertThat(new String(value), not(containsString("spring")));
+            keys.remove(new String(value));
+        }
+
+        assertThat(keys.size(), lessThan(itemCount));
+    }
+
+    @Test
+    public void sscanShouldRetrieveAllValuesInSetCorrectly() {
+        for (int i = 0; i < 30; i++) {
+            connection.sAdd(KEY_1_BYTES, JedisConverters.toBytes(Integer.valueOf(i)));
+        }
+
+        int count = 0;
+        Cursor<byte[]> cursor = connection.sScan(KEY_1_BYTES, ScanOptions.NONE);
+        while (cursor.hasNext()) {
+            count++;
+            cursor.next();
+        }
+
+        assertThat(count, is(30));
+    }
+    
+    @Test
+    public void zScanShouldReadEntireValueRange() {
+        int nrOfValues = 321;
+        for (int i = 0; i < nrOfValues; i++) {
+            connection.zAdd(KEY_1_BYTES, i, JedisConverters.toBytes("value-" + i));
+        }
+
+        Cursor<Tuple> tuples = connection.zScan(KEY_1_BYTES, ScanOptions.NONE);
+
+        int count = 0;
+        while (tuples.hasNext()) {
+            tuples.next();
+            count++;
+        }
+
+        assertThat(count, equalTo(nrOfValues));
+    }
+
+    @Test
+    public void hScanShouldReadEntireValueRange() {
+        int nrOfValues = 321;
+        for (int i = 0; i < nrOfValues; i++) {
+            connection.hSet(KEY_1_BYTES, JedisConverters.toBytes("key" + i), JedisConverters.toBytes("value-" + i));
+        }
+
+        Cursor<Map.Entry<byte[], byte[]>> cursor = connection.hScan(KEY_1_BYTES,
+                scanOptions().match("key*").build());
+
+        int i = 0;
+        while (cursor.hasNext()) {
+            cursor.next();
+            i++;
+        }
+
+        assertThat(i, is(nrOfValues));
+    }
+    
     protected void verifyResults(List<Object> expected, List<Object> actual) {
         assertEquals(expected, actual);
     }
