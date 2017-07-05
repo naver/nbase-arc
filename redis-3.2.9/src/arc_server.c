@@ -1041,11 +1041,11 @@ arc_server_cron (void)
 
   run_with_period (1000)
   {
-    if (arc.cluster_mode && server.rdb_child_pid != -1)
+    if (arc.cluster_mode && server.rdb_child_pid == -1)
       {
 	try_cronsave ();
       }
-    if (arc.cluster_mode && server.rdb_child_pid != -1)
+    if (arc.cluster_mode && server.rdb_child_pid == -1)
       {
 	try_seqsave ();
       }
