@@ -130,6 +130,7 @@ int pool_partition_count (redis_pool * pool);
 #define LATENCY_HISTOGRAM_COLUMNS 12
 #define LATENCY_HISTOGRAM_SAMPLES 16
 #define LATENCY_STAT_SAMPLES 16
+#define LATENCY_STAT_SAMPLE_MSEC 100
 
 #define ARRAY_INIT_SIZE_PG          100
 #define ARRAY_INIT_SIZE_SERVER      16

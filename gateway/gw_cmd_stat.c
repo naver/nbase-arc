@@ -305,13 +305,13 @@ sdscatinfo_gateway (sds info, command_context * ctx)
   return info;
 }
 
+#define SCALE_FACTOR (1000.0/(double)(LATENCY_STAT_SAMPLE_MSEC*LATENCY_STAT_SAMPLES))
 static sds
 sdscatinfo_latency (sds info, command_context * ctx)
 {
   long long histo[LATENCY_HISTOGRAM_COLUMNS];
   struct info_ret *resp;
   int i, j, interval;
-
   // Aggregate latency histogram
   memset (&histo, 0, sizeof (histo));
   for (i = 0; i < ARRAY_N (&ctx->async_handles); i++)
@@ -332,12 +332,13 @@ sdscatinfo_latency (sds info, command_context * ctx)
     {
       info =
 	sdscatprintf (info, "less_than_or_equal_to_%dms:%lld\r\n",
-		      interval, histo[i]);
+		      interval, (long long) (histo[i] * SCALE_FACTOR));
       interval *= 2;
     }
   info =
     sdscatprintf (info, "more_than_%dms:%lld\r\n", interval / 2,
-		  histo[LATENCY_HISTOGRAM_COLUMNS - 1]);
+		  (long long) (histo[LATENCY_HISTOGRAM_COLUMNS - 1] *
+			       SCALE_FACTOR));
 
   return info;
 }

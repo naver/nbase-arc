@@ -756,7 +756,7 @@ redis_pool_cron (struct aeEventLoop *el, long long id, void *privdata)
     }
   }
 
-  run_with_period (100)
+  run_with_period (LATENCY_STAT_SAMPLE_MSEC)
   {
     dictIterator *di;
     dictEntry *de;
