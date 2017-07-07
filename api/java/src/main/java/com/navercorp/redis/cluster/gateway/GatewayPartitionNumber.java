@@ -16,6 +16,8 @@
 
 package com.navercorp.redis.cluster.gateway;
 
+import java.util.Random;
+
 /**
  * @author jaehong.kim
  */
@@ -24,6 +26,8 @@ public class GatewayPartitionNumber {
     public static final int NOT_MATCHED = -1;
 
     public final static int POLYNOMIAL = 0x1021;
+    
+    public final static Random rand = new Random(System.currentTimeMillis());
 
     public static int get(final String str) {
         return get(toBytes(str));
@@ -35,6 +39,14 @@ public class GatewayPartitionNumber {
         }
 
         return crc16(bytes) % 8192;
+    }
+    
+    /**
+     * 
+     * @return random number range from 0 to 8191 inclusively
+     */
+    public static int get() {
+        return rand.nextInt(8192);
     }
 
     public static int crc16(byte[] bytes) {

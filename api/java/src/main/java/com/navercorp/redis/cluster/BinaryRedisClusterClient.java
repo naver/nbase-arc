@@ -24,7 +24,10 @@ import java.util.Map.Entry;
 
 import redis.clients.jedis.BinaryClient;
 import redis.clients.jedis.DebugParams;
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.params.geo.GeoRadiusParam;
 
 import com.navercorp.redis.cluster.connection.RedisProtocol;
 import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
@@ -304,6 +307,13 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
         sendCommand(Command.BITCOUNT, key, RedisProtocol.toByteArray(start), RedisProtocol.toByteArray(end));
     }
 
+    public void bitfield(final byte[] key, final byte[]... arguments) {
+        final byte[][] params = new byte[arguments.length + 1][];
+        params[0] = key;
+        System.arraycopy(arguments, 0, params, 1, arguments.length);
+        sendCommand(Command.BITFIELD, params);
+    }
+
     /**
      * Hset.
      *
@@ -439,6 +449,10 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
         args.add(cursor);
         args.addAll(params.getParams());
         sendCommand(Command.HSCAN, args.toArray(new byte[args.size()][]));
+    }
+    
+    public void hstrlen(byte[] key, byte[] field) {
+        sendCommand(Command.HSTRLEN, key, field);
     }
 
     public void hincrByFloat(final byte[] key, final byte[] field, double increment) {
@@ -703,6 +717,31 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
      */
     public void zrank(final byte[] key, final byte[] member) {
         sendCommand(Command.ZRANK, key, member);
+    }
+
+    public void zlexcount(final byte[] key, final byte[] min, final byte[] max) {
+        sendCommand(Command.ZLEXCOUNT, key, min, max);
+    }
+
+    public void zrangeByLex(final byte[] key, final byte[] min, final byte[] max) {
+        sendCommand(Command.ZRANGEBYLEX, key, min, max);
+    }
+
+    public void zrangeByLex(final byte[] key, final byte[] min, final byte[] max, final int offset, final int count) {
+        sendCommand(Command.ZRANGEBYLEX, key, min, max, Keyword.LIMIT.raw, toByteArray(offset), toByteArray(count));
+    }
+
+    public void zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min) {
+        sendCommand(Command.ZREVRANGEBYLEX, key, max, min);
+    }
+
+    public void zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min, final int offset,
+            final int count) {
+        sendCommand(Command.ZREVRANGEBYLEX, key, max, min, Keyword.LIMIT.raw, toByteArray(offset), toByteArray(count));
+    }
+
+    public void zremrangeByLex(byte[] key, byte[] min, byte[] max) {
+        sendCommand(Command.ZREMRANGEBYLEX, key, min, max);
     }
 
     /**
@@ -1093,4 +1132,99 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
     public void restore(final byte[] key, final long ttl, final byte[] serializedValue) {
         sendCommand(Command.RESTORE, key, RedisProtocol.toByteArray(ttl), serializedValue);
     }
+
+    public void geoadd(byte[] key, double longitude, double latitude, byte[] member) {
+        sendCommand(Command.GEOADD, key, toByteArray(longitude), toByteArray(latitude), member);
+    }
+
+    public void geoadd(byte[] key, Map<byte[], GeoCoordinate> memberCoordinateMap) {
+        final List<byte[]> params = new ArrayList<byte[]>();
+        params.add(key);
+        params.addAll(convertGeoCoordinateMapToByteArrays(memberCoordinateMap));
+        sendCommand(Command.GEOADD, params.toArray(new byte[params.size()][]));
+    }
+
+    public void geodist(byte[] key, byte[] member1, byte[] member2) {
+        sendCommand(Command.GEODIST, key, member1, member2);
+    }
+
+    public void geodist(byte[] key, byte[] member1, byte[] member2, GeoUnit unit) {
+        sendCommand(Command.GEODIST, key, member1, member2, unit.raw);
+    }
+
+    public void geohash(byte[] key, byte[]... members) {
+        final byte[][] params = new byte[members.length + 1][];
+        params[0] = key;
+        System.arraycopy(members, 0, params, 1, members.length);
+        sendCommand(Command.GEOHASH, params);
+    }
+
+    public void geopos(byte[] key, byte[]... members) {
+        final byte[][] params = new byte[members.length + 1][];
+        params[0] = key;
+        System.arraycopy(members, 0, params, 1, members.length);
+        sendCommand(Command.GEOPOS, params);
+    }
+
+    public void georadius(byte[] key, double longitude, double latitude, double radius, GeoUnit unit) {
+        sendCommand(Command.GEORADIUS, key, toByteArray(longitude), toByteArray(latitude), toByteArray(radius),
+                unit.raw);
+    }
+
+    public void georadius(byte[] key, double longitude, double latitude, double radius, GeoUnit unit,
+            GeoRadiusParam param) {
+        sendCommand(Command.GEORADIUS,
+                param.getByteParams(key, toByteArray(longitude), toByteArray(latitude), toByteArray(radius), unit.raw));
+    }
+
+    public void georadiusByMember(byte[] key, byte[] member, double radius, GeoUnit unit) {
+        sendCommand(Command.GEORADIUSBYMEMBER, key, member, toByteArray(radius), unit.raw);
+    }
+
+    public void georadiusByMember(byte[] key, byte[] member, double radius, GeoUnit unit, GeoRadiusParam param) {
+        sendCommand(Command.GEORADIUSBYMEMBER, param.getByteParams(key, member, toByteArray(radius), unit.raw));
+    }
+    
+    public void pfadd(byte[] key, final byte[]... elements) {
+        final byte[][] params = new byte[elements.length + 1][];
+        params[0] = key;
+        System.arraycopy(elements, 0, params, 1, elements.length);
+        sendCommand(Command.PFADD, params);
+    }
+    
+    public void pfcount(final byte[] key) {
+        sendCommand(Command.PFCOUNT, key);
+    }
+    
+    public void scan(final byte[] cursor, final ScanParams params) {
+        final List<byte[]> args = new ArrayList<byte[]>();
+        args.add(cursor);
+        args.addAll(params.getParams());
+        sendCommand(Command.SCAN, args.toArray(new byte[args.size()][]));
+    }
+
+    public void cscanlen() {
+        sendCommand(Command.CSCANLEN);
+    }
+    
+    public void cscan(int partitionID, byte[] cursor) {
+        cscan(partitionID, cursor, new ScanParams());
+    }
+    
+    public void cscan(int partitionID, byte[] cursor, ScanParams params) {
+        final List<byte[]> args = new ArrayList<byte[]>();
+        args.add(RedisProtocol.toByteArray(partitionID));
+        args.add(cursor);
+        args.addAll(params.getParams());
+        sendCommand(Command.CSCAN, args.toArray(new byte[args.size()][]));
+    }
+    
+    public void cscandigest() {
+        sendCommand(Command.CSCANDIGEST);
+    }
+    
+    public void touch(byte[]... keys) {
+        sendCommand(Command.TOUCH, keys);
+    }
+    
 }

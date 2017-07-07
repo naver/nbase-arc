@@ -16,7 +16,12 @@
 
 package com.navercorp.redis.cluster;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.INCRBY;
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.OVERFLOW;
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.SAT;
+
 import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -234,5 +239,31 @@ public class BinaryValuesCommandsTest extends RedisClusterTestBase {
     public void strlen() {
         redis.set(REDIS_BKEY_0, binaryValue);
         assertEquals(binaryValue.length, redis.strlen(REDIS_BKEY_0).intValue());
+    }
+    
+    @Test
+    public void bitField() {
+        List<Long> reply = redis.bitfield(REDIS_BKEY_0, INCRBY.raw, "u2".getBytes(), "100".getBytes(), "1".getBytes(),
+                OVERFLOW.raw, SAT.raw, INCRBY.raw, "u2".getBytes(), "102".getBytes(), "1".getBytes());
+        assertEquals(2, reply.size());
+        assertTrue(1 == reply.get(0));
+        assertTrue(1 == reply.get(1));
+
+        reply = redis.bitfield(REDIS_BKEY_0, INCRBY.raw, "u2".getBytes(), "100".getBytes(), "1".getBytes(),
+                OVERFLOW.raw, SAT.raw, INCRBY.raw, "u2".getBytes(), "102".getBytes(), "1".getBytes());
+        assertEquals(2, reply.size());
+        assertTrue(2 == reply.get(0));
+        assertTrue(2 == reply.get(1));
+
+        reply = redis.bitfield(REDIS_BKEY_0, INCRBY.raw, "u2".getBytes(), "100".getBytes(), "1".getBytes(),
+                OVERFLOW.raw, SAT.raw, INCRBY.raw, "u2".getBytes(), "102".getBytes(), "1".getBytes());
+        assertEquals(2, reply.size());
+        assertTrue(3 == reply.get(0));
+        assertTrue(3 == reply.get(1));
+
+        reply = redis.bitfield(REDIS_BKEY_0, INCRBY.raw, "u2".getBytes(), "100".getBytes(), "1".getBytes(),
+                OVERFLOW.raw, SAT.raw, INCRBY.raw, "u2".getBytes(), "102".getBytes(), "1".getBytes());
+        assertTrue(0 == reply.get(0));
+        assertTrue(3 == reply.get(1));
     }
 }

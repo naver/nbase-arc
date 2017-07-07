@@ -31,13 +31,20 @@ import com.navercorp.redis.cluster.gateway.Gateway;
 import com.navercorp.redis.cluster.gateway.GatewayException;
 import com.navercorp.redis.cluster.gateway.GatewayPartitionNumber;
 import com.navercorp.redis.cluster.gateway.GatewayServer;
+import com.navercorp.redis.cluster.gateway.RedisClusterCallback;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.jedis.GeoRadiusResponse;
+import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.exceptions.JedisDataException;
+import redis.clients.jedis.params.geo.GeoRadiusParam;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -1354,6 +1361,40 @@ public class RedisClusterPipeline extends Queable {
         });
     }
 
+    public Response<List<Long>> bitfield(final String key, final String... arguments) {
+        return this.executeCallback(new PipelineCallback<Response<List<Long>>>() {
+            public Response<List<Long>> doInPipeline() {
+                client.bitfield(key, arguments);
+                return getResponse(BuilderFactory.LONG_LIST);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<Long>> bitfield(final byte[] key, final byte[]... arguments) {
+        return this.executeCallback(new PipelineCallback<Response<List<Long>>>() {
+            public Response<List<Long>> doInPipeline() {
+                client.bitfield(key, arguments);
+                return getResponse(BuilderFactory.LONG_LIST);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Hashes
 
@@ -5458,6 +5499,1073 @@ public class RedisClusterPipeline extends Queable {
         });
     }
 
+    public Response<Long> geoadd(final String key, final double longitude, final double latitude, final String member) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.geoadd(key, longitude, latitude, member);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Response<Long> geoadd(final byte[] key, final double longitude, final double latitude, final byte[] member) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.geoadd(key, longitude, latitude, member);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Response<Long> geoadd(final String key, final Map<String, GeoCoordinate> memberCoordinateMap) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.geoadd(key, memberCoordinateMap);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Response<Long> geoadd(final byte[] key, final Map<byte[], GeoCoordinate> memberCoordinateMap) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.geoadd(key, memberCoordinateMap);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Response<Double> geodist(final String key, final String member1, final String member2) {
+        return this.executeCallback(new PipelineCallback<Response<Double>>() {
+            public Response<Double> doInPipeline() {
+                client.geodist(key, member1, member2);
+                return getResponse(BuilderFactory.DOUBLE);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Double> geodist(final byte[] key, final byte[] member1, final byte[] member2) {
+        return this.executeCallback(new PipelineCallback<Response<Double>>() {
+            public Response<Double> doInPipeline() {
+                client.geodist(key, member1, member2);
+                return getResponse(BuilderFactory.DOUBLE);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Double> geodist(final String key, final String member1, final String member2, final GeoUnit unit) {
+        return this.executeCallback(new PipelineCallback<Response<Double>>() {
+            public Response<Double> doInPipeline() {
+                client.geodist(key, member1, member2, unit);
+                return getResponse(BuilderFactory.DOUBLE);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Double> geodist(final byte[] key, final byte[] member1, final byte[] member2, final GeoUnit unit) {
+        return this.executeCallback(new PipelineCallback<Response<Double>>() {
+            public Response<Double> doInPipeline() {
+                client.geodist(key, member1, member2, unit);
+                return getResponse(BuilderFactory.DOUBLE);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<String>> geohash(final String key, final String... members) {
+        return this.executeCallback(new PipelineCallback<Response<List<String>>>() {
+            public Response<List<String>> doInPipeline() {
+                client.geohash(key, members);
+                return getResponse(BuilderFactory.STRING_LIST);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<byte[]>> geohash(final byte[] key, final byte[]... members) {
+        return this.executeCallback(new PipelineCallback<Response<List<byte[]>>>() {
+            public Response<List<byte[]>> doInPipeline() {
+                client.geohash(key, members);
+                return getResponse(BuilderFactory.BYTE_ARRAY_LIST);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoCoordinate>> geopos(final String key, final String... members) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoCoordinate>>>() {
+            public Response<List<GeoCoordinate>> doInPipeline() {
+                client.geopos(key, members);
+                return getResponse(BuilderFactory.GEO_COORDINATE_LIST);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoCoordinate>> geopos(final byte[] key, final byte[]... members) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoCoordinate>>>() {
+            public Response<List<GeoCoordinate>> doInPipeline() {
+                client.geopos(key, members);
+                return getResponse(BuilderFactory.GEO_COORDINATE_LIST);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadius(final String key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadius(key, longitude, latitude, radius, unit);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadius(final byte[] key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadius(key, longitude, latitude, radius, unit);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadius(final String key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit, final GeoRadiusParam param) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadius(key, longitude, latitude, radius, unit, param);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadius(final byte[] key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit, final GeoRadiusParam param) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadius(key, longitude, latitude, radius, unit, param);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadiusByMember(final String key, final String member,
+            final double radius, final GeoUnit unit) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadiusByMember(key, member, radius, unit);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Response<List<GeoRadiusResponse>> georadiusByMember(final byte[] key, final byte[] member,
+            final double radius, final GeoUnit unit) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadiusByMember(key, member, radius, unit);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadiusByMember(final String key, final String member,
+            final double radius, final GeoUnit unit, final GeoRadiusParam param) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadiusByMember(key, member, radius, unit, param);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<List<GeoRadiusResponse>> georadiusByMember(final byte[] key, final byte[] member,
+            final double radius, final GeoUnit unit, final GeoRadiusParam param) {
+        return this.executeCallback(new PipelineCallback<Response<List<GeoRadiusResponse>>>() {
+            public Response<List<GeoRadiusResponse>> doInPipeline() {
+                client.georadiusByMember(key, member, radius, unit, param);
+                return getResponse(BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> pfadd(final String key, final String... elements) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.pfadd(key, elements);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> pfadd(final byte[] key, final byte[]... elements) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.pfadd(key, elements);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> pfcount(final String key) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.pfcount(key);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> pfcount(final byte[] key) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.pfcount(key);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> touch(final String... keys) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.touch(keys);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(keys[0]);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> touch(final byte[]... keys) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.touch(keys);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(keys[0]);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<String>> scan(final String cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<String>>>() {
+            public Response<ScanResult<String>> doInPipeline() {
+                client.scan(cursor, new ScanParams());
+                return getResponse(BuilderFactory.SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<byte[]>> scan(final byte[] cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<byte[]>>>() {
+            public Response<ScanResult<byte[]>> doInPipeline() {
+                client.scan(cursor, new ScanParams());
+                return getResponse(BuilderFactory.SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<String>> scan(final String cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<String>>>() {
+            public Response<ScanResult<String>> doInPipeline() {
+                client.scan(cursor, params);
+                return getResponse(BuilderFactory.SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<byte[]>> scan(final byte[] cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<byte[]>>>() {
+            public Response<ScanResult<byte[]>> doInPipeline() {
+                client.scan(cursor, params);
+                return getResponse(BuilderFactory.SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<String>> cscan(final int partitionID, final String cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<String>>>() {
+            public Response<ScanResult<String>> doInPipeline() {
+                client.cscan(partitionID, cursor);
+                return getResponse(BuilderFactory.SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<byte[]>> cscan(final int partitionID, final byte[] cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<byte[]>>>() {
+            public Response<ScanResult<byte[]>> doInPipeline() {
+                client.cscan(partitionID, cursor);
+                return getResponse(BuilderFactory.SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<String>> cscan(final int partitionID, final String cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<String>>>() {
+            public Response<ScanResult<String>> doInPipeline() {
+                client.cscan(partitionID, cursor, params);
+                return getResponse(BuilderFactory.SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<byte[]>> cscan(final int partitionID, final byte[] cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<byte[]>>>() {
+            public Response<ScanResult<byte[]>> doInPipeline() {
+                client.cscan(partitionID, cursor, params);
+                return getResponse(BuilderFactory.SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<String> cscandigest() {
+        return this.executeCallback(new PipelineCallback<Response<String>>() {
+            public Response<String> doInPipeline() {
+                client.cscandigest();
+                return getResponse(BuilderFactory.STRING);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> cscanlen() {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.cscanlen();
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Response<ScanResult<String>> sscan(final String key, final String cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<String>>>() {
+            public Response<ScanResult<String>> doInPipeline() {
+                client.sscan(key, cursor, new ScanParams());
+                return getResponse(BuilderFactory.SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Response<ScanResult<byte[]>> sscan(final byte[] key, final byte[] cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<byte[]>>>() {
+            public Response<ScanResult<byte[]>> doInPipeline() {
+                client.sscan(key, cursor, new ScanParams());
+                return getResponse(BuilderFactory.SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<String>> sscan(final String key, final String cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<String>>>() {
+            public Response<ScanResult<String>> doInPipeline() {
+                client.sscan(key, cursor, params);
+                return getResponse(BuilderFactory.SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<byte[]>> sscan(final byte[] key, final byte[] cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<byte[]>>>() {
+            public Response<ScanResult<byte[]>> doInPipeline() {
+                client.sscan(key, cursor, params);
+                return getResponse(BuilderFactory.SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Map.Entry<String, String>>> hscan(final String key, final String cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Map.Entry<String, String>>>>() {
+            public Response<ScanResult<Map.Entry<String, String>>> doInPipeline() {
+                client.hscan(key, cursor, new ScanParams());
+                return getResponse(BuilderFactory.MAP_SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Map.Entry<byte[], byte[]>>> hscan(final byte[] key, final byte[] cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Map.Entry<byte[], byte[]>>>>() {
+            public Response<ScanResult<Map.Entry<byte[], byte[]>>> doInPipeline() {
+                client.hscan(key, cursor, new ScanParams());
+                return getResponse(BuilderFactory.MAP_SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Map.Entry<String, String>>> hscan(final String key, final String cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Map.Entry<String, String>>>>() {
+            public Response<ScanResult<Map.Entry<String, String>>> doInPipeline() {
+                client.hscan(key, cursor, params);
+                return getResponse(BuilderFactory.MAP_SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Map.Entry<byte[], byte[]>>> hscan(final byte[] key, final byte[] cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Map.Entry<byte[], byte[]>>>>() {
+            public Response<ScanResult<Map.Entry<byte[], byte[]>>> doInPipeline() {
+                client.hscan(key, cursor, params);
+                return getResponse(BuilderFactory.MAP_SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+
+
+    public Response<ScanResult<Tuple>> zscan(final String key, final String cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Tuple>>>() {
+            public Response<ScanResult<Tuple>> doInPipeline() {
+                client.zscan(key, cursor, new ScanParams());
+                return getResponse(BuilderFactory.TUPLE_SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Tuple>> zscan(final byte[] key, final byte[] cursor) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Tuple>>>() {
+            public Response<ScanResult<Tuple>> doInPipeline() {
+                client.zscan(key, cursor, new ScanParams());
+                return getResponse(BuilderFactory.TUPLE_SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Tuple>> zscan(final String key, final String cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Tuple>>>() {
+            public Response<ScanResult<Tuple>> doInPipeline() {
+                client.zscan(key, cursor, params);
+                return getResponse(BuilderFactory.TUPLE_SCAN_RESULT);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<ScanResult<Tuple>> zscan(final byte[] key, final byte[] cursor, final ScanParams params) {
+        return this.executeCallback(new PipelineCallback<Response<ScanResult<Tuple>>>() {
+            public Response<ScanResult<Tuple>> doInPipeline() {
+                client.zscan(key, cursor, params);
+                return getResponse(BuilderFactory.TUPLE_SCAN_RESULT_BINARY);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Response<Long> hstrlen(final String key, final String field) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.hstrlen(key, field);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Response<Long> hstrlen(final byte[] key, final byte[] field) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.hstrlen(key, field);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> zlexcount(final String key, final String min, final String max) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.zlexcount(key, min, max);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> zlexcount(final byte[] key, final byte[] min, final byte[] max) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.zlexcount(key, min, max);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<String>> zrangeByLex(final String key, final String min, final String max) {
+        return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
+            public Response<Set<String>> doInPipeline() {
+                client.zrangeByLex(key, min, max);
+                return getResponse(BuilderFactory.STRING_SET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<byte[]>> zrangeByLex(final byte[] key, final byte[] min, final byte[] max) {
+        return this.executeCallback(new PipelineCallback<Response<Set<byte[]>>>() {
+            public Response<Set<byte[]>> doInPipeline() {
+                client.zrangeByLex(key, min, max);
+                return getResponse(BuilderFactory.BYTE_ARRAY_ZSET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<String>> zrangeByLex(final String key, final String min, final String max, final int offset,
+            final int count) {
+        return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
+            public Response<Set<String>> doInPipeline() {
+                client.zrangeByLex(key, min, max, offset, count);
+                return getResponse(BuilderFactory.STRING_SET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<byte[]>> zrangeByLex(final byte[] key, final byte[] min, final byte[] max, final int offset,
+            final int count) {
+        return this.executeCallback(new PipelineCallback<Response<Set<byte[]>>>() {
+            public Response<Set<byte[]>> doInPipeline() {
+                client.zrangeByLex(key, min, max, offset, count);
+                return getResponse(BuilderFactory.BYTE_ARRAY_ZSET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<String>> zrevrangeByLex(final String key, final String max, final String min) {
+        return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
+            public Response<Set<String>> doInPipeline() {
+                client.zrevrangeByLex(key, max, min);
+                return getResponse(BuilderFactory.STRING_SET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<byte[]>> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min) {
+        return this.executeCallback(new PipelineCallback<Response<Set<byte[]>>>() {
+            public Response<Set<byte[]>> doInPipeline() {
+                client.zrevrangeByLex(key, max, min);
+                return getResponse(BuilderFactory.BYTE_ARRAY_ZSET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<String>> zrevrangeByLex(final String key, final String max, final String min, final int offset,
+            final int count) {
+        return this.executeCallback(new PipelineCallback<Response<Set<String>>>() {
+            public Response<Set<String>> doInPipeline() {
+                client.zrevrangeByLex(key, max, min, offset, count);
+                return getResponse(BuilderFactory.STRING_SET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Set<byte[]>> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min, final int offset, final int count) {
+        return this.executeCallback(new PipelineCallback<Response<Set<byte[]>>>() {
+            public Response<Set<byte[]>> doInPipeline() {
+                client.zrevrangeByLex(key, max, min, offset, count);
+                return getResponse(BuilderFactory.BYTE_ARRAY_ZSET);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Response<Long> zremrangeByLex(final String key, final String min, final String max) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.zremrangeByLex(key, min, max);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Response<Long> zremrangeByLex(final byte[] key, final byte[] min, final byte[] max) {
+        return this.executeCallback(new PipelineCallback<Response<Long>>() {
+            public Response<Long> doInPipeline() {
+                client.zremrangeByLex(key, min, max);
+                return getResponse(BuilderFactory.LONG);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     private interface PipelineCallback<T> {
         public T doInPipeline();
 

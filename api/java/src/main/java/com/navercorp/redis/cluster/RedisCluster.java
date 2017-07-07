@@ -16,6 +16,8 @@
  */
 package com.navercorp.redis.cluster;
 
+import java.util.AbstractMap;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -23,11 +25,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.navercorp.nbasearc.gcp.VirtualConnection;
 import com.navercorp.redis.cluster.pipeline.BuilderFactory;
 
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.jedis.GeoRadiusResponse;
+import redis.clients.jedis.GeoUnit;
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.util.SafeEncoder;
 
 /**
  * The Class RedisCluster.
@@ -259,6 +267,11 @@ public class RedisCluster extends BinaryRedisCluster implements
         return client.getIntegerReply();
     }
 
+    public List<Long> bitfield(final String key, final String... arguments) {
+        client.bitfield(key, arguments);
+        return client.getIntegerMultiBulkReply();
+    }
+
     // ////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Hashes
 
@@ -314,6 +327,110 @@ public class RedisCluster extends BinaryRedisCluster implements
     public String hmset(final String key, final Map<String, String> hash) {
         client.hmset(key, hash);
         return client.getStatusCodeReply();
+    }
+
+    public ScanResult<String> scan(final String cursor) {
+        return scan(cursor, new ScanParams());
+    }
+
+    public ScanResult<String> scan(final String cursor, final ScanParams params) {
+        client.scan(cursor, params);
+        List<Object> result = client.getObjectMultiBulkReply();
+        String newcursor = new String((byte[]) result.get(0));
+        List<String> results = new ArrayList<String>();
+        @SuppressWarnings("unchecked")
+        List<byte[]> rawResults = (List<byte[]>) result.get(1);
+        for (byte[] bs : rawResults) {
+            results.add(SafeEncoder.encode(bs));
+        }
+        return new ScanResult<String>(newcursor, results);
+    }
+
+    public ScanResult<String> cscan(int partitionID, String cursor) {
+        return cscan(partitionID, cursor, new ScanParams());
+    }
+
+    public ScanResult<String> cscan(int partitionID, String cursor, ScanParams params) {
+        client.cscan(partitionID, cursor, params);
+        List<Object> result = client.getObjectMultiBulkReply();
+        String newcursor = new String((byte[]) result.get(0));
+        List<String> results = new ArrayList<String>();
+        @SuppressWarnings("unchecked")
+        List<byte[]> rawResults = (List<byte[]>) result.get(1);
+        for (byte[] bs : rawResults) {
+            results.add(SafeEncoder.encode(bs));
+        }
+        return new ScanResult<String>(newcursor, results);
+    }
+
+    public ScanResult<String> sscan(final String key, final String cursor) {
+        return sscan(key, cursor, new ScanParams());
+    }
+
+    public ScanResult<String> sscan(final String key, final String cursor, final ScanParams params) {
+        client.sscan(key, cursor, params);
+        List<Object> result = client.getObjectMultiBulkReply();
+        String newcursor = new String((byte[]) result.get(0));
+        List<String> results = new ArrayList<String>();
+        List<byte[]> rawResults = (List<byte[]>) result.get(1);
+        for (byte[] bs : rawResults) {
+            results.add(SafeEncoder.encode(bs));
+        }
+        return new ScanResult<String>(newcursor, results);
+    }
+
+    public ScanResult<Map.Entry<String, String>> hscan(final String key, final String cursor) {
+        client.hscan(key, cursor, new ScanParams());
+        List<Object> result = client.getObjectMultiBulkReply();
+        String newcursor = new String((byte[]) result.get(0));
+        List<Map.Entry<String, String>> results = new ArrayList<Map.Entry<String, String>>();
+        @SuppressWarnings("unchecked")
+        List<byte[]> rawResults = (List<byte[]>) result.get(1);
+        Iterator<byte[]> iterator = rawResults.iterator();
+        while (iterator.hasNext()) {
+            results.add(new AbstractMap.SimpleEntry<String, String>(new String((byte[]) iterator.next()),
+                    new String((byte[]) iterator.next())));
+        }
+        return new ScanResult<Map.Entry<String, String>>(newcursor, results);
+    }
+
+    public ScanResult<Map.Entry<String, String>> hscan(final String key, final String cursor, final ScanParams params) {
+        client.hscan(key, cursor, params);
+        List<Object> result = client.getObjectMultiBulkReply();
+        String newcursor = new String((byte[]) result.get(0));
+        List<Map.Entry<String, String>> results = new ArrayList<Map.Entry<String, String>>();
+        @SuppressWarnings("unchecked")
+        List<byte[]> rawResults = (List<byte[]>) result.get(1);
+        Iterator<byte[]> iterator = rawResults.iterator();
+        while (iterator.hasNext()) {
+            results.add(new AbstractMap.SimpleEntry<String, String>(new String((byte[]) iterator.next()),
+                    new String((byte[]) iterator.next())));
+        }
+        return new ScanResult<Map.Entry<String, String>>(newcursor, results);
+    }
+    
+    public ScanResult<Tuple> zscan(final String key, final String cursor) {
+        return zscan(key, cursor, new ScanParams());
+    }
+
+    public ScanResult<Tuple> zscan(final String key, final String cursor, final ScanParams params) {
+        client.zscan(key, cursor, params);
+        List<Object> result = client.getObjectMultiBulkReply();
+        String newcursor = new String((byte[]) result.get(0));
+        List<Tuple> results = new ArrayList<Tuple>();
+        @SuppressWarnings("unchecked")
+        List<byte[]> rawResults = (List<byte[]>) result.get(1);
+        Iterator<byte[]> iterator = rawResults.iterator();
+        while (iterator.hasNext()) {
+            results.add(new Tuple(SafeEncoder.encode(iterator.next()),
+                    Double.valueOf(SafeEncoder.encode(iterator.next()))));
+        }
+        return new ScanResult<Tuple>(newcursor, results);
+    }
+
+    public Long hstrlen(String key, String field) {
+        client.hstrlen(key, field);
+        return client.getIntegerReply();
     }
 
     public Long hset(final String key, final String field, final String value) {
@@ -553,6 +670,37 @@ public class RedisCluster extends BinaryRedisCluster implements
         return client.getIntegerReply();
     }
 
+    public Long zlexcount(final String key, final String min, final String max) {
+      client.zlexcount(key, min, max);
+      return client.getIntegerReply();
+    }
+
+    public Set<String> zrangeByLex(final String key, final String min, final String max) {
+      client.zrangeByLex(key, min, max);
+      return new LinkedHashSet<String>(client.getMultiBulkReply());
+    }
+
+    public Set<String> zrangeByLex(final String key, final String min, final String max,
+        final int offset, final int count) {
+      client.zrangeByLex(key, min, max, offset, count);
+      return new LinkedHashSet<String>(client.getMultiBulkReply());
+    }
+
+    public Set<String> zrevrangeByLex(String key, String max, String min) {
+      client.zrevrangeByLex(key, max, min);
+      return new LinkedHashSet<String>(client.getMultiBulkReply());
+    }
+
+    public Set<String> zrevrangeByLex(String key, String max, String min, int offset, int count) {
+      client.zrevrangeByLex(key, max, min, offset, count);
+      return new LinkedHashSet<String>(client.getMultiBulkReply());
+    }
+
+    public Long zremrangeByLex(final String key, final String min, final String max) {
+      client.zremrangeByLex(key, min, max);
+      return client.getIntegerReply();
+    }
+    
     public Long zrem(final String key, final String... members) {
         client.zrem(key, members);
         return client.getIntegerReply();
@@ -691,7 +839,77 @@ public class RedisCluster extends BinaryRedisCluster implements
         client.restore(key, ttl, serializedValue);
         return client.getStatusCodeReply();
     }
+    
+    public Long geoadd(String key, double longitude, double latitude, String member) {
+        client.geoadd(key, longitude, latitude, member);
+        return client.getIntegerReply();
+    }
+    
+    public Long geoadd(String key, Map<String, GeoCoordinate> memberCoordinateMap) {
+        client.geoadd(key, memberCoordinateMap);
+        return client.getIntegerReply();
+    }
 
+    public Double geodist(String key, String member1, String member2) {
+        client.geodist(key, member1, member2);
+        String dval = client.getBulkReply();
+        return (dval != null ? new Double(dval) : null);
+    }
+
+    public Double geodist(String key, String member1, String member2, GeoUnit unit) {
+        client.geodist(key, member1, member2, unit);
+        String dval = client.getBulkReply();
+        return (dval != null ? new Double(dval) : null);
+    }
+
+    public List<String> geohash(String key, String... members) {
+        client.geohash(key, members);
+        return client.getMultiBulkReply();
+    }
+
+    public List<GeoCoordinate> geopos(String key, String... members) {
+        client.geopos(key, members);
+        return BuilderFactory.GEO_COORDINATE_LIST.build(client.getObjectMultiBulkReply());
+    }
+
+    public List<GeoRadiusResponse> georadius(String key, double longitude, double latitude, double radius,
+            GeoUnit unit) {
+        client.georadius(key, longitude, latitude, radius, unit);
+        return BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT.build(client.getObjectMultiBulkReply());
+    }
+
+    public List<GeoRadiusResponse> georadius(String key, double longitude, double latitude, double radius, GeoUnit unit,
+            GeoRadiusParam param) {
+        client.georadius(key, longitude, latitude, radius, unit, param);
+        return BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT.build(client.getObjectMultiBulkReply());
+    }
+
+    public List<GeoRadiusResponse> georadiusByMember(String key, String member, double radius, GeoUnit unit) {
+        client.georadiusByMember(key, member, radius, unit);
+        return BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT.build(client.getObjectMultiBulkReply());
+    }
+
+    public List<GeoRadiusResponse> georadiusByMember(String key, String member, double radius, GeoUnit unit,
+            GeoRadiusParam param) {
+        client.georadiusByMember(key, member, radius, unit, param);
+        return BuilderFactory.GEORADIUS_WITH_PARAMS_RESULT.build(client.getObjectMultiBulkReply());
+    }
+
+    public Long pfadd(final String key, final String... elements) {
+      client.pfadd(key, elements);
+      return client.getIntegerReply();
+    }
+
+    public Long pfcount(final String key) {
+      client.pfcount(key);
+      return client.getIntegerReply();
+    }
+    
+    public Long touch(String... keys) {
+        client.touch(keys);
+        return client.getIntegerReply();
+    }
+    
     /**
      * Quit.
      *

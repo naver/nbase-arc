@@ -18,6 +18,10 @@ package com.navercorp.redis.cluster;
 
 import org.junit.Test;
 
+import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.*;
+
+import java.util.List;
+
 /**
  * @author jaehong.kim
  */
@@ -69,5 +73,32 @@ public class BitCommandsTest extends RedisClusterTestBase {
 
         long c3 = redis.bitcount(REDIS_KEY_0, 2L, 5L);
         assertEquals(3, c3);
+    }
+    
+    @Test
+    public void bitField() {
+        List<Long> reply = redis.bitfield(REDIS_KEY_0, INCRBY.toString(), "u2", "100", "1", OVERFLOW.toString(),
+                SAT.toString(), INCRBY.toString(), "u2", "102", "1");
+        assertEquals(2, reply.size());
+        assertTrue(1 == reply.get(0));
+        assertTrue(1 == reply.get(1));
+        
+        reply = redis.bitfield(REDIS_KEY_0, INCRBY.toString(), "u2", "100", "1", OVERFLOW.toString(),
+                SAT.toString(), INCRBY.toString(), "u2", "102", "1");
+        assertEquals(2, reply.size());
+        assertTrue(2 == reply.get(0));
+        assertTrue(2 == reply.get(1));
+
+        reply = redis.bitfield(REDIS_KEY_0, INCRBY.toString(), "u2", "100", "1", OVERFLOW.toString(),
+                SAT.toString(), INCRBY.toString(), "u2", "102", "1");
+        assertEquals(2, reply.size());
+        assertTrue(3 == reply.get(0));
+        assertTrue(3 == reply.get(1));
+
+        reply = redis.bitfield(REDIS_KEY_0, INCRBY.toString(), "u2", "100", "1", OVERFLOW.toString(),
+                SAT.toString(), INCRBY.toString(), "u2", "102", "1");
+        assertEquals(2, reply.size());
+        assertTrue(0 == reply.get(0));
+        assertTrue(3 == reply.get(1));
     }
 }

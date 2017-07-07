@@ -33,8 +33,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
+import redis.clients.jedis.GeoCoordinate;
+import redis.clients.jedis.GeoRadiusResponse;
+import redis.clients.jedis.GeoUnit;
+import redis.clients.jedis.ScanParams;
+import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.exceptions.JedisConnectionException;
+import redis.clients.jedis.params.geo.GeoRadiusParam;
 
 /**
  * redis cluster<br>
@@ -1572,6 +1578,38 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public List<Long> bitfield(final byte[] key, final byte[]... arguments) {
+        return this.execute(new RedisClusterCallback<List<Long>>() {
+            public List<Long> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitfield(key, arguments);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public List<Long> bitfield(final String key, final String... arguments) {
+        return this.execute(new RedisClusterCallback<List<Long>>() {
+            public List<Long> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitfield(key, arguments);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     //
     // List commands
     //
@@ -3645,6 +3683,201 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public Long zlexcount(final String key, final String min, final String max) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zlexcount(key, min, max);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long zlexcount(final byte[] key, final byte[] min, final byte[] max) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zlexcount(key, min, max);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<String> zrangeByLex(final String key, final String min, final String max) {
+        return this.execute(new RedisClusterCallback<Set<String>>() {
+            public Set<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrangeByLex(key, min, max);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<byte[]> zrangeByLex(final byte[] key, final byte[] min, final byte[] max) {
+        return this.execute(new RedisClusterCallback<Set<byte[]>>() {
+            public Set<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrangeByLex(key, min, max);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<String> zrangeByLex(final String key, final String min, final String max, final int offset,
+            final int count) {
+        return this.execute(new RedisClusterCallback<Set<String>>() {
+            public Set<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrangeByLex(key, min, max, offset, count);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<byte[]> zrangeByLex(final byte[] key, final byte[] min, final byte[] max, final int offset,
+            final int count) {
+        return this.execute(new RedisClusterCallback<Set<byte[]>>() {
+            public Set<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrangeByLex(key, min, max, offset, count);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<String> zrevrangeByLex(final String key, final String max, final String min) {
+        return this.execute(new RedisClusterCallback<Set<String>>() {
+            public Set<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrevrangeByLex(key, max, min);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<byte[]> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min) {
+        return this.execute(new RedisClusterCallback<Set<byte[]>>() {
+            public Set<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrevrangeByLex(key, max, min);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<String> zrevrangeByLex(final String key, final String max, final String min, final int offset,
+            final int count) {
+        return this.execute(new RedisClusterCallback<Set<String>>() {
+            public Set<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrevrangeByLex(key, max, min, offset, count);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Set<byte[]> zrevrangeByLex(final byte[] key, final byte[] max, final byte[] min, final int offset, final int count) {
+        return this.execute(new RedisClusterCallback<Set<byte[]>>() {
+            public Set<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zrevrangeByLex(key, max, min, offset, count);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long zremrangeByLex(final String key, final String min, final String max) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zremrangeByLex(key, min, max);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Long zremrangeByLex(final byte[] key, final byte[] min, final byte[] max) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zremrangeByLex(key, min, max);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
     //
     // Hash commands
     //
@@ -4137,6 +4370,390 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public ScanResult<String> scan(final String cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<String>>() {
+            public ScanResult<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.scan(cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<byte[]> scan(final byte[] cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<byte[]>>() {
+            public ScanResult<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.scan(cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<String> scan(final String cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<String>>() {
+            public ScanResult<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.scan(cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<byte[]> scan(final byte[] cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<byte[]>>() {
+            public ScanResult<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.scan(cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<String> cscan(final int partitionID, final String cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<String>>() {
+            public ScanResult<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.cscan(partitionID, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<byte[]> cscan(final int partitionID, final byte[] cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<byte[]>>() {
+            public ScanResult<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.cscan(partitionID, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<String> cscan(final int partitionID, final String cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<String>>() {
+            public ScanResult<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.cscan(partitionID, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<byte[]> cscan(final int partitionID, final byte[] cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<byte[]>>() {
+            public ScanResult<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.cscan(partitionID, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return partitionID;
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public String cscandigest() {
+        return this.execute(new RedisClusterCallback<String>() {
+            public String doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.cscandigest();
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long cscanlen() {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.cscanlen();
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get();
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public ScanResult<String> sscan(final String key, final String cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<String>>() {
+            public ScanResult<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.sscan(key, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public ScanResult<byte[]> sscan(final byte[] key, final byte[] cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<byte[]>>() {
+            public ScanResult<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.sscan(key, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<String> sscan(final String key, final String cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<String>>() {
+            public ScanResult<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.sscan(key, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<byte[]> sscan(final byte[] key, final byte[] cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<byte[]>>() {
+            public ScanResult<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.sscan(key, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Map.Entry<String, String>> hscan(final String key, final String cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<Map.Entry<String, String>>>() {
+            public ScanResult<Map.Entry<String, String>> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.hscan(key, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Map.Entry<byte[], byte[]>> hscan(final byte[] key, final byte[] cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<Map.Entry<byte[], byte[]>>>() {
+            public ScanResult<Map.Entry<byte[], byte[]>> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.hscan(key, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Map.Entry<String, String>> hscan(final String key, final String cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<Map.Entry<String, String>>>() {
+            public ScanResult<Map.Entry<String, String>> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.hscan(key, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Map.Entry<byte[], byte[]>> hscan(final byte[] key, final byte[] cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<Map.Entry<byte[], byte[]>>>() {
+            public ScanResult<Map.Entry<byte[], byte[]>> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.hscan(key, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Tuple> zscan(final String key, final String cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<Tuple>>() {
+            public ScanResult<Tuple> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zscan(key, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Tuple> zscan(final byte[] key, final byte[] cursor) {
+        return this.execute(new RedisClusterCallback<ScanResult<Tuple>>() {
+            public ScanResult<Tuple> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zscan(key, cursor);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Tuple> zscan(final String key, final String cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<Tuple>>() {
+            public ScanResult<Tuple> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zscan(key, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public ScanResult<Tuple> zscan(final byte[] key, final byte[] cursor, final ScanParams params) {
+        return this.execute(new RedisClusterCallback<ScanResult<Tuple>>() {
+            public ScanResult<Tuple> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zscan(key, cursor, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long hstrlen(final String key, final String field) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.hstrlen(key, field);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Long hstrlen(final byte[] key, final byte[] field) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.hstrlen(key, field);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
     /* 
 	 * @see TriplesRedisClusterCommands#slget(java.lang.String, java.lang.String, java.lang.String)
 	 */
@@ -6069,6 +6686,430 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public Long geoadd(final String key, final double longitude, final double latitude, final String member) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geoadd(key, longitude, latitude, member);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Long geoadd(final byte[] key, final double longitude, final double latitude, final byte[] member) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geoadd(key, longitude, latitude, member);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Long geoadd(final String key, final Map<String, GeoCoordinate> memberCoordinateMap) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geoadd(key, memberCoordinateMap);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Long geoadd(final byte[] key, final Map<byte[], GeoCoordinate> memberCoordinateMap) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geoadd(key, memberCoordinateMap);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    public Double geodist(final String key, final String member1, final String member2) {
+        return this.execute(new RedisClusterCallback<Double>() {
+            public Double doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geodist(key, member1, member2);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Double geodist(final byte[] key, final byte[] member1, final byte[] member2) {
+        return this.execute(new RedisClusterCallback<Double>() {
+            public Double doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geodist(key, member1, member2);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Double geodist(final String key, final String member1, final String member2, final GeoUnit unit) {
+        return this.execute(new RedisClusterCallback<Double>() {
+            public Double doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geodist(key, member1, member2, unit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Double geodist(final byte[] key, final byte[] member1, final byte[] member2, final GeoUnit unit) {
+        return this.execute(new RedisClusterCallback<Double>() {
+            public Double doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geodist(key, member1, member2, unit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<String> geohash(final String key, final String... members) {
+        return this.execute(new RedisClusterCallback<List<String>>() {
+            public List<String> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geohash(key, members);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<byte[]> geohash(final byte[] key, final byte[]... members) {
+        return this.execute(new RedisClusterCallback<List<byte[]>>() {
+            public List<byte[]> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geohash(key, members);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoCoordinate> geopos(final String key, final String... members) {
+        return this.execute(new RedisClusterCallback<List<GeoCoordinate>>() {
+            public List<GeoCoordinate> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geopos(key, members);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoCoordinate> geopos(final byte[] key, final byte[]... members) {
+        return this.execute(new RedisClusterCallback<List<GeoCoordinate>>() {
+            public List<GeoCoordinate> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.geopos(key, members);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadius(final String key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadius(key, longitude, latitude, radius, unit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadius(final byte[] key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadius(key, longitude, latitude, radius, unit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadius(final String key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit, final GeoRadiusParam param) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadius(key, longitude, latitude, radius, unit, param);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadius(final byte[] key, final double longitude, final double latitude,
+            final double radius, final GeoUnit unit, final GeoRadiusParam param) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadius(key, longitude, latitude, radius, unit, param);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadiusByMember(final String key, final String member, final double radius,
+            final GeoUnit unit) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadiusByMember(key, member, radius, unit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadiusByMember(final byte[] key, final byte[] member, final double radius,
+            final GeoUnit unit) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadiusByMember(key, member, radius, unit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadiusByMember(final String key, final String member, final double radius,
+            final GeoUnit unit, final GeoRadiusParam param) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadiusByMember(key, member, radius, unit, param);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public List<GeoRadiusResponse> georadiusByMember(final byte[] key, final byte[] member, final double radius,
+            final GeoUnit unit, final GeoRadiusParam param) {
+        return this.execute(new RedisClusterCallback<List<GeoRadiusResponse>>() {
+            public List<GeoRadiusResponse> doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.georadiusByMember(key, member, radius, unit, param);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long pfadd(final String key, final String... elements) {
+      return this.execute(new RedisClusterCallback<Long>() {
+          public Long doInRedisCluster(RedisCluster redisCluster) {
+              return redisCluster.pfadd(key, elements);
+          }
+
+          public int getPartitionNumber() {
+              return GatewayPartitionNumber.get(key);
+          }
+
+          public AffinityState getState() {
+              return AffinityState.READ;
+          }
+      });
+    }
+
+    public Long pfadd(final byte[] key, final byte[]... elements) {
+      return this.execute(new RedisClusterCallback<Long>() {
+          public Long doInRedisCluster(RedisCluster redisCluster) {
+              return redisCluster.pfadd(key, elements);
+          }
+
+          public int getPartitionNumber() {
+              return GatewayPartitionNumber.get(key);
+          }
+
+          public AffinityState getState() {
+              return AffinityState.READ;
+          }
+      });
+    }
+
+    public Long pfcount(final String key) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.pfcount(key);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long pfcount(final byte[] key) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.pfcount(key);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long touch(final String... keys) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.touch(keys);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(keys[0]);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
+    public Long touch(final byte[]... keys) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.touch(keys);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(keys[0]);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("{");
