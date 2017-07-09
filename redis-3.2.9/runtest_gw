@@ -19,6 +19,7 @@ for i in range(len(sys.argv)):
 tests = [
     './tests/nbase-arc/test_protocol.py',
     './tests/nbase-arc/test_sss.py',
+    './tests/nbase-arc/test_gateway.py',
     ]
 
 for test in tests:
