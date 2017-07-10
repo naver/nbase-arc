@@ -1,13 +1,13 @@
 ### Command support.
 Nbasearc currently uses modified version of Redis 3.2.9. 
-Some of the Redis commands are not supported and some are modified in the context of the cluster environment. See also [s3 commands](/doc/s3-commands.md)
+Some of the Redis commands are not supported and some are modified in the context of the cluster environment. See also [s3 commands](/doc/s3-commands.md), [cluster scan commands](/doc/cluster-scan-commands.md)
 
 Following table summarizes the supported Redis commands and differences supported by the nbase-arc gateways.
 
 | Commands | Supported | Note |
 | ------------ | ------------ | ----- |
 |    APPEND           | O | |
-|    ASKING           | X | TBD |
+|    ASKING           | X | |
 |    AUTH             | X | |
 |    BGREWRITEAOF     | X | |
 |    BGSAVE           | X | |
@@ -19,8 +19,8 @@ Following table summarizes the supported Redis commands and differences supporte
 |    BRPOP            | X | |
 |    BRPOPLPUSH       | X | |
 |    CLIENT           | X | |
-|    CLUSTER          | X | TBD |
-|    COMMAND          | X | TBD |
+|    CLUSTER          | X | |
+|    COMMAND          | X | |
 |    CONFIG           | X | |
 |    CRC16            | O | |
 |    DBSIZE           | O | returns aggregated dbsize |
@@ -59,7 +59,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    HLEN             | O | |
 |    HMGET            | O | |
 |    HMSET            | O | |
-|    HOST:            | X | TBD |
+|    HOST:            | X | |
 |    HSCAN            | O | Available since 1.4 |
 |    HSET             | O | |
 |    HSETNX           | O | |
@@ -71,7 +71,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    INFO             | O | returns cluster info |
 |    KEYS             | X | |
 |    LASTSAVE         | X | |
-|    LATENCY          | X | TBD |
+|    LATENCY          | X | |
 |    LINDEX           | O | |
 |    LINSERT          | O | |
 |    LLEN             | O | |
@@ -95,11 +95,11 @@ Following table summarizes the supported Redis commands and differences supporte
 |    PEXPIREAT        | O | |
 |    PFADD            | O | Available since 1.4 |
 |    PFCOUNT          | O | Available since 1.4 (single key only) |
-|    PFDEBUG          | X | TBD |
-|    PFMERGE          | X | TBD |
-|    PFSELFTEST       | X | TBD |
+|    PFDEBUG          | X | |
+|    PFMERGE          | X | |
+|    PFSELFTEST       | X | |
 |    PING             | O | gateway ping |
-|    POST             | X | TBD |
+|    POST             | X | |
 |    PSETEX           | O | |
 |    PSUBSCRIBE       | X | |
 |    PSYNC            | X | |
@@ -109,14 +109,14 @@ Following table summarizes the supported Redis commands and differences supporte
 |    PUNSUBSCRIBE     | X | |
 |    QUIT             | O | |
 |    RANDOMKEY        | X | |
-|    READONLY         | X | TBD |
-|    READWRITE        | X | TBD |
+|    READONLY         | X | |
+|    READWRITE        | X | |
 |    RENAME           | X | |
 |    RENAMENX         | X | |
 |    REPLCONF         | X | |
 |    RESTORE          | O | |
-|    RESTORE-ASKING   | X | TBD |
-|    ROLE             | X | TBD |
+|    RESTORE-ASKING   | X | |
+|    ROLE             | X | |
 |    RPOP             | O | |
 |    RPOPLPUSH        | X | |
 |    RPUSH            | O | |
@@ -159,7 +159,7 @@ Following table summarizes the supported Redis commands and differences supporte
 |    TYPE             | O | |
 |    UNSUBSCRIBE      | X | |
 |    UNWATCH          | X | |
-|    WAIT             | X | TBD |
+|    WAIT             | X | |
 |    WATCH            | X | |
 |    ZADD             | O | |
 |    ZCARD            | O | |
