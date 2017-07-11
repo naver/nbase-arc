@@ -2,7 +2,8 @@
 GIT_REFRESH:=$(shell git update-index --refresh)
 # Note --match value is glob(7) pattern
 VERSION:=$(shell git describe --tags --dirty --always --match=v[0-9]*\.[0-9]*\.[0-9]*)
-REDIS_VERSION=2.8.8
+#REDIS_VERSION=2.8.8
+REDIS_VERSION=3.2.9
 RELEASE_DIR=release/nbase-arc
 
 default: all

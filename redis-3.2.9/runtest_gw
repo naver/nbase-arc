@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+import sys
+import os
+
+# options
+# --accurrate
+#   no effect for now
+# --gw-port 
+#   if not specified use 8200. (see integration_test/test_basic_op.py)
+
+
+port = 8200
+
+for i in range(len(sys.argv)):
+    if sys.argv[i] == '--gw-port' and i + 1 < len(sys.argv):
+        port = int(sys.argv[i+1])
+
+tests = [
+    './tests/nbase-arc/test_protocol.py',
+    './tests/nbase-arc/test_sss.py',
+    './tests/nbase-arc/test_gateway.py',
+    ]
+
+for test in tests:
+    cmd = 'python %s %d' % (test, port)
+    ret = os.system(cmd)
+    if ret == 0:
+        print 'test %s passed' % test
+    else:
+        print 'test %s error: %d' % (test, ret)
+        sys.exit(-1)
+
+sys.exit(0)
