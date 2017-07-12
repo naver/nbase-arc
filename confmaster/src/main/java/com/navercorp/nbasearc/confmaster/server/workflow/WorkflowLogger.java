@@ -36,6 +36,7 @@ import org.codehaus.jackson.annotate.JsonIgnoreProperties;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.annotate.JsonPropertyOrder;
 import org.codehaus.jackson.annotate.JsonAutoDetect.Visibility;
+import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.type.TypeReference;
 import org.slf4j.helpers.MessageFormatter;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -283,6 +284,9 @@ public class WorkflowLogger {
             { "logID", "logTime", "jobID", "type", "name", "severity",
             "msg", "severity", "msg", "clusterName", "arguments" })
     public static class ZkWorkflowLog {
+
+        @JsonIgnore
+        private static final MemoryObjectMapper mapper = new MemoryObjectMapper();
         
         @JsonProperty("logID")
         private long logID;
@@ -327,11 +331,7 @@ public class WorkflowLogger {
         }
 
         public String toJsonString() {
-            return String
-                    .format("{\"logID\":%d,\"logTime\":\"%s\",\"jobID\":%d,\"type\":\"%s\",\"severity\":\"%s\",\"name\":\"%s\",\"msg\":\"%s\",\"clusterName\":\"%s\",\"arguments\":%s}",
-                            getLogID(), getLogTime(), getJobID(), getType(),
-                            getSeverity(), getName(), getMsg(), getClusterName(),
-                            getArguments());
+            return mapper.writeValueAsString(this);
         }
 
         @Override
