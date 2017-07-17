@@ -18,12 +18,14 @@
 #include <assert.h>
 #include <unistd.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <limits.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/epoll.h>
+#include <sys/timerfd.h>
 #include <fcntl.h>
 #include "tcp.h"
 #include "stream.h"
@@ -141,8 +143,10 @@ struct smrConnector
   int epfd;			// return value of epoll_create
   int mfd;			// connection to the master replicator
   int lfd;			// connection to the local replicator
+  int tfd;			// timer fd. used to reconnect to master
   int mfd_mask;			// epoll mask for mfd
   int lfd_mask;			// epoll mask for lfd
+  int tfd_mask;			// epoll mask for tfd
   confNewMaster *new_master;	// unhandled new master request
 };
 
@@ -199,7 +203,8 @@ mm_consec_size (inState * is, long long seq)
 static int check_callback (smrCallback * cb);
 static smrConnector *new_connector (smrCallback * cb, void *arg,
 				    long long ckpt_seq);
-static int master_connect (smrConnector * connector);
+static int master_connect (smrConnector * connector, char *host, int port,
+			   int nid);
 
 /* ---------------------- */
 /* configuration commands */
@@ -225,9 +230,14 @@ static int cfg_parse_port (char *tok, int *port);
 static void cfg_free (confCommand * cmd);
 static confCommand *cfg_parse (char *conf_str);
 
+// retry connect timer
+static int open_timer (smrConnector * connector, int msec);
+static void close_timer_if_opened (smrConnector * connector);
+
 /* --------------- */
 /* reconfiguration */
 /* --------------- */
+static void close_master (smrConnector * connector);
 static int change_master (smrConnector * connector);
 
 /* ----- */
@@ -261,6 +271,7 @@ static int local_readable (smrConnector * connector);
 static int local_writable (smrConnector * connector);
 static int master_readable (smrConnector * connector);
 static int master_writable (smrConnector * connector);
+static int timer_readable (smrConnector * connector);
 
 /* ---------------- */
 /* smr data related */
@@ -311,8 +322,10 @@ new_connector (smrCallback * cb, void *arg, long long ckpt_seq)
   connector->epfd = -1;
   connector->mfd = -1;
   connector->lfd = -1;
+  connector->tfd = -1;
   connector->mfd_mask = EP_NONE;
   connector->lfd_mask = EP_NONE;
+  connector->tfd_mask = EP_NONE;
 
   /* input state */
   connector->istate.smrlog = NULL;
@@ -372,16 +385,11 @@ error:
 }
 
 static int
-master_connect (smrConnector * connector)
+master_connect (smrConnector * connector, char *host, int port, int nid)
 {
   char ebuf[512];
-  char *host;
-  int port;
   short net_nid;
   long long net_seq = 0LL;
-
-  host = connector->init.mhost;
-  port = connector->init.mport;
 
   assert (connector->mfd == -1);
   connector->mfd =
@@ -393,46 +401,47 @@ master_connect (smrConnector * connector)
     }
 
   /* HANDSHAKE */
-  net_nid = htons (connector->init.nid);
+  net_nid = htons (nid);
   if (tcp_write_fully (connector->mfd, &net_nid, sizeof (short)) == -1)
     {
       ERRNO_POINT ();
-      return -1;
+      goto error;
     }
-
   /*
    * get last cseq from master (for catchup)
    */
   if (tcp_read_fully (connector->mfd, &net_seq, sizeof (long long)) == -1)
     {
       ERRNO_POINT ();
-      return -1;
+      goto error;
     }
   connector->master_cseq = ntohll (net_seq);
 
   if (tcp_set_option (connector->mfd, TCP_OPT_NONBLOCK) == -1)
     {
       ERRNO_POINT ();
-      return -1;
+      goto error;
     }
 
   if (create_file_event
       (connector, connector->mfd, EP_READ, &connector->mfd_mask, 0) == -1)
     {
       ERRNO_POINT ();
-      return -1;
+      goto error;
     }
 
   if (create_file_event
       (connector, connector->mfd, EP_WRITE, &connector->mfd_mask, 0) == -1)
     {
       ERRNO_POINT ();
-      return -1;
+      goto error;
     }
-
   return 0;
-}
 
+error:
+  close_master (connector);
+  return -1;
+}
 
 /* 
  * This function copies the init command to connector->init for lazy initialization
@@ -866,31 +875,94 @@ error:
 }
 
 static int
+open_timer (smrConnector * conn, int msec)
+{
+  int ret;
+  struct itimerspec its;
+  struct timespec now;
+
+  if (conn->tfd != -1)
+    {
+      ERRNO_POINT ();
+      return -1;
+    }
+
+  ret = clock_gettime (CLOCK_REALTIME, &now);
+  if (ret < 0)
+    {
+      ERRNO_POINT ();
+      return -1;
+    }
+  its.it_value.tv_sec = now.tv_sec + (msec / 1000);
+  its.it_value.tv_nsec = now.tv_nsec + (msec % 1000) * 1000000;
+  its.it_interval.tv_sec = (msec / 1000);
+  its.it_interval.tv_nsec = (msec % 1000) * 1000000;
+
+  conn->tfd = timerfd_create (CLOCK_REALTIME, TFD_NONBLOCK);
+  if (conn->tfd == -1)
+    {
+      ERRNO_POINT ();
+      return -1;
+    }
+  /* from now go to error */
+
+  ret = timerfd_settime (conn->tfd, TFD_TIMER_ABSTIME, &its, NULL);
+  if (ret < 0)
+    {
+      ERRNO_POINT ();
+      goto error;
+    }
+
+  ret = create_file_event (conn, conn->tfd, EP_READ, &conn->tfd_mask, 0);
+  if (ret < 0)
+    {
+      ERRNO_POINT ();
+      goto error;
+    }
+  return 0;
+
+error:
+  close_timer_if_opened (conn);
+  return -1;
+}
+
+static void
+close_timer_if_opened (smrConnector * connector)
+{
+  if (connector->tfd != -1)
+    {
+      (void) delete_file_event (connector, connector->tfd, EP_WRITE,
+				&connector->tfd_mask);
+      (void) delete_file_event (connector, connector->tfd, EP_READ,
+				&connector->tfd_mask);
+      close (connector->tfd);
+      connector->tfd = -1;
+    }
+}
+
+static void
+close_master (smrConnector * connector)
+{
+  if (connector->mfd != -1)
+    {
+      (void) delete_file_event (connector, connector->mfd, EP_WRITE,
+				&connector->mfd_mask);
+      (void) delete_file_event (connector, connector->mfd, EP_READ,
+				&connector->mfd_mask);
+      close (connector->mfd);
+      connector->mfd = -1;
+    }
+  close_timer_if_opened (connector);
+}
+
+static int
 change_master (smrConnector * connector)
 {
   confNewMaster *nm = connector->new_master;
   assert (nm != NULL);
 
   /* close connection to the master */
-  if (connector->mfd > 0)
-    {
-      if ((connector->mfd_mask & EP_WRITE) != 0
-	  && delete_file_event (connector, connector->mfd, EP_WRITE,
-				&connector->mfd_mask) == 1)
-	{
-	  ERRNO_POINT ();
-	  return -1;
-	}
-      else if ((connector->mfd_mask & EP_READ) != 0
-	       && delete_file_event (connector, connector->mfd, EP_READ,
-				     &connector->mfd_mask) == 1)
-	{
-	  ERRNO_POINT ();
-	  return -1;
-	}
-      close (connector->mfd);
-      connector->mfd = -1;
-    }
+  close_master (connector);
 
   /* rewind buffer */
   if (io_stream_reset_read (connector->mous) == -1)
@@ -900,6 +972,18 @@ change_master (smrConnector * connector)
     }
 
   /* connect to new master */
+  if (master_connect (connector, nm->mhost, nm->mport, nm->nid) == -1)
+    {
+      if (open_timer (connector, 1000) < 0)
+	{
+	  ERRNO_POINT ();
+	  return -1;
+	}
+      // retried
+      return 0;
+    }
+
+  close_timer_if_opened (connector);
   if (connector->init.mhost != NULL)
     {
       free (connector->init.mhost);
@@ -908,16 +992,9 @@ change_master (smrConnector * connector)
   nm->mhost = NULL;
   connector->init.mport = nm->mport;
   connector->init.nid = nm->nid;
-
-  if (master_connect (connector) == -1)
-    {
-      ERRNO_POINT ();
-      return -1;
-    }
   cfg_free_new_master (nm);
   connector->new_master = NULL;
   connector->curr_last_cseq = -1LL;
-
   return 0;
 }
 
@@ -1499,11 +1576,10 @@ process_input_state_range (smrConnector * connector, smrCallback * cb,
 	}
     }
 
-  if (connector->curr_last_cseq != -1 && connector->curr_last_cseq <= seq)
+  if (connector->tfd == -1 && connector->curr_last_cseq != -1
+      && connector->curr_last_cseq <= seq)
     {
-      assert (connector->curr_last_cseq <= seq);
-      assert (connector->new_master != NULL);
-      if (change_master (connector) == -1)
+      if (change_master (connector) < 0)
 	{
 	  ERRNO_POINT ();
 	  return -1;
@@ -1618,7 +1694,7 @@ read_input_state (smrConnector * connector, int *nconsumed)
 	      /* this can be happend when master election occurred */
 	      if (is->seq >= new_master->after_seq)
 		{
-		  if (change_master (connector) == -1)
+		  if (change_master (connector) < 0)
 		    {
 		      ERRNO_POINT ();
 		      return -1;
@@ -1627,7 +1703,7 @@ read_input_state (smrConnector * connector, int *nconsumed)
 	    }
 	  else if (cmd->cmd == CONF_COMMAND_INIT)
 	    {
-
+	      smrConfigure *init;
 	      if (cfg_copy_configure (connector, (confInit *) cmd) == -1)
 		{
 		  cfg_free (cmd);
@@ -1636,14 +1712,15 @@ read_input_state (smrConnector * connector, int *nconsumed)
 		}
 	      cfg_free (cmd);
 
-	      if (connector->init.commit_seq < connector->ckpt_seq)
+	      init = &connector->init;
+	      if (init->commit_seq < connector->ckpt_seq)
 		{
 		  errno = ERANGE;
 		  ERRNO_POINT ();
 		  return -1;
 		}
 	      connector->istate.seq = connector->ckpt_seq;
-	      connector->istate.mm_seq_max = connector->init.commit_seq;
+	      connector->istate.mm_seq_max = init->commit_seq;
 
 	      /* init log system */
 	      if (connector->istate.smrlog != NULL)
@@ -1652,19 +1729,18 @@ read_input_state (smrConnector * connector, int *nconsumed)
 		  return -1;
 		}
 	      if ((connector->istate.smrlog =
-		   smrlog_init (connector->init.logdir)) == NULL)
+		   smrlog_init (init->logdir)) == NULL)
 		{
 		  ERRNO_POINT ();
 		  return -1;
 		}
-
 	      /* connect to master */
-	      if (master_connect (connector) == -1)
+	      if (master_connect
+		  (connector, init->mhost, init->mport, init->nid) == -1)
 		{
 		  ERRNO_POINT ();
 		  return -1;
 		}
-
 	      ret = cb->noti_ready (connector->arg);
 	      if (ret != 0)
 		{
@@ -1690,15 +1766,7 @@ read_input_state (smrConnector * connector, int *nconsumed)
 	       * local replicator is not a replication member. we must disconnect to the
 	       * master to disable replication message to the master (if exists) 
 	       */
-	      if (connector->mfd > 0)
-		{
-		  (void) delete_file_event (connector, connector->mfd,
-					    EP_READ, &connector->mfd_mask);
-		  (void) delete_file_event (connector, connector->mfd,
-					    EP_WRITE, &connector->mfd_mask);
-		  close (connector->mfd);
-		  connector->mfd = -1;
-		}
+	      close_master (connector);
 	    }
 	  else
 	    {
@@ -1988,10 +2056,7 @@ master_readable (smrConnector * connector)
 
 master_dead:
   /* master dead. wait for master election from local replicator */
-  (void) delete_file_event (connector, fd, EP_READ, &connector->mfd_mask);
-  (void) delete_file_event (connector, fd, EP_WRITE, &connector->mfd_mask);
-  close (connector->mfd);
-  connector->mfd = -1;
+  close_master (connector);
   return 0;
 }
 
@@ -2062,12 +2127,36 @@ master_writable (smrConnector * connector)
     }
 
   return delete_file_event (connector, fd, EP_WRITE, &connector->mfd_mask);
+
 master_dead:
   /* master dead. wait for master election from local replicator */
-  (void) delete_file_event (connector, fd, EP_READ, &connector->mfd_mask);
-  (void) delete_file_event (connector, fd, EP_WRITE, &connector->mfd_mask);
-  close (connector->mfd);
-  connector->mfd = -1;
+  close_master (connector);
+  return 0;
+}
+
+static int
+timer_readable (smrConnector * connector)
+{
+  int ret;
+  uint64_t res;
+
+  ret = read (connector->tfd, &res, sizeof (res));
+  if (ret <= 0)
+    {
+      // 0, -1, -1 with errno EAGAIN
+      ERRNO_POINT ();
+      return -1;
+    }
+
+  if (connector->curr_last_cseq != -1
+      && connector->curr_last_cseq <= connector->istate.seq)
+    {
+      if (change_master (connector) < 0)
+	{
+	  ERRNO_POINT ();
+	  return -1;
+	}
+    }
   return 0;
 }
 
@@ -2442,7 +2531,7 @@ smr_process_internal (smrConnector * connector, int timeout)
   int num_events;
   int i;
   int ret;
-  int mfd;
+  int mfd, tfd;
 
   errno = 0;
   assert (connector != NULL);
@@ -2454,6 +2543,7 @@ smr_process_internal (smrConnector * connector, int timeout)
     }
 
   mfd = connector->mfd;
+  tfd = connector->tfd;
 
   for (i = 0; i < num_events; i++)
     {
@@ -2493,13 +2583,20 @@ smr_process_internal (smrConnector * connector, int timeout)
 	      ret = local_writable (connector);
 	    }
 	}
+      else if (events[i].data.fd == connector->tfd)
+	{
+	  if (mask & EP_READ)
+	    {
+	      ret = timer_readable (connector);
+	    }
+	}
       else
 	{
 	  /* 
 	   * this can be happended when local processing closed the fd
 	   * see 'lconn' command processing' 
 	   */
-	  if (events[i].data.fd == mfd)
+	  if (events[i].data.fd == mfd || events[i].data.fd == tfd)
 	    {
 	      ret = 0;
 	    }

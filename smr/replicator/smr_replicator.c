@@ -1545,6 +1545,7 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", LOCAL_CONN_IN, (long) &ret);
   if (ret < 0)
     {
       goto error;
@@ -1882,6 +1883,7 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", SLAVE_CONN_IN, (long) &ret);
   if (ret < 0)
     {
       goto error;
@@ -2293,6 +2295,7 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", CLIENT_CONN_IN, (long) &ret);
   if (ret < 0)
     {
       LOG (LG_ERROR, "failed to set tcp option");
@@ -3423,6 +3426,7 @@ mgmt_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", MANAGEMENT_CONN_IN, (long) &ret);
   if (ret < 0)
     {
       goto error;
@@ -4613,8 +4617,8 @@ fi_delay_request (mgmtConn * conn, char **tokens, int num_tok)
 }
 
 /*
- * [read|write] <conn type> delay <count> <per sleep msec.>
- * [read|write] <conn type> return <return value> <errno>
+ * [read|write|accept] <conn type> delay <count> <per sleep msec.>
+ * [read|write|accept] <conn type> return <return value> <errno>
  */
 static int
 fi_rw_request (char *rw, mgmtConn * conn, char **tokens, int num_tok)
@@ -4712,9 +4716,19 @@ fi_request (mgmtConn * conn, char **tokens, int num_tok)
       return fi_delay_request (conn, tokens + 1, num_tok - 1);
     }
   else if (strcasecmp (tokens[0], "read") == 0
-	   || strcasecmp (tokens[0], "write") == 0)
+	   || strcasecmp (tokens[0], "write") == 0
+	   || strcasecmp (tokens[0], "accept") == 0)
     {
       return fi_rw_request (tokens[0], conn, tokens + 1, num_tok - 1);
+    }
+  else if (strcasecmp (tokens[0], "clear") == 0)
+    {
+#ifdef SFI_ENABLED
+      sfi_disable_all ();
+      return mgmt_reply_cstring (conn, "+OK");
+#else
+      return mgmt_reply_cstring (conn, "-ERR not supported");
+#endif
     }
   else
     {

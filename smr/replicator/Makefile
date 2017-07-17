@@ -17,6 +17,9 @@ all: $(OBJECT) smr-replicator
 gcov:
 	$(MAKE) GCOV_FLAGS="-fprofile-arcs -ftest-coverage -DSFI_ENABLED"
 
+sfi:
+	$(MAKE) DEBUG="-g -ggdb -DSFI_ENABLED"
+
 # gcc -MM *.c generates below dependencies
 smr_replicator.o : smr_replicator.c
 smrmp.o: smrmp.c
