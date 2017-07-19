@@ -31,6 +31,8 @@
 
 #include "tcp.h"
 
+extern long long currtime_usec ();
+
 static void
 set_error (char *ebuf, int ebuf_sz, char *format, ...)
 {
@@ -203,6 +205,50 @@ tcp_read_fully (int fd, void *buf_, int count)
   return tr;
 }
 
+
+int
+tcp_read_fully_deadline (int fd, void *buf, int count,
+			 long long deadline_msec)
+{
+  fd_set rfds;
+  struct timeval tv;
+  int ret, remain;
+  char *bp;
+
+  FD_ZERO (&rfds);
+  FD_SET (fd, &rfds);
+  bp = buf;
+  remain = count;
+
+  while (remain > 0)
+    {
+      long long tval = (deadline_msec * 1000) - currtime_usec ();
+      if (tval <= 0)
+	{
+	  return -1;
+	}
+      tv.tv_sec = tval / 1000000;
+      tv.tv_usec = tval % 1000000;
+
+      ret = select (fd + 1, &rfds, NULL, NULL, &tv);
+      if (ret > 0)
+	{
+	  int nr = read (fd, bp, remain);
+	  if (nr <= 0)
+	    {
+	      return -1;
+	    }
+	  bp += nr;
+	  remain -= nr;
+	}
+      else
+	{
+	  return -1;
+	}
+    }
+  return count;
+}
+
 int
 tcp_write_fully (int fd, void *buf_, int count)
 {
@@ -231,6 +277,49 @@ tcp_write_fully (int fd, void *buf_, int count)
 	}
     }
   return tw;
+}
+
+int
+tcp_write_fully_deadline (int fd, void *buf, int count,
+			  long long deadline_msec)
+{
+  fd_set wfds;
+  struct timeval tv;
+  int ret, remain;
+  char *bp;
+
+  FD_ZERO (&wfds);
+  FD_SET (fd, &wfds);
+  bp = buf;
+  remain = count;
+
+  while (remain > 0)
+    {
+      long long tval = (deadline_msec * 1000) - currtime_usec ();
+      if (tval <= 0)
+	{
+	  return -1;
+	}
+      tv.tv_sec = tval / 1000000;
+      tv.tv_usec = tval % 1000000;
+
+      ret = select (fd + 1, NULL, &wfds, NULL, &tv);
+      if (ret > 0)
+	{
+	  int nw = write (fd, bp, remain);
+	  if (nw <= 0)
+	    {
+	      return -1;
+	    }
+	  bp += nw;
+	  remain -= nw;
+	}
+      else
+	{
+	  return -1;
+	}
+    }
+  return count;
 }
 
 int

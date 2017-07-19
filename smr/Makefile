@@ -13,5 +13,7 @@ gcov:
 	cd replicator && $(MAKE) $@
 	cd test && $(MAKE) $@
 
-test:
-
+sfi:
+	cd smr && $(MAKE) $@
+	cd replicator && $(MAKE) $@
+	cd test && $(MAKE) $@

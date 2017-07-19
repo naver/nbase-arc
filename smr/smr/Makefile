@@ -17,6 +17,9 @@ all: $(OBJECT) $(MYLIB) smr-logutil
 gcov:
 	$(MAKE) GCOV_FLAGS="-fprofile-arcs -ftest-coverage -DSFI_ENABLED"
 
+sfi:
+	$(MAKE) DEBUG="-g -ggdb -DSFI_ENABLED"
+
 # gcc -MM *.c generates below dependencies
 tcp.o : tcp.c
 crc16.o : crc16.c

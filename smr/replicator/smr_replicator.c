@@ -134,6 +134,8 @@ struct slowLogQuery_
   }                                                                   \
 } while (0)
 
+#define DEFAULT_HANDSHAKE_TIMEOUT_MSEC 1000
+
 /* --------------------------- */
 /* Local function declarations */
 /* --------------------------- */
@@ -1489,6 +1491,7 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   int cport;
   long long net_seq;
   int ret;
+  long long deadline;
 
   assert (fd == rep->local_lfd);
 
@@ -1541,8 +1544,16 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
       goto error;
     }
 
+  ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", LOCAL_CONN_IN, (long) &ret);
+  if (ret < 0)
+    {
+      goto error;
+    }
+
   /* HANDSHAKE */
-  if (tcp_read_fully (cfd, &net_seq, sizeof (net_seq)) < 0)
+  deadline = currtime_ms () + DEFAULT_HANDSHAKE_TIMEOUT_MSEC;
+  if (tcp_read_fully_deadline (cfd, &net_seq, sizeof (net_seq), deadline) < 0)
     {
       LOG (LG_ERROR, "failed to read sequence number");
       goto error;
@@ -1550,12 +1561,6 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 
   lc->sent_seq = lc->consumed_seq = ntohll (net_seq);
   if (adjust_log_before_lconn (rep, lc->sent_seq) < 0)
-    {
-      goto error;
-    }
-
-  ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
-  if (ret < 0)
     {
       goto error;
     }
@@ -1830,6 +1835,7 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   short net_nid, nid;
   char buf[3 * sizeof (long long)];
   char *bp;
+  long long deadline;
 
   assert (fd == rep->slave_lfd);
 
@@ -1876,6 +1882,13 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
       goto error;
     }
 
+  ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", SLAVE_CONN_IN, (long) &ret);
+  if (ret < 0)
+    {
+      goto error;
+    }
+
   /* HANDSHAKE */
   // send my min, commit, max sequences
   // receive nid, slave seq request
@@ -1895,13 +1908,14 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   memcpy (bp, &net_seq, sizeof (long long));
   bp += sizeof (long long);
 
-  if (tcp_write_fully (cfd, buf, sizeof (buf)) < 0)
+  deadline = currtime_ms () + DEFAULT_HANDSHAKE_TIMEOUT_MSEC;
+  if (tcp_write_fully_deadline (cfd, buf, sizeof (buf), deadline) < 0)
     {
       LOG (LG_ERROR, "failed to send seqence number and nid");
       goto error;
     }
 
-  if (tcp_read_fully (cfd, &net_nid, sizeof (net_nid)) < 0)
+  if (tcp_read_fully_deadline (cfd, &net_nid, sizeof (net_nid), deadline) < 0)
     {
       LOG (LG_ERROR, "failed to read node id");
       goto error;
@@ -1924,7 +1938,7 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   sc->nid = nid;
   sc->is_quorum_member = nid_is_quorum_member (rep, nid);
 
-  if (tcp_read_fully (cfd, &net_seq, sizeof (net_seq)) < 0)
+  if (tcp_read_fully_deadline (cfd, &net_seq, sizeof (net_seq), deadline) < 0)
     {
       LOG (LG_ERROR, "failed to read sequence number");
       goto error;
@@ -1956,12 +1970,6 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     {
       LOG (LG_ERROR, "can't get log file for sequence %ldd",
 	   sc->slave_log_seq);
-      goto error;
-    }
-
-  ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
-  if (ret < 0)
-    {
       goto error;
     }
 
@@ -2241,6 +2249,7 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   short net_nid;
   long long net_seq;
   int ret;
+  long long deadline;
 
   assert (fd == rep->client_lfd);
 
@@ -2285,8 +2294,17 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
       goto error;
     }
 
+  ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", CLIENT_CONN_IN, (long) &ret);
+  if (ret < 0)
+    {
+      LOG (LG_ERROR, "failed to set tcp option");
+      goto error;
+    }
+
   /* HANDSHAKE */
-  if (tcp_read_fully (cfd, &net_nid, sizeof (short)) < 0)
+  deadline = currtime_ms () + DEFAULT_HANDSHAKE_TIMEOUT_MSEC;
+  if (tcp_read_fully_deadline (cfd, &net_nid, sizeof (short), deadline) < 0)
     {
       LOG (LG_ERROR, "failed to read nid");
       goto error;
@@ -2300,20 +2318,14 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   net_seq = htonll (rep->commit_seq);
-  if (tcp_write_fully (cfd, &net_seq, sizeof (long long)) < 0)
+  if (tcp_write_fully_deadline (cfd, &net_seq, sizeof (long long), deadline) <
+      0)
     {
       LOG (LG_ERROR, "write commit seqence failed: %lld", rep->commit_seq);
       goto error;
     }
   LOG (LG_INFO, "new client: nid:%d fd:%d sent commit seq:%lld", cc->nid, cfd,
        rep->commit_seq);
-
-  ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
-  if (ret < 0)
-    {
-      LOG (LG_ERROR, "failed to set tcp option");
-      goto error;
-    }
 
   if (aeCreateFileEvent (rep->el, cfd, AE_READABLE, client_read_handler, cc)
       == AE_ERR)
@@ -2725,6 +2737,7 @@ connect_to_master (smrReplicator * rep, char *host, int port,
   int ret;
   short net_nid;
   logMmapEntry *lme = NULL;
+  long long deadline;
 
   if (rep->master != NULL)
     {
@@ -2764,26 +2777,36 @@ connect_to_master (smrReplicator * rep, char *host, int port,
     }
   rep->master_base_port = port - PORT_OFF_SLAVE;
 
+  ret = tcp_set_option (mc->fd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  if (ret < 0)
+    {
+      goto error;
+    }
+
   /* 
-   * initial hand-shake 
+   * initial HANDSHAKE
    * 1. get sequences from master
    * 2. check local_max_seq against master sequence numbers and ajust log_seq 
    */
-  if (tcp_read_fully (mc->fd, &net_seq, sizeof (long long)) < 0)
+  deadline = currtime_ms () + DEFAULT_HANDSHAKE_TIMEOUT_MSEC;
+  if (tcp_read_fully_deadline (mc->fd, &net_seq, sizeof (long long), deadline)
+      < 0)
     {
       LOG (LG_ERROR, "failed to read master min sequence number");
       goto error;
     }
   master_min_seq = ntohll (net_seq);
 
-  if (tcp_read_fully (mc->fd, &net_seq, sizeof (long long)) < 0)
+  if (tcp_read_fully_deadline (mc->fd, &net_seq, sizeof (long long), deadline)
+      < 0)
     {
       LOG (LG_ERROR, "failed to read master max commit sequence number");
       goto error;
     }
   // master_commit_seq is not used
 
-  if (tcp_read_fully (mc->fd, &net_seq, sizeof (long long)) < 0)
+  if (tcp_read_fully_deadline (mc->fd, &net_seq, sizeof (long long), deadline)
+      < 0)
     {
       LOG (LG_ERROR, "failed to read master max sequence number");
       goto error;
@@ -2806,25 +2829,22 @@ connect_to_master (smrReplicator * rep, char *host, int port,
     }
 
   net_nid = htons (rep->nid);
-  if (tcp_write_fully (mc->fd, &net_nid, sizeof (net_nid)) < 0)
+  if (tcp_write_fully_deadline (mc->fd, &net_nid, sizeof (net_nid), deadline)
+      < 0)
     {
       LOG (LG_ERROR, "failed to write node id to the master");
       goto error;
     }
 
   net_seq = htonll (local_max_seq);
-  if (tcp_write_fully (mc->fd, &net_seq, sizeof (long long)) < 0)
+  if (tcp_write_fully_deadline
+      (mc->fd, &net_seq, sizeof (long long), deadline) < 0)
     {
       LOG (LG_ERROR, "failed to write sequence number to the master");
       goto error;
     }
   mc->rseq = local_max_seq;
 
-  ret = tcp_set_option (mc->fd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
-  if (ret < 0)
-    {
-      goto error;
-    }
   rep->master = mc;
   return 0;
 
@@ -3406,6 +3426,7 @@ mgmt_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   ret = tcp_set_option (cfd, TCP_OPT_NONBLOCK | TCP_OPT_NODELAY);
+  SFI_PROBE2 ("accept", MANAGEMENT_CONN_IN, (long) &ret);
   if (ret < 0)
     {
       goto error;
@@ -4596,8 +4617,8 @@ fi_delay_request (mgmtConn * conn, char **tokens, int num_tok)
 }
 
 /*
- * [read|write] <conn type> delay <count> <per sleep msec.>
- * [read|write] <conn type> return <return value> <errno>
+ * [read|write|accept] <conn type> delay <count> <per sleep msec.>
+ * [read|write|accept] <conn type> return <return value> <errno>
  */
 static int
 fi_rw_request (char *rw, mgmtConn * conn, char **tokens, int num_tok)
@@ -4695,9 +4716,19 @@ fi_request (mgmtConn * conn, char **tokens, int num_tok)
       return fi_delay_request (conn, tokens + 1, num_tok - 1);
     }
   else if (strcasecmp (tokens[0], "read") == 0
-	   || strcasecmp (tokens[0], "write") == 0)
+	   || strcasecmp (tokens[0], "write") == 0
+	   || strcasecmp (tokens[0], "accept") == 0)
     {
       return fi_rw_request (tokens[0], conn, tokens + 1, num_tok - 1);
+    }
+  else if (strcasecmp (tokens[0], "clear") == 0)
+    {
+#ifdef SFI_ENABLED
+      sfi_disable_all ();
+      return mgmt_reply_cstring (conn, "+OK");
+#else
+      return mgmt_reply_cstring (conn, "-ERR not supported");
+#endif
     }
   else
     {
@@ -6441,6 +6472,7 @@ mig_dest_connect (smrReplicator * rep)
   long long net_seq = 0LL;
   int fd = -1;
   migStruct *mig;
+  long long deadline;
 
   assert (rep != NULL);
   mig = rep->mig;
@@ -6454,15 +6486,23 @@ mig_dest_connect (smrReplicator * rep)
       return -1;
     }
 
+  if (tcp_set_option (fd, TCP_OPT_NODELAY | TCP_OPT_NONBLOCK) < 0)
+    {
+      MIG_ERR (rep, "tcp_sert_option failed");
+      goto error;
+    }
+
   /* HANDSHAKE */
+  deadline = currtime_ms () + DEFAULT_HANDSHAKE_TIMEOUT_MSEC;
   net_nid = htons (rep->nid);
-  if (tcp_write_fully (fd, &net_nid, sizeof (short)) < 0)
+  if (tcp_write_fully_deadline (fd, &net_nid, sizeof (short), deadline) < 0)
     {
       MIG_ERR (rep, "handshake error: failed to write nid");
       goto error;
     }
 
-  if (tcp_read_fully (fd, &net_seq, sizeof (long long)) < 0)
+  if (tcp_read_fully_deadline (fd, &net_seq, sizeof (long long), deadline) <
+      0)
     {
       MIG_ERR (rep,
 	       "handshake error: failed to read commit sequence from dest");
@@ -6470,11 +6510,6 @@ mig_dest_connect (smrReplicator * rep)
     }
   // unused master_cseq
 
-  if (tcp_set_option (fd, TCP_OPT_NODELAY | TCP_OPT_NONBLOCK) < 0)
-    {
-      MIG_ERR (rep, "tcp_sert_option failed");
-      goto error;
-    }
   return fd;
 error:
   if (fd > 0)

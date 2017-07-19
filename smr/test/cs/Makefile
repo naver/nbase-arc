@@ -19,6 +19,9 @@ all: smr-client smr-server
 gcov:
 	$(MAKE) GCOV_FLAGS="-fprofile-arcs -ftest-coverage -DSFI_ENABLED"
 
+sfi:
+	$(MAKE) DEBUG="-g -ggdb -DSFI_ENABLED"
+
 # gcc -MM *.c generates below dependencies
 smr_server.o: smr_server.c 
 smr_client.o: smr_client.c 

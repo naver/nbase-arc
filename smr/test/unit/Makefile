@@ -18,6 +18,9 @@ all: $(OBJECT) $(TESTS) $(PERFS)
 gcov:
 	$(MAKE) GCOV_FLAGS="-fprofile-arcs -ftest-coverage -DSFI_ENABLED"
 
+sfi:
+	$(MAKE) DEBUG="-g -ggdb -DSFI_ENABLED"
+
 # executables
 test-stream: test_stream.o 
 	$(CC) -o test-stream $(DEFS) $(CFLAGS) $(DEBUG) $(OBJECT) $< $(LINKS)
