@@ -812,7 +812,9 @@ print_raw (unsigned char *buf, int len)
   char out_buf[8010];
   char *op, *start;
   const static char hexa[] =
-    { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f' };
+    { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd',
+    'e', 'f'
+  };
 
   dp = buf;
   op = start = &out_buf[0];
@@ -986,8 +988,11 @@ data_dump (int argc, char *argv[])
   ret = smrlog_scan (smrlog, start_seq, end_seq, data_scanner, &begin_seq);
   if (ret < 0)
     {
-      printf ("smrlog_scan failed: %d\n", ret);
-      goto fini;
+      if (!(end_seq == -1LL && errno == ERRNO_NO_ENTRY))
+	{
+	  printf ("smrlog_scan failed: %d (errno=%d)\n", ret, errno);
+	  goto fini;
+	}
     }
 
   exit_code = 0;
