@@ -246,7 +246,7 @@ keyspace_misses:4479
 * rejected_connections: The number of connections rejected, by the entire cluster to the Redis server
 * expired_keys: The number of keys that expires in the entire cluster
 * evicted_keys: The number of keys evicted in the entire cluster (always 0 because nbase-arc does not support eviction)
-* kespace_hits: The number of keyspace hits in the entire cluster
+* keyspace_hits: The number of keyspace hits in the entire cluster
 * keyspace_misses: The number of keyspace misses in the entire cluster
 
 ##### Keyspace
