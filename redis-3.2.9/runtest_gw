@@ -20,6 +20,7 @@ tests = [
     './tests/nbase-arc/test_protocol.py',
     './tests/nbase-arc/test_sss.py',
     './tests/nbase-arc/test_gateway.py',
+    './tests/nbase-arc/test_gw_commands.py',
     ]
 
 for test in tests:
