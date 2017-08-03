@@ -376,7 +376,6 @@ process_command (client * c)
 	}
       cmdflags = c->smr->cmd->flags;
 
-#ifndef COVERAGE_TEST
       /* if the command is not permitted in cluster environment,
        * act as if this command does not exist */
       if (c->smr->cmd->flags & CMD_NOCLUSTER)
@@ -386,7 +385,6 @@ process_command (client * c)
 			       ("-ERR Unsupported Command\r\n", 26));
 	  cmdflags = 0;
 	}
-#endif
     }
 
   /* If this partition group is in OOM state, reply oom error message. 

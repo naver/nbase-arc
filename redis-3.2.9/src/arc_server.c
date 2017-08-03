@@ -959,7 +959,10 @@ arcx_init_server_pre (void)
 // following commands are not permitted when arc.cluster_mode = 1
 // used commands are: ping, client list , lastsave , bgsave
 static const char *non_cluster_commands[] = {
-  "brpop", "brpoplpush", "blpop", "debug", "eval", "evalsha", "wait",
+#ifndef COVERAGE_TEST
+  "debug",
+#endif
+  "brpop", "brpoplpush", "blpop", "eval", "evalsha", "wait",
   "bgrewriteaof", "shutdown", "migrate", "move", "cluster", "asking",
   "restore-asking", "readonly", "readwrite", "psubscribe", "publish",
   "pubsub", "punsubscribe", "subscribe", "unsubscribe", "pfdebug",

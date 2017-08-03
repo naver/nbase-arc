@@ -108,8 +108,11 @@ def do_commands(conn, GW=True):
         assert(resp >= 1)
 
         # |    DEBUG            | X | |
-        resp = r('DEBUG', 'object', key)
-        assert(resp.startswith('ERR Unsupported'))
+        if GW:
+            resp = r('DEBUG', 'object', key)
+            assert(resp.startswith('ERR Unsupported'))
+        else:
+            pass # integration test use 'debug'
 
         # |    DECR             | O | |
         r('set', key, 10)
