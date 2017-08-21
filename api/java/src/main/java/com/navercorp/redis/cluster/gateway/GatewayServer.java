@@ -52,6 +52,7 @@ public class GatewayServer {
      * @param address         the address
      * @param poolConfig      the pool config
      * @param timeoutMillisec the timeout millisec
+     * @param keyspace        the keyspace
      */
     public GatewayServer(final GatewayAddress address, final RedisClusterPoolConfig poolConfig,
                          final int timeoutMillisec, final String keyspace) {

@@ -93,6 +93,7 @@ public class BinaryTriplesRedisCluster implements BinaryTriplesRedisClusterComma
      * @param host    the host
      * @param port    the port
      * @param timeout the timeout
+     * @param async   if async is true, this class uses async network I/O
      */
     public BinaryTriplesRedisCluster(final String host, final int port, final int timeout, boolean async) {
         client = new RedisClusterClient(host, port, async);

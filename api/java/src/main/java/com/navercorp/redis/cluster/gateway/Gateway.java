@@ -246,6 +246,8 @@ public class Gateway implements GatewayServerData {
 
     /**
      *
+     * @param partitionNumber the partitionNumber
+     * @param state the AffinityState
      * @return the server
      * @throws GatewayException the gateway exception
      */

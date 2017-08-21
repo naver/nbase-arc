@@ -35,7 +35,7 @@ public interface GatewayServerData {
     /**
      * reload by addresses
      *
-     * @param addresses
+     * @param addresses list of GatewayAddress
      */
     void reload(List<GatewayAddress> addresses);
 

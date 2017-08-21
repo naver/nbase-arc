@@ -115,8 +115,8 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
-     * @param milliseconds
+     * @param key          the key
+     * @param milliseconds key is specified in the milliseconds
      * @return Integer reply, specifically:
      * 1 if the timeout was set.
      * 0 if key does not exist or the timeout could not be set.
@@ -129,8 +129,8 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
-     * @param millisecondsTimestamp
+     * @param key                   the key
+     * @param millisecondsTimestamp the key will expire at the millisecondsTimestamp 
      * @return Integer reply, specifically:
      * 1 if the timeout was set.
      * 0 if key does not exist or the timeout could not be set (see: EXPIRE).
@@ -192,7 +192,7 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
+     * @param key the key
      * @return Integer reply: TTL in milliseconds, or a negative value in order to signal an error (see the description above).
      */
     Long pttl(byte[] key);
@@ -218,7 +218,7 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
+     * @param key the key
      * @return Integer reply, specifically:
      * 1 if the timeout was removed.
      * 0 if key does not exist or does not have an associated timeout.
@@ -421,9 +421,9 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
-     * @param increment
-     * @return
+     * @param key the key
+     * @param increment Increments the number stored at key by the increment
+     * @return Integer reply, the value at field after the increment operation.
      */
     Double incrByFloat(byte[] key, double increment);
 
@@ -442,8 +442,8 @@ public interface BinaryRedisClusterCommands {
     /**
      * Set the string value as value of the key. The string can't be longer than 1073741824 bytes (1
      * GB).
-     * @param key
-     * @param value
+     * @param key the keyva
+     * @param value the value
      * @param nxxx NX|XX, NX -- Only set the key if it does not already exist. XX -- Only set the key
      *          if it already exist.
      * @param expx EX|PX, expire time units: EX = seconds; PX = milliseconds
@@ -512,10 +512,10 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
-     * @param milliseconds
-     * @param value
-     * @return
+     * @param key the key
+     * @param milliseconds the milliseconds
+     * @param value the value
+     * @return Simple string reply
      */
     String psetex(byte[] key, long milliseconds, byte[] value);
 
@@ -536,7 +536,7 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1) for every key
      *
-     * @param keys
+     * @param keys the keys
      * @return Multi bulk reply. Error Code will return if parts of keys fail in cluster due to server down or network problem.
      */
     List<byte[]> mget(final byte[]... keys);
@@ -556,7 +556,7 @@ public interface BinaryRedisClusterCommands {
      * either see the changes to both A and B at once, or no modification at
      * all.
      *
-     * @param keysvalues
+     * @param keysvalues the keysvalues 
      * @return Status code reply. Error Code will return if parts of keys fail in cluster due to server down or network problem.
      */
     String mset(byte[]... keysvalues);
@@ -569,8 +569,8 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(N)
      *
-     * @param key
-     * @return
+     * @param key the key
+     * @return Integer reply. The number of bits set to 1.
      */
     Long bitcount(byte[] key);
 
@@ -582,10 +582,10 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(N)
      *
-     * @param key
-     * @param start
-     * @param end
-     * @return
+     * @param key   the key
+     * @param start the start
+     * @param end   the end
+     * @return Integer reply. The number of bits set to 1.
      */
     Long bitcount(byte[] key, long start, long end);
 
@@ -596,9 +596,10 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1) for each subcommand specified
      * 
-     * @param key
-     * @param arguments
-     * @return
+     * @param key       the key
+     * @param arguments the arguments
+     * @return The command returns an array with each entry being the corresponding result of 
+     * the sub command given at the same position. OVERFLOW subcommands don't count as generating a reply.
      */
     List<Long> bitfield(final byte[] key, final byte[]... arguments);
     
@@ -682,10 +683,10 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1)
      *
-     * @param key
-     * @param field
-     * @param increment
-     * @return
+     * @param key       the key
+     * @param field     the field
+     * @param increment the increment
+     * @return Bulk string reply, the value of field after the increment.
      */
     Double hincrByFloat(byte[] key, byte[] field, double increment);
 
@@ -1103,6 +1104,7 @@ public interface BinaryRedisClusterCommands {
      * Time complexity O(1)
      *
      * @param key the key
+     * @param count the count
      * @return Bulk reply
      */
     List<byte[]> srandmember(byte[] key, int count);
@@ -1749,7 +1751,7 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1) to access the key and additional O(N*M) to serialized it, where N is the number of Redis objects composing the value and M their average size. For small string values the time complexity is thus O(1)+O(1*M) where M is small, so simply O(1).
      *
-     * @param key
+     * @param key the key
      * @return Bulk reply: the serialized value.
      */
     byte[] dump(byte[] key);
@@ -1761,9 +1763,9 @@ public interface BinaryRedisClusterCommands {
      * <p>
      * Time complexity: O(1) to create the new key and additional O(N*M) to recostruct the serialized value, where N is the number of Redis objects composing the value and M their average size. For small string values the time complexity is thus O(1)+O(1*M) where M is small, so simply O(1). However for sorted set values the complexity is O(N*M*log(N)) because inserting values into sorted sets is O(log(N)).
      *
-     * @param key
-     * @param ttl
-     * @param serializedValue
+     * @param key             the key
+     * @param ttl             the ttl
+     * @param serializedValue the serializedValue
      * @return Status code reply: The command returns OK on success.
      */
     String restore(byte[] key, long ttl, byte[] serializedValue);

@@ -120,7 +120,8 @@ public class GatewayAddress {
     /**
      * Instantiates a new gateway address.
      *
-     * @param address the address
+     * @param id the id of gateway
+     * @param address the address of gateway
      */
     public GatewayAddress(final int id, final String address) {
         this.id = id;
@@ -132,6 +133,7 @@ public class GatewayAddress {
     /**
      * Instantiates a new gateway address.
      *
+     * @param id the id of gateway
      * @param host the host
      * @param port the port
      */

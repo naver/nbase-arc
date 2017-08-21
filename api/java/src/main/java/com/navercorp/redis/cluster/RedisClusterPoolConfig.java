@@ -21,13 +21,13 @@ import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
  * Subclass of org.apache.commons.pool.impl.GenericObjectPool.Config that
  * includes getters/setters so it can be more easily configured by Spring and
  * other IoC frameworks.
- * <p>
- * <p>
+ * <br> 
+ * <br> 
  * Spring example:<br>
  * <br>
  * &lt;bean id="redisClusterPoolConfig" class="RedisClusterPoolConfig"&gt; &lt;property
  * name="testWhileIdle" value="true"/&gt; &lt;/bean&gt;
- * <p>
+ * <br> 
  * <pre>
  *  maxActive is 8
  *  testWhileIdle is true
