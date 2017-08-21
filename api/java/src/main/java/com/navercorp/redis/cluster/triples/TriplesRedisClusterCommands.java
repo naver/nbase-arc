@@ -91,11 +91,11 @@ public interface TriplesRedisClusterCommands {
     /**
      * Add the string values.
      *
-     * @param key
-     * @param field
-     * @param name
-     * @param unixTime
-     * @param values
+     * @param key      the key
+     * @param field    the field
+     * @param name     the name
+     * @param unixTime the unixTime
+     * @param values   the values
      * @return Integer reply, the number of saved elements.
      */
     Long sladdAt(String key, String field, String name, long unixTime, String... values);
@@ -337,11 +337,11 @@ public interface TriplesRedisClusterCommands {
     /**
      * Add the string values.
      *
-     * @param key
-     * @param field
-     * @param name
-     * @param unixTime
-     * @param values
+     * @param key      the key
+     * @param field    the field
+     * @param name     the name
+     * @param unixTime the unixTime 
+     * @param values   the values
      * @return Integer reply, the number of saved elements.
      */
     Long ssaddAt(String key, String field, String name, long unixTime, String... values);

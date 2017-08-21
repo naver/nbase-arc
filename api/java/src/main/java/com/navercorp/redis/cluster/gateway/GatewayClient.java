@@ -46,6 +46,7 @@ import redis.clients.jedis.params.geo.GeoRadiusParam;
  * redis cluster<br>
  * <p>
  * GatewayClient
+ * </p>
  * <p>
  * <b>Spring Bean</b><br>
  * <pre>
@@ -58,6 +59,7 @@ import redis.clients.jedis.params.geo.GeoRadiusParam;
  * &lt;/bean&gt;
  *
  * </pre>
+ * 
  * <p>
  * <b>Example</b><br>
  * <pre>
@@ -69,7 +71,8 @@ import redis.clients.jedis.params.geo.GeoRadiusParam;
  * String result = client.get("foo");
  * client.destroy();
  * </pre>
- * <p>
+ * 
+ * 
  * <p>
  * <b>Pipeline</b><br>
  * <pre>
@@ -87,7 +90,6 @@ import redis.clients.jedis.params.geo.GeoRadiusParam;
  *   }
  * }
  * </pre>
- * <p>
  *
  * @author seongminwoo
  * @author jaehong.kim

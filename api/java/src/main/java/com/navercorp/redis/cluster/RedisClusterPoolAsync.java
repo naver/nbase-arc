@@ -69,6 +69,8 @@ public class RedisClusterPoolAsync extends Pool<RedisCluster> {
      * @param host       the host
      * @param port       the port
      * @param timeout    the timeout
+     * @param keyspace   the keyspace
+     * @param gcp        the GatewayConnectionPool 
      */
     public RedisClusterPoolAsync(final RedisClusterPoolConfig poolConfig, final String host, int port, int timeout,
                             final String keyspace, final GatewayConnectionPool gcp) {

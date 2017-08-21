@@ -156,7 +156,7 @@ public class NodeWatcher implements Watcher {
     }
 
     /**
-     * @param event
+     * @param event the event
      * @see org.apache.zookeeper.Watcher#process(org.apache.zookeeper.WatchedEvent)
      */
     public void process(WatchedEvent event) {

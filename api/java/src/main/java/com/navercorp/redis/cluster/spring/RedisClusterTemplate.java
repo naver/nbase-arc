@@ -19,7 +19,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 
 /**
  * The Class RedisClusterTemplate using JdkSerializationRedisSerializer.
- * You must annotate @Qualifier to use this class with <String, String> type of generic, 
+ * You must annotate @Qualifier to use this class with &lt;String, String&gt; type of generic, 
  * otherwise StringRedisClusterTemplate using StringRedisSerializer will be selected.  
  *
  * @param <K> the key type

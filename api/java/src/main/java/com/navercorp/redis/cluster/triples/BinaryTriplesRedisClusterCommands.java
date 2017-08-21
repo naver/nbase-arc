@@ -89,11 +89,11 @@ public interface BinaryTriplesRedisClusterCommands {
     /**
      * Add the values.
      *
-     * @param key
-     * @param field
-     * @param name
-     * @param unixTime
-     * @param values
+     * @param key      the key
+     * @param field    the field
+     * @param name     the name
+     * @param unixTime the unixTime
+     * @param values   the values
      * @return Integer reply, the number of saved elements.
      */
     Long sladdAt(byte[] key, byte[] field, byte[] name, long unixTime, byte[]... values);
@@ -334,11 +334,11 @@ public interface BinaryTriplesRedisClusterCommands {
     /**
      * Add the values.
      *
-     * @param key
-     * @param field
-     * @param name
-     * @param unixTime
-     * @param values
+     * @param key      the key
+     * @param field    the field
+     * @param name     the name
+     * @param unixTime the unixTime
+     * @param values   the values
      * @return Integer reply, the number of saved elements.
      */
     Long ssaddAt(byte[] key, byte[] field, byte[] name, long unixTime, byte[]... values);
