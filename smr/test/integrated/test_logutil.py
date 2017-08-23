@@ -64,7 +64,7 @@ class TestLogUtil (unittest.TestCase):
             seqs = master.smr.getseq_log()
             file_seqs = []
             seq = 0
-            while seq < seqs['max']:
+            while seq + 64*1024*1024 < seqs['max']:
                 file_seqs.append(seq)
                 seq = seq + 64*1024*1024
 
