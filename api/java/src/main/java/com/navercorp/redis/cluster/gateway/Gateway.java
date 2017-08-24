@@ -80,9 +80,11 @@ public class Gateway implements GatewayServerData {
         if (config.getDomainAddress() != null) {
             // domain
             addresses = GatewayAddress.asListFromDomain(config.getDomainAddress());
+            init(addresses);
         } else if (config.getIpAddress() != null) {
             // IP
             addresses = GatewayAddress.asList(config.getIpAddress());
+            init(addresses);
         } else if (config.isZkUsed()) {
             // zookeeper
             try {
@@ -92,17 +94,15 @@ public class Gateway implements GatewayServerData {
                 addresses = nodeWatcher.getGatewayAddress();
                 affinity = nodeWatcher.getGatewayAffinity();
             } catch (Exception e) {
-                log.error("[Gateway] Failed to connect CM. " + config.getZkAddress() + " - " + config.getClusterName(),
+                log.error("[Gateway] Failed to connect ZK. " + config.getZkAddress() + " - " + config.getClusterName(),
                         e);
             }
         }
 
-        if (addresses == null || addresses.size() == 0) {
+        if (servers.size() == 0) {
             destroy();
             throw new IllegalArgumentException("not found address " + config);
         }
-
-        init(addresses);
 
         this.selector = new GatewayServerSelector(config.getGatewaySelectorMethod());
     }

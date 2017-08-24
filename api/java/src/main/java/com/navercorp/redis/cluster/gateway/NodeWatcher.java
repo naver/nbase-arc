@@ -20,8 +20,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.zookeeper.KeeperException;
@@ -47,13 +53,15 @@ public class NodeWatcher implements Watcher {
 
     private final Logger log = LoggerFactory.getLogger(NodeWatcher.class);
 
-    final CountDownLatch connLatcher = new CountDownLatch(1);
+    private CountDownLatch connLatcher;
 
     private ZooKeeper zk;
     private GatewayConfig config;
     private GatewayServerData gatewayServerData;
     private ObjectMapper objectMapper = new ObjectMapper();
 
+    final ExecutorService connectExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean shutdown = new AtomicBoolean(false);
 
     public NodeWatcher(GatewayServerData gatewayServerData) {
         this.gatewayServerData = gatewayServerData;
@@ -63,13 +71,40 @@ public class NodeWatcher implements Watcher {
         this.config = config;
     }
 
-    public void start() throws IOException, InterruptedException, KeeperException {
+    public void start() throws InterruptedException, ExecutionException, TimeoutException {
         log.info("[NodeWatcher] Starting {} {}", config.getZkAddress(), buildGatewayPath());
 
-        this.zk = new ZooKeeper(config.getZkAddress(), config.getZkSessionTimeout(), this);
-        this.connLatcher.await(config.getZkConnectTimeout(), TimeUnit.MILLISECONDS); // if not yet connected to ZooKeeper, wait
+        this.connLatcher = new CountDownLatch(1);
+        connectExecutor.submit(zkConnector);
+        this.connLatcher.await(config.getZkConnectTimeout(), TimeUnit.MILLISECONDS);
     }
 
+    private Runnable zkConnector = new Runnable() {
+        @Override
+        public void run() {
+            int retryDelay = 500;
+
+            while (shutdown.get() == false) {
+                try {
+                    log.warn("[NodeWatcher] try to connect to zookeeper.");
+                    zk = new ZooKeeper(config.getZkAddress(), config.getZkSessionTimeout(), NodeWatcher.this);
+                    return;
+                } catch (IOException e) {
+                    log.warn("[NodeWatcher] failed to connect to zookeeper.", e);
+                    retryDelay *= 2;
+                    if (retryDelay > 8000)
+                        retryDelay = 8000;
+                }
+                
+                try {
+                    Thread.sleep(retryDelay);
+                } catch (InterruptedException e) {
+                    log.error("[NodeWatcher] failed to sleep for retryDelay.", e);
+                }
+            }
+        }
+    };
+    
     String buildGatewayPath() {
         StringBuilder sb = new StringBuilder();
         sb.append(ZK_CLUSTER_PATH).append("/").append(config.getClusterName()).append(ZK_GATEWAY);
@@ -144,6 +179,9 @@ public class NodeWatcher implements Watcher {
     public void stop() {
         log.info("[NodeWatcher] Stop");
 
+        shutdown.set(true);
+        connectExecutor.shutdown();
+        
         if (zk == null) {
             return;
         }
@@ -168,10 +206,21 @@ public class NodeWatcher implements Watcher {
             switch (event.getState()) {
                 case SyncConnected:
                     log.debug("[NodeWatcher] SyncConnected");
+                    reloadGatewaylist();
+                    reloadGatewayAffinity();
                     this.connLatcher.countDown();
                     break;
+                case Expired:
+                    log.debug("[NodeWatcher] Expired");
+                    try {
+                        zk.close();
+                    } catch (InterruptedException e) {
+                        log.error("[NodeWatcher] failed to clean up ZooKeeper");
+                    }
+                    connectExecutor.submit(zkConnector);
+                    break;
                 default:
-
+                    break;
             }
         } else if (event.getType() == Event.EventType.NodeChildrenChanged) {
             log.debug("[NodeWatcher] NodeChildrenChanged");
