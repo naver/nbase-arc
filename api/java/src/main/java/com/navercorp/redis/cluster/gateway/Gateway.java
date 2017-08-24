@@ -135,13 +135,14 @@ public class Gateway implements GatewayServerData {
                             config.getTimeoutMillisec(), config.getKeyspace(), gcp);
                     final int count = gatewayServer.preload(config.getClientSyncTimeUnitMillis(),
                             config.getConnectPerDelayMillis(), config.getPoolConfig());
+                    this.servers.put(address.getName(), gatewayServer);
+                    gatewayServer.setExist(true);
+                    log.info("[Gateway] Add gateway server " + gatewayServer);
+                    
                     this.gcp.addGw(address.getId(), address.getHost(), address.getPort(),
                             config.getPhysicalConnectionCount(), config.getPhysicalConnectionReconnectInterval())
                             .get(config.getTimeoutMillisec(), TimeUnit.MILLISECONDS);
-                    gatewayServer.setValid(count > 0);
-                    gatewayServer.setExist(true);
-                    this.servers.put(address.getName(), gatewayServer);
-                    log.info("[Gateway] Add gateway server " + gatewayServer);
+                    gatewayServer.setValid(true);
                 }
             } catch (Exception ex) {
                 log.error("[Gateway] Failed to reload " + address, ex);
