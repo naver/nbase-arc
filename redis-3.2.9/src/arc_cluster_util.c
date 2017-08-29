@@ -253,7 +253,7 @@ static void
 playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 {
   struct dumpState *ds = (struct dumpState *) data;
-  int ret = 0, nw;
+  int ret = 0, nw, len;
   UNUSED (mask);
 
 
@@ -299,9 +299,10 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 	}
     }
 
+  len = ds->aof.io.buffer.pos - ds->aofpos;
   nw =
     write (fd, ds->aof.io.buffer.ptr + ds->aofpos,
-	   ds->aof.io.buffer.pos - ds->aofpos);
+	   ds->net_avail < len ? ds->net_avail : len);
 
   if (nw == -1 && errno == EAGAIN)
     {
