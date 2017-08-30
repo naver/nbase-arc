@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -64,6 +66,7 @@ public class Gateway implements GatewayServerData {
     private GatewayAffinity affinity = new GatewayAffinity();
     
     private final GatewayConnectionPool gcp;
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
     /**
      * Instantiates a new gateway.
@@ -170,7 +173,13 @@ public class Gateway implements GatewayServerData {
         for (final GatewayServer server : deletedServers) {
             server.setExist(false);
             server.setValid(false); // set valid flag to false if gateway is removed or not valid
-            server.close();
+            executor.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    server.close();
+                }
+            }, 3, TimeUnit.MINUTES);
+            
             if (this.servers.remove(server.getAddress().getName()) == null) {
                 log.error("[Gateway] Not found deleted gateway server " + server + ", list=" + this.servers);
             }
@@ -230,6 +239,8 @@ public class Gateway implements GatewayServerData {
         if (nodeWatcher != null) {
             nodeWatcher.stop();
         }
+        
+        executor.shutdown();
 
         for (GatewayServer server : this.servers.values()) {
             server.destroy();
