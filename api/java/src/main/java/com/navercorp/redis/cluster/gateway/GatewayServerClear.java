@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.navercorp.redis.cluster.util.DaemonThreadFactory;
+
 /**
  * @author jaehong.kim
  */
@@ -36,7 +38,8 @@ public class GatewayServerClear implements Runnable {
     private long lastRunTime = System.currentTimeMillis();
 
     public GatewayServerClear(final int periodSeconds) {
-        this.scheduler = Executors.newScheduledThreadPool(1);
+        this.scheduler = Executors.newScheduledThreadPool(1,
+                new DaemonThreadFactory("nbase-arc-gateway-server-clearer-", true));
         this.scheduler.scheduleAtFixedRate(this, periodSeconds, periodSeconds, TimeUnit.SECONDS);
     }
 

@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -30,6 +29,8 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.navercorp.redis.cluster.util.DaemonThreadFactory;
+
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
@@ -60,7 +61,8 @@ public class NodeWatcher implements Watcher {
     private GatewayServerData gatewayServerData;
     private ObjectMapper objectMapper = new ObjectMapper();
 
-    final ExecutorService connectExecutor = Executors.newSingleThreadExecutor();
+    final ExecutorService connectExecutor = Executors.newSingleThreadExecutor(
+            new DaemonThreadFactory("nbase-arc-zookeeper-connector-", true));
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
 
     public NodeWatcher(GatewayServerData gatewayServerData) {

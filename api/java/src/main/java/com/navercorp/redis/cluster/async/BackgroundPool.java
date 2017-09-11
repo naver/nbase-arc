@@ -18,8 +18,8 @@ package com.navercorp.redis.cluster.async;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.atomic.AtomicInteger;
+
+import com.navercorp.redis.cluster.util.DaemonThreadFactory;
 
 /**
  * @author jaehong.kim
@@ -42,7 +42,7 @@ public class BackgroundPool {
             if (this.pool != null) {
                 return this.pool;
             }
-            this.pool = Executors.newFixedThreadPool(this.poolSize, new BackgroundPoolFactory());
+            this.pool = Executors.newFixedThreadPool(this.poolSize, new DaemonThreadFactory(THREAD_PREFIX, true));
         }
         return this.pool;
     }
@@ -65,15 +65,5 @@ public class BackgroundPool {
         }
         sb.append("}");
         return sb.toString();
-    }
-
-    class BackgroundPoolFactory implements ThreadFactory {
-        private AtomicInteger count = new AtomicInteger(0);
-
-        public Thread newThread(Runnable runnable) {
-            final Thread t = new Thread(runnable, THREAD_PREFIX + count.getAndIncrement());
-            t.setDaemon(true);
-            return t;
-        }
     }
 }

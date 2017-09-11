@@ -31,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.navercorp.nbasearc.gcp.GatewayConnectionPool;
+import com.navercorp.redis.cluster.util.DaemonThreadFactory;
 
 /**
  *
@@ -66,7 +67,8 @@ public class Gateway implements GatewayServerData {
     private GatewayAffinity affinity = new GatewayAffinity();
     
     private final GatewayConnectionPool gcp;
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
+            new DaemonThreadFactory("nbase-arc-gateway-closer-", true));
 
     /**
      * Instantiates a new gateway.
@@ -114,18 +116,15 @@ public class Gateway implements GatewayServerData {
         log.info("[Gateway] Reloading {}", addresses);
 
         synchronized (this.servers) {
-            // add
-            addServers(addresses);
-
-            // del
-            delServers(addresses);
+            addNewServers(addresses);
+            delOutdatedServers(addresses);
             buildIndex();
         }
 
         log.info("[Gateway] Reloaded {}", servers);
     }
 
-    private void addServers(List<GatewayAddress> addresses) {
+    private void addNewServers(List<GatewayAddress> addresses) {
         for (GatewayAddress address : addresses) {
             try {
                 if (this.servers.containsKey(address.getName())) {
@@ -153,7 +152,7 @@ public class Gateway implements GatewayServerData {
         }
     }
 
-    private void delServers(List<GatewayAddress> addresses) {
+    private void delOutdatedServers(List<GatewayAddress> addresses) {
         final List<GatewayServer> deletedServers = new ArrayList<GatewayServer>();
         for (final GatewayServer server : servers.values()) {
             String currentGatewayName = server.getAddress().getName();
