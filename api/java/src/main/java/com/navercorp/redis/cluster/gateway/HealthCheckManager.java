@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.navercorp.redis.cluster.util.DaemonThreadFactory;
+
 /**
  * The Class HealthCheckManager.
  *
@@ -60,8 +62,10 @@ public class HealthCheckManager implements Runnable {
      */
     public HealthCheckManager(final GatewayServerData serverData, final int periodSeconds, final int threadSize) {
         this.serverData = serverData;
-        this.threadPool = Executors.newFixedThreadPool(threadSize);
-        this.scheduler = Executors.newScheduledThreadPool(1);
+        this.threadPool = Executors.newFixedThreadPool(threadSize,
+                new DaemonThreadFactory("nbase-arc-gateway-healthchecker-", true));
+        this.scheduler = Executors.newScheduledThreadPool(1,
+                new DaemonThreadFactory("nbase-arc-gateway-healthcheck-scheduler-", true));
         this.scheduler.scheduleAtFixedRate(this, periodSeconds, periodSeconds, TimeUnit.SECONDS);
     }
 
