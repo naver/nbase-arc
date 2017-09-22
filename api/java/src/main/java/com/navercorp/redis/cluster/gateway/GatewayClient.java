@@ -41,6 +41,7 @@ import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 
 /**
  * redis cluster<br>
@@ -2489,6 +2490,54 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    Long zadd(final byte[] key, final double score, final byte[] member, final ZAddParams params) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zadd(key, score, member, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    Long zadd(final String key, final double score, final String member, final ZAddParams params) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zadd(key, score, member, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+
+    Long zadd(final byte[] key, final Map<byte[], Double> scoreMembers, final ZAddParams params) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.zadd(key, scoreMembers, params);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.WRITE;
+            }
+        });
+    }
+    
     /* 
 	 * @see RedisClusterCommands#zcard(java.lang.String)
 	 */

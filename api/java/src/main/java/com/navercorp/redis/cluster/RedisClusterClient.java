@@ -33,6 +33,7 @@ import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -1076,6 +1077,17 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         zaddBinary2(SafeEncoder.encode(key), binaryScoreMembers);
     }
 
+    public void zadd(String key, double score, String member, ZAddParams params) {
+        zadd(SafeEncoder.encode(key), score, SafeEncoder.encode(member), params);
+    }
+
+    public void zadd(String key, Map<String, Double> scoreMembers, ZAddParams params) {
+        HashMap<byte[], Double> binaryScoreMembers = new HashMap<byte[], Double>();
+        for (Map.Entry<String, Double> entry : scoreMembers.entrySet()) {
+            binaryScoreMembers.put(SafeEncoder.encode(entry.getKey()), entry.getValue());
+        }
+        zadd(SafeEncoder.encode(key), binaryScoreMembers, params);
+    }
 
     /**
      * Object refcount.

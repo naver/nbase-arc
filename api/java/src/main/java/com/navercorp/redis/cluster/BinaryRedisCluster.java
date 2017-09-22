@@ -36,6 +36,7 @@ import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.util.JedisByteHashMap;
 import redis.clients.util.SafeEncoder;
 
@@ -587,6 +588,16 @@ public class BinaryRedisCluster extends TriplesRedisCluster implements BinaryRed
 
     public Long zadd2(final byte[] key, final Map<byte[], Double> scoreMembers) {
         client.zaddBinary2(key, scoreMembers);
+        return client.getIntegerReply();
+    }
+
+    public Long zadd(byte[] key, double score, byte[] member, ZAddParams params) {
+        client.zadd(key, score, member, params);
+        return client.getIntegerReply();
+    }
+
+    public Long zadd(byte[] key, Map<byte[], Double> scoreMembers, ZAddParams params) {
+        client.zadd(key, scoreMembers, params);
         return client.getIntegerReply();
     }
 
