@@ -297,10 +297,10 @@ merge_int_replies (command_context * ctx)
   ssize_t len;
   sbuf_pos start;
   ParseContext *parse_ctx;
-  long long del_count, ll;
+  long long count, ll;
   int i, ret;
 
-  del_count = 0;
+  count = 0;
   for (i = 0; i < ARRAY_N (&ctx->msg_handles); i++)
     {
       char ch;
@@ -315,7 +315,7 @@ merge_int_replies (command_context * ctx)
 	  ret = sbuf_string2ll (start, len - 1, &ll);
 	  if (ret)
 	    {
-	      del_count += ll;
+	      count += ll;
 	      continue;
 	    }
 	}
@@ -324,7 +324,7 @@ merge_int_replies (command_context * ctx)
 					"-ERR bad integer response\r\n");
     }
   return stream_create_sbuf_printf (mgr->shared_stream, ":%lld\r\n",
-				    del_count);
+				    count);
 }
 
 void
@@ -418,7 +418,7 @@ mget_command (command_context * ctx)
   COROUTINE_END;
 }
 
-static void
+void
 multi_key_int_reply_command (command_context * ctx)
 {
   sbuf *reply, *err_reply;
@@ -456,18 +456,6 @@ multi_key_int_reply_command (command_context * ctx)
   reply_and_free (ctx, reply);
 
   COROUTINE_END;
-}
-
-void
-touch_command (command_context * ctx)
-{
-  multi_key_int_reply_command (ctx);
-}
-
-void
-del_command (command_context * ctx)
-{
-  multi_key_int_reply_command (ctx);
 }
 
 void

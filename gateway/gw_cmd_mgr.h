@@ -128,6 +128,7 @@ int is_cmd_async_finished (command_async * cmd);
 
 // User Command function
 void single_key_command (command_context * ctx);
+void multi_key_int_reply_command (command_context * ctx);
 void mget_command (command_context * ctx);
 void touch_command (command_context * ctx);
 void mset_command (command_context * ctx);
