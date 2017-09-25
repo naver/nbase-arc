@@ -102,6 +102,11 @@ public class BinaryRedisCluster extends TriplesRedisCluster implements BinaryRed
         return client.getIntegerReply() == 1;
     }
 
+    public Long exists(final byte[]... keys) {
+        client.exists(keys);
+        return client.getIntegerReply();
+    }
+
     public Long expire(final byte[] key, final int seconds) {
         client.expire(key, seconds);
         return client.getIntegerReply();
@@ -278,6 +283,21 @@ public class BinaryRedisCluster extends TriplesRedisCluster implements BinaryRed
 
     public Long bitcount(final byte[] key, long start, long end) {
         client.bitcount(key, start, end);
+        return client.getIntegerReply();
+    }
+
+    public Long bitpos(byte[] key, boolean bit) {
+        client.bitpos(key, bit);
+        return client.getIntegerReply();
+    }
+    
+    public Long bitpos(byte[] key, boolean bit, int start) {
+        client.bitpos(key, bit, start);
+        return client.getIntegerReply();
+    }
+    
+    public Long bitpos(byte[] key, boolean bit, int start, int end) {
+        client.bitpos(key, bit, start, end);
         return client.getIntegerReply();
     }
 

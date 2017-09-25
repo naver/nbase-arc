@@ -22,6 +22,7 @@ import java.util.Set;
 import org.junit.Test;
 
 import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -31,6 +32,7 @@ public class SortedSetCommandsTest extends RedisClusterTestBase {
     final byte[] ba = {0x0A};
     final byte[] bb = {0x0B};
     final byte[] bc = {0x0C};
+    final byte[] bd = {0x0D};
 
     @Override
     public void clear() {
@@ -56,6 +58,16 @@ public class SortedSetCommandsTest extends RedisClusterTestBase {
         status = redis.zadd(REDIS_KEY_0, 2d, "a");
         assertEquals(0, status);
 
+        status = redis.zadd(REDIS_KEY_0, 100d, "a", ZAddParams.zAddParams().xx());
+        assertEquals(0, status);
+        status = redis.zadd(REDIS_KEY_0, 101d, "a", ZAddParams.zAddParams().xx().ch());
+        assertEquals(1, status);
+
+        status = redis.zadd(REDIS_KEY_0, 100d, "d", ZAddParams.zAddParams().nx());
+        assertEquals(1, status);
+        status = redis.zadd(REDIS_KEY_0, 101d, "d", ZAddParams.zAddParams().nx().ch());
+        assertEquals(0, status);
+
         // Binary
         long bstatus = redis.zadd(REDIS_BKEY_0, 1d, ba);
         assertEquals(1, bstatus);
@@ -69,6 +81,15 @@ public class SortedSetCommandsTest extends RedisClusterTestBase {
         bstatus = redis.zadd(REDIS_BKEY_0, 2d, ba);
         assertEquals(0, bstatus);
 
+        bstatus = redis.zadd(REDIS_BKEY_0, 100d, ba, ZAddParams.zAddParams().xx());
+        assertEquals(0, bstatus);
+        bstatus = redis.zadd(REDIS_BKEY_0, 101d, ba, ZAddParams.zAddParams().xx().ch());
+        assertEquals(1, bstatus);
+
+        bstatus = redis.zadd(REDIS_BKEY_0, 100d, bd, ZAddParams.zAddParams().nx());
+        assertEquals(1, bstatus);
+        bstatus = redis.zadd(REDIS_BKEY_0, 101d, bd, ZAddParams.zAddParams().nx().ch());
+        assertEquals(0, bstatus);
     }
 
     @Test

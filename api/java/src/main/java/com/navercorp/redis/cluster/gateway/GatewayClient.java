@@ -312,6 +312,28 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
+    public Long exists(final String... keys) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            @Override
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.exists(keys);
+            }
+
+            @Override
+            public int getPartitionNumber() {
+                if (keys == null || keys.length < 1) {
+                    return GatewayPartitionNumber.NOT_MATCHED;
+                }
+                return GatewayPartitionNumber.get(keys[0]);
+            }
+
+            @Override
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+    
     /* 
 	 * @see BinaryRedisClusterCommands#exists(byte[])
 	 */
@@ -325,6 +347,28 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
                 return GatewayPartitionNumber.get(key);
             }
 
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long exists(final byte[]... keys) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            @Override
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.exists(keys);
+            }
+
+            @Override
+            public int getPartitionNumber() {
+                if (keys == null || keys.length < 1) {
+                    return GatewayPartitionNumber.NOT_MATCHED;
+                }
+                return GatewayPartitionNumber.get(keys[0]);
+            }
+
+            @Override
             public AffinityState getState() {
                 return AffinityState.READ;
             }
@@ -1569,6 +1613,102 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         return this.execute(new RedisClusterCallback<Long>() {
             public Long doInRedisCluster(RedisCluster redisCluster) {
                 return redisCluster.bitcount(key, start, end);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long bitpos(final String key, final boolean bit) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitpos(key, bit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long bitpos(final String key, final boolean bit, final int start) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitpos(key, bit, start);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long bitpos(final String key, final boolean bit, final int start, final int end) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitpos(key, bit, start, end);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long bitpos(final byte[] key, final boolean bit) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitpos(key, bit);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long bitpos(final byte[] key, final boolean bit, final int start) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitpos(key, bit, start);
+            }
+
+            public int getPartitionNumber() {
+                return GatewayPartitionNumber.get(key);
+            }
+
+            public AffinityState getState() {
+                return AffinityState.READ;
+            }
+        });
+    }
+
+    public Long bitpos(final byte[] key, final boolean bit, final int start, final int end) {
+        return this.execute(new RedisClusterCallback<Long>() {
+            public Long doInRedisCluster(RedisCluster redisCluster) {
+                return redisCluster.bitpos(key, bit, start, end);
             }
 
             public int getPartitionNumber() {

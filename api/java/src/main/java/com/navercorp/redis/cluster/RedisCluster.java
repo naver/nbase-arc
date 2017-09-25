@@ -92,6 +92,11 @@ public class RedisCluster extends BinaryRedisCluster implements
         client.exists(key);
         return client.getIntegerReply() == 1;
     }
+    
+    public Long exists(final String... keys) {
+        client.exists(keys);
+        return client.getIntegerReply();
+    }
 
     public Long expire(final String key, final int seconds) {
         client.expire(key, seconds);
@@ -267,7 +272,22 @@ public class RedisCluster extends BinaryRedisCluster implements
         client.bitcount(key, start, end);
         return client.getIntegerReply();
     }
-
+    
+    public Long bitpos(String key, boolean bit) {
+        client.bitpos(key, bit);
+        return client.getIntegerReply();
+    }
+    
+    public Long bitpos(String key, boolean bit, int start) {
+        client.bitpos(key, bit, start);
+        return client.getIntegerReply();
+    }
+    
+    public Long bitpos(String key, boolean bit, int start, int end) {
+        client.bitpos(key, bit, start, end);
+        return client.getIntegerReply();
+    }
+    
     public List<Long> bitfield(final String key, final String... arguments) {
         client.bitfield(key, arguments);
         return client.getIntegerMultiBulkReply();

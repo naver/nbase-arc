@@ -99,6 +99,15 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
     }
 
     /**
+     * Exists.
+     *
+     * @param keys the keys
+     */
+    public void exists(final String... keys) {
+        sendCommand(Command.EXISTS, keys);
+    }
+
+    /**
      * Del.
      *
      * @param keys the keys
@@ -1222,6 +1231,18 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
 
     public void touch(String... keys) {
         sendCommand(Command.TOUCH, keys);
+    }
+
+    public void bitpos(String key, boolean bit) {
+        sendCommand(Command.BITPOS, SafeEncoder.encode(key), SafeEncoder.encode(bit ? "1" : "0"));
+    }
+
+    public void bitpos(String key, boolean bit, int start) {
+        sendCommand(Command.BITPOS, SafeEncoder.encode(key), SafeEncoder.encode(bit ? "1" : "0"), toByteArray(start));
+    }
+
+    public void bitpos(String key, boolean bit, int start, int end) {
+        sendCommand(Command.BITPOS, SafeEncoder.encode(key), SafeEncoder.encode(bit ? "1" : "0"), toByteArray(start), toByteArray(end));
     }
     
 }
