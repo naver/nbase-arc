@@ -2630,7 +2630,7 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
-    Long zadd(final byte[] key, final double score, final byte[] member, final ZAddParams params) {
+    public Long zadd(final byte[] key, final double score, final byte[] member, final ZAddParams params) {
         return this.execute(new RedisClusterCallback<Long>() {
             public Long doInRedisCluster(RedisCluster redisCluster) {
                 return redisCluster.zadd(key, score, member, params);
@@ -2646,7 +2646,7 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
-    Long zadd(final String key, final double score, final String member, final ZAddParams params) {
+    public Long zadd(final String key, final double score, final String member, final ZAddParams params) {
         return this.execute(new RedisClusterCallback<Long>() {
             public Long doInRedisCluster(RedisCluster redisCluster) {
                 return redisCluster.zadd(key, score, member, params);
@@ -2662,7 +2662,7 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
         });
     }
 
-    Long zadd(final byte[] key, final Map<byte[], Double> scoreMembers, final ZAddParams params) {
+    public Long zadd(final byte[] key, final Map<byte[], Double> scoreMembers, final ZAddParams params) {
         return this.execute(new RedisClusterCallback<Long>() {
             public Long doInRedisCluster(RedisCluster redisCluster) {
                 return redisCluster.zadd(key, scoreMembers, params);
