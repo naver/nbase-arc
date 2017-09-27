@@ -74,6 +74,23 @@ public class BitCommandsTest extends RedisClusterTestBase {
         long c3 = redis.bitcount(REDIS_KEY_0, 2L, 5L);
         assertEquals(3, c3);
     }
+
+    @Test
+    public void bitPos() {
+        redis.setbit(REDIS_KEY_0, 16, true);
+        redis.setbit(REDIS_KEY_0, 24, true);
+        redis.setbit(REDIS_KEY_0, 40, true);
+        redis.setbit(REDIS_KEY_0, 56, true);
+
+        long c4 = redis.bitpos(REDIS_KEY_0, true);
+        assertEquals(16, c4);
+        c4 = redis.bitpos(REDIS_KEY_0, true, 3);
+        assertEquals(24, c4);
+        c4 = redis.bitpos(REDIS_KEY_0, true, 4, 5);
+        assertEquals(40, c4);
+        c4 = redis.bitpos(REDIS_KEY_0, true, 6);
+        assertEquals(56, c4);
+    }
     
     @Test
     public void bitField() {

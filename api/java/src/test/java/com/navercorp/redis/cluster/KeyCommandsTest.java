@@ -66,6 +66,20 @@ public class KeyCommandsTest extends RedisClusterTestBase {
 
         reply = redis.exists(REDIS_BKEY_0);
         assertFalse(reply);
+
+        status = redis.set(REDIS_KEY_0, REDIS_VALUE_0);
+        assertEquals("OK", status);
+        status = redis.set(REDIS_KEY_1, REDIS_VALUE_1);
+        assertEquals("OK", status);
+        lreply = redis.exists(REDIS_KEY_0, REDIS_KEY_1, "NOT_EXIST");
+        assertEquals(2, lreply);
+
+        status = redis.set(REDIS_BKEY_0, REDIS_BVALUE_0);
+        assertEquals("OK", status);
+        status = redis.set(REDIS_BKEY_1, REDIS_BVALUE_1);
+        assertEquals("OK", status);
+        lreply = redis.exists(REDIS_BKEY_0, REDIS_BKEY_1, "NOT_EXIST".getBytes());
+        assertEquals(2, lreply);
     }
 
     @Test

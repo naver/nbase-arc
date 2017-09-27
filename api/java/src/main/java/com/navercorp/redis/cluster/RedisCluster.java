@@ -35,6 +35,7 @@ import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.Tuple;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -90,6 +91,11 @@ public class RedisCluster extends BinaryRedisCluster implements
     public Boolean exists(final String key) {
         client.exists(key);
         return client.getIntegerReply() == 1;
+    }
+    
+    public Long exists(final String... keys) {
+        client.exists(keys);
+        return client.getIntegerReply();
     }
 
     public Long expire(final String key, final int seconds) {
@@ -266,7 +272,22 @@ public class RedisCluster extends BinaryRedisCluster implements
         client.bitcount(key, start, end);
         return client.getIntegerReply();
     }
-
+    
+    public Long bitpos(String key, boolean bit) {
+        client.bitpos(key, bit);
+        return client.getIntegerReply();
+    }
+    
+    public Long bitpos(String key, boolean bit, int start) {
+        client.bitpos(key, bit, start);
+        return client.getIntegerReply();
+    }
+    
+    public Long bitpos(String key, boolean bit, int start, int end) {
+        client.bitpos(key, bit, start, end);
+        return client.getIntegerReply();
+    }
+    
     public List<Long> bitfield(final String key, final String... arguments) {
         client.bitfield(key, arguments);
         return client.getIntegerMultiBulkReply();
@@ -573,6 +594,16 @@ public class RedisCluster extends BinaryRedisCluster implements
 
     public Long zadd2(final String key, final Map<String, Double> scoreMembers) {
         client.zadd2(key, scoreMembers);
+        return client.getIntegerReply();
+    }
+
+    public Long zadd(String key, double score, String member, ZAddParams params) {
+        client.zadd(key, score, member, params);
+        return client.getIntegerReply();
+    }
+
+    public Long zadd(String key, Map<String, Double> scoreMembers, ZAddParams params) {
+        client.zadd(key, scoreMembers, params);
         return client.getIntegerReply();
     }
 

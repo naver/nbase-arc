@@ -482,6 +482,8 @@ public final class RedisProtocol {
         BITCOUNT,
         
         BITFIELD,
+        
+        BITPOS,
 
         /**
          * The HSET.

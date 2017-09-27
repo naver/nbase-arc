@@ -16,6 +16,8 @@
 package com.navercorp.redis.cluster;
 
 import static com.navercorp.redis.cluster.connection.RedisProtocol.*;
+import static redis.clients.jedis.Protocol.toByteArray;
+import static redis.clients.jedis.Protocol.Command.ZADD;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +30,8 @@ import redis.clients.jedis.GeoCoordinate;
 import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.jedis.params.sortedset.ZAddParams;
+import redis.clients.util.SafeEncoder;
 
 import com.navercorp.redis.cluster.connection.RedisProtocol;
 import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
@@ -134,6 +138,15 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
      */
     public void exists(final byte[] key) {
         sendCommand(Command.EXISTS, key);
+    }
+    
+    /**
+     * Exists.
+     *
+     * @param keys the keys
+     */
+    public void exists(final byte[]... keys) {
+        sendCommand(Command.EXISTS, keys);
     }
 
     /**
@@ -305,6 +318,18 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
 
     public void bitcount(final byte[] key, long start, long end) {
         sendCommand(Command.BITCOUNT, key, RedisProtocol.toByteArray(start), RedisProtocol.toByteArray(end));
+    }
+
+    public void bitpos(byte[] key, boolean bit) {
+        sendCommand(Command.BITPOS, key, SafeEncoder.encode(bit ? "1" : "0"));
+    }
+
+    public void bitpos(byte[] key, boolean bit, int start) {
+        sendCommand(Command.BITPOS, key, SafeEncoder.encode(bit ? "1" : "0"), toByteArray(start));
+    }
+
+    public void bitpos(byte[] key, boolean bit, int start, int end) {
+        sendCommand(Command.BITPOS, key, SafeEncoder.encode(bit ? "1" : "0"), toByteArray(start), toByteArray(end));
     }
 
     public void bitfield(final byte[] key, final byte[]... arguments) {
@@ -639,6 +664,19 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
     public void zadd(final byte[] key, final double score, final byte[] member) {
         sendCommand(Command.ZADD, key, RedisProtocol.toByteArray(score), member);
     }
+
+    public void zadd(byte[] key, final double score, byte[] member, ZAddParams params) {
+        sendCommand(Command.ZADD, params.getByteParams(key, toByteArray(score), member));
+    }
+
+    public void zadd(byte[] key, Map<byte[], Double> scoreMembers, ZAddParams params) {
+        ArrayList<byte[]> args = convertScoreMembersToByteArrays(scoreMembers);
+        byte[][] argsArray = new byte[args.size()][];
+        args.toArray(argsArray);
+    
+        sendCommand(Command.ZADD, params.getByteParams(key, argsArray));
+    }
+    
 
     /**
      * Zadd binary.

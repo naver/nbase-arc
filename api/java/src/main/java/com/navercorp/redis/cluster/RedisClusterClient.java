@@ -33,6 +33,7 @@ import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.ScanParams;
 import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.params.geo.GeoRadiusParam;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -95,6 +96,15 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
      */
     public void exists(final String key) {
         exists(SafeEncoder.encode(key));
+    }
+
+    /**
+     * Exists.
+     *
+     * @param keys the keys
+     */
+    public void exists(final String... keys) {
+        sendCommand(Command.EXISTS, keys);
     }
 
     /**
@@ -1076,6 +1086,17 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         zaddBinary2(SafeEncoder.encode(key), binaryScoreMembers);
     }
 
+    public void zadd(String key, double score, String member, ZAddParams params) {
+        zadd(SafeEncoder.encode(key), score, SafeEncoder.encode(member), params);
+    }
+
+    public void zadd(String key, Map<String, Double> scoreMembers, ZAddParams params) {
+        HashMap<byte[], Double> binaryScoreMembers = new HashMap<byte[], Double>();
+        for (Map.Entry<String, Double> entry : scoreMembers.entrySet()) {
+            binaryScoreMembers.put(SafeEncoder.encode(entry.getKey()), entry.getValue());
+        }
+        zadd(SafeEncoder.encode(key), binaryScoreMembers, params);
+    }
 
     /**
      * Object refcount.
@@ -1210,6 +1231,18 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
 
     public void touch(String... keys) {
         sendCommand(Command.TOUCH, keys);
+    }
+
+    public void bitpos(String key, boolean bit) {
+        sendCommand(Command.BITPOS, SafeEncoder.encode(key), SafeEncoder.encode(bit ? "1" : "0"));
+    }
+
+    public void bitpos(String key, boolean bit, int start) {
+        sendCommand(Command.BITPOS, SafeEncoder.encode(key), SafeEncoder.encode(bit ? "1" : "0"), toByteArray(start));
+    }
+
+    public void bitpos(String key, boolean bit, int start, int end) {
+        sendCommand(Command.BITPOS, SafeEncoder.encode(key), SafeEncoder.encode(bit ? "1" : "0"), toByteArray(start), toByteArray(end));
     }
     
 }

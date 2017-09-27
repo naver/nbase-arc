@@ -16,12 +16,15 @@
 
 package com.navercorp.redis.cluster;
 
+import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.Test;
 
 import redis.clients.jedis.Tuple;
+import redis.clients.jedis.params.sortedset.ZAddParams;
 import redis.clients.util.SafeEncoder;
 
 /**
@@ -31,6 +34,7 @@ public class SortedSetCommandsTest extends RedisClusterTestBase {
     final byte[] ba = {0x0A};
     final byte[] bb = {0x0B};
     final byte[] bc = {0x0C};
+    final byte[] bd = {0x0D};
 
     @Override
     public void clear() {
@@ -56,6 +60,28 @@ public class SortedSetCommandsTest extends RedisClusterTestBase {
         status = redis.zadd(REDIS_KEY_0, 2d, "a");
         assertEquals(0, status);
 
+        status = redis.zadd(REDIS_KEY_0, 100d, "a", ZAddParams.zAddParams().xx());
+        assertEquals(0, status);
+        status = redis.zadd(REDIS_KEY_0, 101d, "a", ZAddParams.zAddParams().xx().ch());
+        assertEquals(1, status);
+
+        status = redis.zadd(REDIS_KEY_0, 100d, "d", ZAddParams.zAddParams().nx());
+        assertEquals(1, status);
+        status = redis.zadd(REDIS_KEY_0, 101d, "d", ZAddParams.zAddParams().nx().ch());
+        assertEquals(0, status);
+
+        Map<String, Double> elements = new HashMap<String, Double>();
+        elements.put("a", 0d);
+        elements.put("b", 1d);
+        elements.put("c", 2d);
+        status = redis.zadd(REDIS_KEY_1, elements, ZAddParams.zAddParams().nx());
+        assertEquals(3, status);
+        
+        Set<Tuple> key1Elements = redis.zrangeWithScores(REDIS_KEY_1, 0, 3);
+        assertTrue(key1Elements.contains(new Tuple("a", 0d)));
+        assertTrue(key1Elements.contains(new Tuple("b", 1d)));
+        assertTrue(key1Elements.contains(new Tuple("c", 2d)));
+
         // Binary
         long bstatus = redis.zadd(REDIS_BKEY_0, 1d, ba);
         assertEquals(1, bstatus);
@@ -69,6 +95,27 @@ public class SortedSetCommandsTest extends RedisClusterTestBase {
         bstatus = redis.zadd(REDIS_BKEY_0, 2d, ba);
         assertEquals(0, bstatus);
 
+        bstatus = redis.zadd(REDIS_BKEY_0, 100d, ba, ZAddParams.zAddParams().xx());
+        assertEquals(0, bstatus);
+        bstatus = redis.zadd(REDIS_BKEY_0, 101d, ba, ZAddParams.zAddParams().xx().ch());
+        assertEquals(1, bstatus);
+
+        bstatus = redis.zadd(REDIS_BKEY_0, 100d, bd, ZAddParams.zAddParams().nx());
+        assertEquals(1, bstatus);
+        bstatus = redis.zadd(REDIS_BKEY_0, 101d, bd, ZAddParams.zAddParams().nx().ch());
+        assertEquals(0, bstatus);
+
+        Map<byte[], Double> belements = new HashMap<byte[], Double>();
+        belements.put(ba, 0d);
+        belements.put(bb, 1d);
+        belements.put(bc, 2d);
+        bstatus = redis.zadd(REDIS_BKEY_1, belements, ZAddParams.zAddParams().nx());
+        assertEquals(3, bstatus);
+
+        Set<Tuple> bkey1Elements = redis.zrangeWithScores(REDIS_BKEY_1, 0, 3);
+        assertTrue(bkey1Elements.contains(new Tuple(ba, 0d)));
+        assertTrue(bkey1Elements.contains(new Tuple(bb, 1d)));
+        assertTrue(bkey1Elements.contains(new Tuple(bc, 2d)));
     }
 
     @Test
