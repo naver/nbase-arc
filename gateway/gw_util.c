@@ -260,3 +260,27 @@ dictSdsDestructor (void *privdata, void *val)
   DICT_NOTUSED (privdata);
   sdsfree (val);
 }
+
+/* Resizing aeCreateFileEvent */
+int
+aexCreateFileEvent (aeEventLoop * eventLoop, int fd, int mask,
+		    aeFileProc * proc, void *clientData)
+{
+  int ret;
+
+  errno = 0;
+  ret = aeCreateFileEvent (eventLoop, fd, mask, proc, clientData);
+  if (ret == AE_ERR && errno == ERANGE)
+    {
+      int curr = aeGetSetSize (eventLoop);
+      int ssz = curr * 2 > fd ? curr * 2 : fd + 1024;
+
+      ret = aeResizeSetSize (eventLoop, ssz);
+      if (ret != AE_OK)
+	{
+	  return ret;
+	}
+      ret = aeCreateFileEvent (eventLoop, fd, mask, proc, clientData);
+    }
+  return ret;
+}

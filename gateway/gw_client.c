@@ -92,7 +92,7 @@ cli_add_client (client_pool * pool, int fd)
   anetEnableTcpNoDelay (NULL, fd);
   anetKeepAlive (NULL, fd, GW_DEFAULT_TCP_KEEPALIVE);
 
-  if (aeCreateFileEvent (pool->el, fd, AE_READABLE, cli_read_handler, cli) ==
+  if (aexCreateFileEvent (pool->el, fd, AE_READABLE, cli_read_handler, cli) ==
       AE_ERR)
     {
       zfree (cli);
@@ -212,7 +212,7 @@ enable_cli_send_handler (client * cli)
 
   if (!(aeGetFileEvents (pool->el, cli->fd) & AE_WRITABLE))
     {
-      if (aeCreateFileEvent
+      if (aexCreateFileEvent
 	  (pool->el, cli->fd, AE_WRITABLE, cli_send_handler, cli) == AE_ERR)
 	{
 	  close_client (cli);

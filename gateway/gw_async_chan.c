@@ -37,7 +37,7 @@ async_create (aeEventLoop * el, void *chan_data)
   anetNonBlock (NULL, chan->pipefd[ASYNC_PIPE_READ]);
   anetNonBlock (NULL, chan->pipefd[ASYNC_PIPE_WRITE]);
 
-  if (aeCreateFileEvent
+  if (aexCreateFileEvent
       (el, chan->pipefd[ASYNC_PIPE_READ], AE_READABLE, async_receive_event,
        chan) == AE_ERR)
     {
@@ -90,7 +90,7 @@ async_send_event (aeEventLoop * my_el, async_chan * target,
 
   if (notify)
     {
-      if (aeCreateFileEvent
+      if (aexCreateFileEvent
 	  (my_el, target->pipefd[ASYNC_PIPE_WRITE], AE_WRITABLE,
 	   async_notify_event, NULL) == AE_ERR)
 	{

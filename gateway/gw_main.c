@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+#include <sys/time.h>
+#include <sys/resource.h>
+
 #include "gw_main.h"
 
 global_conf_t global;
@@ -225,6 +228,7 @@ init_config (int argc, char **argv)
   const char *confmaster_addr;
   char *logfile_prefix = NULL;
   int confmaster_port, ret;
+  struct rlimit rlim;
 
   global.port = GW_DEFAULT_SERVERPORT;
   global.admin_port = global.port + 1;
@@ -296,6 +300,22 @@ init_config (int argc, char **argv)
   else
     {
       gwlog_init (logfile_prefix, global.verbosity, 1, 1, 0);
+    }
+
+  // enlarge maxclients close to system limit
+  ret = getrlimit (RLIMIT_NOFILE, &rlim);
+  if (ret < 0)
+    {
+      gwlog (GW_WARNING, "getrlimit(2) failed:%d", ret);
+      exit (1);
+    }
+  if (rlim.rlim_cur == RLIM_INFINITY || rlim.rlim_cur > INT_MAX)
+    {
+      global.maxclients = INT_MAX;
+    }
+  else if ((int) (rlim.rlim_cur - 1024) > global.maxclients)
+    {
+      global.maxclients = (int) (rlim.rlim_cur - 1024);
     }
 
   if (global.tcp_backlog < GW_MIN_TCP_BACKLOG)
@@ -384,7 +404,7 @@ start_master (void)
       exit (1);
     }
   anetNonBlock (NULL, master.fd);
-  if (aeCreateFileEvent
+  if (aexCreateFileEvent
       (master.el, master.fd, AE_READABLE, user_accept_tcp_handler,
        NULL) == AE_ERR)
     {
@@ -402,7 +422,7 @@ start_master (void)
       exit (1);
     }
   anetNonBlock (NULL, master.admin_fd);
-  if (aeCreateFileEvent
+  if (aexCreateFileEvent
       (master.el, master.admin_fd, AE_READABLE, admin_accept_tcp_handler,
        NULL) == AE_ERR)
     {

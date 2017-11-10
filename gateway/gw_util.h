@@ -24,6 +24,7 @@
 #include "zmalloc.h"
 #include "dict.h"
 #include "sds.h"
+#include "ae.h"
 
 #define run_with_period(_ms_) if ((_ms_ <= 1000/(*hz)) || !((*cronloops)%((_ms_)/(1000/(*hz)))))
 
@@ -61,4 +62,8 @@ int dictSdsKeyCompare (void *privdata, const void *key1, const void *key2);
 int dictSdsKeyCaseCompare (void *privdata, const void *key1,
 			   const void *key2);
 void dictSdsDestructor (void *privdata, void *val);
+
+/* Resizing aeCreateFileEvent */
+int aexCreateFileEvent (aeEventLoop * eventLoop, int fd, int mask,
+			aeFileProc * proc, void *clientData);
 #endif
