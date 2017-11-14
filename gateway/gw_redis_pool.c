@@ -1507,7 +1507,7 @@ enable_msg_send_handler (redis_connection * conn)
   pool = conn->my_pool;
   if (!(aeGetFileEvents (pool->el, conn->fd) & AE_WRITABLE))
     {
-      if (aeCreateFileEvent
+      if (aexCreateFileEvent
 	  (pool->el, conn->fd, AE_WRITABLE, msg_send_handler, conn) == AE_ERR)
 	{
 	  return ERR;
@@ -2035,8 +2035,8 @@ connect_redis (redis_pool * pool, redis_connection * conn)
   anetEnableTcpNoDelay (NULL, fd);
   anetKeepAlive (NULL, fd, GW_DEFAULT_TCP_KEEPALIVE);
 
-  if (aeCreateFileEvent (pool->el, fd, AE_READABLE, msg_read_handler, conn) ==
-      AE_ERR)
+  if (aexCreateFileEvent (pool->el, fd, AE_READABLE, msg_read_handler, conn)
+      == AE_ERR)
     {
       close (fd);
       return ERR;
