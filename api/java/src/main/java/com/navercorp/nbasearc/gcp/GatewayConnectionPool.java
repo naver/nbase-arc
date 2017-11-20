@@ -56,7 +56,7 @@ public class GatewayConnectionPool {
     private final Affinity affinity;
     
     private final Random random;
-    private volatile int roundGatewayIndex;
+    private final AtomicInteger roundGatewayIndex;
 
     public GatewayConnectionPool(int threadPoolSize, boolean healthCheckUsed) {
         this.eventLoopTrunk = new SingleThreadEventLoopTrunk(threadPoolSize);
@@ -64,7 +64,7 @@ public class GatewayConnectionPool {
         this.vcConcurrentSet = Sets.newConcurrentHashSet();
         this.closed = new AtomicBoolean();
         this.affinity = new Affinity();
-        this.roundGatewayIndex = Integer.MAX_VALUE;
+        this.roundGatewayIndex = new AtomicInteger(0);
         this.gatewayList = new AtomicReference<List<Gateway>>();
         this.random = new Random(System.currentTimeMillis());
         
@@ -220,8 +220,8 @@ public class GatewayConnectionPool {
 
         // Affinity first
         List<Integer> affinityGateways = affinity.affinityGateway(hash, affinityState);
-        if (affinityGateways != null) {
-            Gateway gw = gwMap.get(random.nextInt(affinityGateways.size()));
+        if (affinityGateways != null && affinityGateways.size() != 0) {
+            Gateway gw = gwMap.get(affinityGateways.get(random.nextInt(affinityGateways.size())));
             if (gw != null && gw.getActive() > 0) {
                 PhysicalConnection pc = gw.bestPc();
                 if (pc != null) {
@@ -232,8 +232,8 @@ public class GatewayConnectionPool {
         
         // Random selection
         List<Gateway> candidates = gatewayList.get();
-        int index = roundGatewayIndex++ % candidates.size();
-        for (int i = 0; i < Math.max(3, candidates.size()); i++) {
+        int index = roundGatewayIndex.incrementAndGet() % candidates.size();
+        for (int i = 0; i < Math.min(3, candidates.size()); i++) {
             index = Math.abs(index + 1);
             if (index >= candidates.size()) {
                 index = 0;
