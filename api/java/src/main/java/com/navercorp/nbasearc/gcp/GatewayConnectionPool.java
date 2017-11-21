@@ -233,11 +233,11 @@ public class GatewayConnectionPool {
         // Random selection
         List<Gateway> candidates = gatewayList.get();
         int index = roundGatewayIndex.incrementAndGet() % candidates.size();
+        if (index < 0) {
+            index = index + candidates.size();
+        }
         for (int i = 0; i < Math.min(3, candidates.size()); i++) {
-            index = Math.abs(index + 1);
-            if (index >= candidates.size()) {
-                index = 0;
-            }
+            index = (index + 1) % candidates.size();
             
             Gateway gw = candidates.get(index);
             if (gw.getActive() > 0) {
