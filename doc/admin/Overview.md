@@ -33,7 +33,7 @@ A process that handles distribution rules. It delivers the client's command to a
 
 ## Setup
 Build an nbase-arc zone and then create an nbase-arc cluster on it.
-You should install mangement components on at least 3 machines to make Zookeeper ensemble work, and data components on more than 2 machines for replication.
+You should install management components on at least 3 machines to make Zookeeper ensemble work, and data components on more than 2 machines for replication.
 You should manually install the nbase-arc zone at first, while the nbase-arc cluster is automatically installed by using the zone's management function. 
 
 ## Terminologies
