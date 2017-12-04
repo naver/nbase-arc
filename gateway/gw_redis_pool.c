@@ -418,6 +418,8 @@ move_conn_to_service (redis_connection * conn)
   TAILQ_REMOVE (&pool->conn_in_disconnect_q, conn, conn_tqe);
   pool->nconn_in_service++;
   TAILQ_INSERT_TAIL (&pool->conn_in_service_q, conn, conn_tqe);
+  // Idle connection is considered to be active.
+  conn->last_active_rts = conn->last_active_wts = mstime ();
 }
 
 static void
@@ -749,6 +751,7 @@ redis_pool_cron (struct aeEventLoop *el, long long id, void *privdata)
 
   run_with_period (1000)
   {
+
     TAILQ_FOREACH_SAFE (conn, &pool->conn_in_disconnect_q, conn_tqe, tvar)
     {
       close_connection (conn);
@@ -774,27 +777,33 @@ redis_pool_cron (struct aeEventLoop *el, long long id, void *privdata)
     dictReleaseIterator (di);
   }
 
-  run_with_period (100)
+  // Dead connection detection.
+  run_with_period (500)
   {
-    long long curtime = mstime ();
+    long long curtime, redline = pool->conn_inactive_timeout;
+
+    curtime = mstime ();
     TAILQ_FOREACH_SAFE (conn, &pool->conn_in_service_q, conn_tqe, tvar)
     {
-      // connection list is sorted in assending order by last active time.
-      // So, we can break loop as soon as we find first active connection
-      // in list.
-      if (curtime - conn->last_active_mstime < pool->conn_inactive_timeout)
+      long long rgap;
+      // Consider idle connection to be alive.
+      if (conn->nsendq + conn->nrecvq == 0)
 	{
-	  break;
+	  conn->last_active_rts = conn->last_active_wts = curtime;
+	  continue;
 	}
-
-      // If there are waiting msgs in the queue and the connection is inactive,
-      // we should close the connection.
-      if (conn->nsendq + conn->nrecvq > 0)
+      // rgap >= redline assures that during that period,
+      // (1) no read happened
+      // (2) conn->nrecvq + conn->nsendq > 0 
+      //    - (conn->nrecvq + conn->nsendq > 0) is true
+      //   - (conn->nrecvq + conn->nsendq > 0) -> (conn->nrecvq + conn->nsendq == 0) requires 'read'
+      rgap = curtime - conn->last_active_rts;
+      if (rgap >= redline)
 	{
 	  sds conn_info = get_sds_conn_info (conn);
 
 	  gwlog (GW_WARNING, "Redis is not responding. elapsed:%lld, %s",
-		 curtime - conn->last_active_mstime, conn_info);
+		 rgap, conn_info);
 	  sdsfree (conn_info);
 	  close_conn_and_reconfigure_pool (conn);
 	}
@@ -983,7 +992,7 @@ pool_add_connection (redis_pool * pool, const char *redis_id,
   TAILQ_INIT (&conn->send_q);
   conn->nrecvq = 0;
   TAILQ_INIT (&conn->recv_q);
-  conn->last_active_mstime = 0;
+  conn->last_active_rts = conn->last_active_wts = 0;
   conn->domain_socket = (server->domain_socket_path
 			 && prefer_domain_socket) ? 1 : 0;
   conn->in_service = 0;
@@ -1485,20 +1494,6 @@ slot_select_conn (redis_pool * pool, int slot_idx,
     }
 }
 
-static void
-update_conn_last_active (redis_connection * conn)
-{
-  redis_pool *pool = conn->my_pool;
-
-  conn->last_active_mstime = mstime ();
-  // keep connection list in order by last active time
-  if (conn->in_service)
-    {
-      TAILQ_REMOVE (&pool->conn_in_service_q, conn, conn_tqe);
-      TAILQ_INSERT_TAIL (&pool->conn_in_service_q, conn, conn_tqe);
-    }
-}
-
 static int
 enable_msg_send_handler (redis_connection * conn)
 {
@@ -1512,7 +1507,6 @@ enable_msg_send_handler (redis_connection * conn)
 	{
 	  return ERR;
 	}
-      update_conn_last_active (conn);
     }
   return OK;
 }
@@ -1820,7 +1814,7 @@ msg_send_handler (aeEventLoop * el, int fd, void *privdata, int mask)
       goto close_conn;
     }
 
-  update_conn_last_active (conn);
+  conn->last_active_wts = mstime ();
 
   TAILQ_FOREACH_SAFE (msg, &conn->send_q, msg_tqe, tvar)
   {
@@ -1918,7 +1912,7 @@ msg_read_handler (aeEventLoop * el, int fd, void *privdata, int mask)
       goto close_conn;
     }
 
-  update_conn_last_active (conn);
+  conn->last_active_rts = mstime ();
 
   do
     {
