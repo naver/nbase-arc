@@ -10,7 +10,7 @@ The performance of the gateway is equal or higher than other similar open source
 Gateway provides administrative commands such as adding/removing Redis processes and change the key distribution information of a cluster. These commands along with configuration master allow the reconfigurations of a cluster can be performed seamlessly on production environment. The reconfiguration of a cluster includes moving processes between servers, upgrading components, scaling in/out cluster, and etc. 
 
 ### Structure
-Gateway is composed of multiple worker threads and single master thread. Each thread runs non-blocking eventloop. Master thread allocates client connections to the worker threads and excutes admin commands. Each worker thread runs independently and processes queries from allocated clients.
+Gateway is composed of multiple worker threads and single master thread. Each thread runs non-blocking eventloop. Master thread allocates client connections to the worker threads and executes admin commands. Each worker thread runs independently and processes queries from allocated clients.
 
 ### Benchmark
 

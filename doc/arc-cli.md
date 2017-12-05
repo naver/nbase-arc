@@ -56,7 +56,7 @@ your_cluster> <b>stat 1</b>
 </pre>
 
 #### latency command
-Latency command collects latency infomation from gateway's "info latency" command and shows it in a histogram format.
+Latency command collects latency information from gateway's "info latency" command and shows it in a histogram format.
 You can type `LATENCY [<interval sec>]` in CLI prompt. Default interval is 5 sec.
 
 <pre>

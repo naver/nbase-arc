@@ -28,7 +28,7 @@ See [replication](/doc/state-machine-replicator.md) for a detailed explanation o
 #### Data Persistence
 In Redis, RDB or AOF can be used for data persistence. RDB is a point in time snapshot of the dataset and AOF is a log of write operations for rebuilding the up to date dataset from the empty one. Each method has its own advantages and disadvantages, but both RDB and AOF cannot be used in a unified way to compensate each others disadvantages.
 
-nbasedarc unified RDB and replication log. Additionally, the log sequence number at the time of the checkpoint is held in RDB file. After the RDB file is loaded, only the logs after the checkpoint can be used to recover the date dataset.
+nbase-arc unified RDB and replication log. Additionally, the log sequence number at the time of the checkpoint is held in RDB file. After the RDB file is loaded, only the logs after the checkpoint can be used to recover the date dataset.
 
 ### Client connection
 Clients in RC directly connect to Redis nodes of the cluster. Because all operations must be handled at master node even during cluster live configuration, clients must have to handle MOVED, ASK redirection messages to get to the proper master. Such cluster information should normally cached on the client side for better performance.
