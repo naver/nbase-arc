@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -29,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.navercorp.nbasearc.gcp.GatewayConnectionPool;
+import com.navercorp.redis.cluster.util.DaemonThreadFactory;
 
 /**
  *
@@ -64,6 +67,8 @@ public class Gateway implements GatewayServerData {
     private GatewayAffinity affinity = new GatewayAffinity();
     
     private final GatewayConnectionPool gcp;
+    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor(
+            new DaemonThreadFactory("nbase-arc-gateway-closer-", true));
 
     /**
      * Instantiates a new gateway.
@@ -80,9 +85,11 @@ public class Gateway implements GatewayServerData {
         if (config.getDomainAddress() != null) {
             // domain
             addresses = GatewayAddress.asListFromDomain(config.getDomainAddress());
+            init(addresses);
         } else if (config.getIpAddress() != null) {
             // IP
             addresses = GatewayAddress.asList(config.getIpAddress());
+            init(addresses);
         } else if (config.isZkUsed()) {
             // zookeeper
             try {
@@ -92,17 +99,15 @@ public class Gateway implements GatewayServerData {
                 addresses = nodeWatcher.getGatewayAddress();
                 affinity = nodeWatcher.getGatewayAffinity();
             } catch (Exception e) {
-                log.error("[Gateway] Failed to connect CM. " + config.getZkAddress() + " - " + config.getClusterName(),
+                log.error("[Gateway] Failed to connect ZK. " + config.getZkAddress() + " - " + config.getClusterName(),
                         e);
             }
         }
 
-        if (addresses == null || addresses.size() == 0) {
+        if (servers.size() == 0) {
             destroy();
             throw new IllegalArgumentException("not found address " + config);
         }
-
-        init(addresses);
 
         this.selector = new GatewayServerSelector(config.getGatewaySelectorMethod());
     }
@@ -111,18 +116,15 @@ public class Gateway implements GatewayServerData {
         log.info("[Gateway] Reloading {}", addresses);
 
         synchronized (this.servers) {
-            // add
-            addServers(addresses);
-
-            // del
-            delServers(addresses);
+            addNewServers(addresses);
+            delOutdatedServers(addresses);
             buildIndex();
         }
 
         log.info("[Gateway] Reloaded {}", servers);
     }
 
-    private void addServers(List<GatewayAddress> addresses) {
+    private void addNewServers(List<GatewayAddress> addresses) {
         for (GatewayAddress address : addresses) {
             try {
                 if (this.servers.containsKey(address.getName())) {
@@ -135,13 +137,14 @@ public class Gateway implements GatewayServerData {
                             config.getTimeoutMillisec(), config.getKeyspace(), gcp);
                     final int count = gatewayServer.preload(config.getClientSyncTimeUnitMillis(),
                             config.getConnectPerDelayMillis(), config.getPoolConfig());
+                    this.servers.put(address.getName(), gatewayServer);
+                    gatewayServer.setExist(true);
+                    log.info("[Gateway] Add gateway server " + gatewayServer);
+                    
                     this.gcp.addGw(address.getId(), address.getHost(), address.getPort(),
                             config.getPhysicalConnectionCount(), config.getPhysicalConnectionReconnectInterval())
                             .get(config.getTimeoutMillisec(), TimeUnit.MILLISECONDS);
-                    gatewayServer.setValid(count > 0);
-                    gatewayServer.setExist(true);
-                    this.servers.put(address.getName(), gatewayServer);
-                    log.info("[Gateway] Add gateway server " + gatewayServer);
+                    gatewayServer.setValid(true);
                 }
             } catch (Exception ex) {
                 log.error("[Gateway] Failed to reload " + address, ex);
@@ -149,7 +152,7 @@ public class Gateway implements GatewayServerData {
         }
     }
 
-    private void delServers(List<GatewayAddress> addresses) {
+    private void delOutdatedServers(List<GatewayAddress> addresses) {
         final List<GatewayServer> deletedServers = new ArrayList<GatewayServer>();
         for (final GatewayServer server : servers.values()) {
             String currentGatewayName = server.getAddress().getName();
@@ -169,7 +172,13 @@ public class Gateway implements GatewayServerData {
         for (final GatewayServer server : deletedServers) {
             server.setExist(false);
             server.setValid(false); // set valid flag to false if gateway is removed or not valid
-            server.close();
+            executor.schedule(new Runnable() {
+                @Override
+                public void run() {
+                    server.close();
+                }
+            }, 3, TimeUnit.MINUTES);
+            
             if (this.servers.remove(server.getAddress().getName()) == null) {
                 log.error("[Gateway] Not found deleted gateway server " + server + ", list=" + this.servers);
             }
@@ -229,6 +238,8 @@ public class Gateway implements GatewayServerData {
         if (nodeWatcher != null) {
             nodeWatcher.stop();
         }
+        
+        executor.shutdown();
 
         for (GatewayServer server : this.servers.values()) {
             server.destroy();
