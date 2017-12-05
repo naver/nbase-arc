@@ -6,7 +6,7 @@ nbase-arc (n-base-ARC) is an open source distributed memory store based on Redis
 ## Features
 * Multi-cluster zone
   - You can make multiple clusters within a single zone. Each cluster is distinguished by its name.
-  - Configuration master manages all cluster informations safely. Configuration master also does failure detection and automatic fail-over of the cluster components
+  - Configuration master manages all cluster information safely. Configuration master also does failure detection and automatic fail-over of the cluster components
 * A Cluster is a single big Redis server
   - Clients access Redis servers indirectly via gateways. A cluster acts like a single big Redis server instance with multiple access points. 
   - Gateway is a Redis proxy that accepts Redis requests from client.

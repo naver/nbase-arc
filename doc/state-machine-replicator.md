@@ -7,7 +7,7 @@ Redis replication is a master-slave asynchronous replication, which is fast and 
 #### nbase-arc replication
 nbase-arc implemented a new generic consensus based state machine replication layer called SMR (State Machine Replicator) with following features
 * Generic
-  + Replication is decomposed into replicator processs and client library. So SMR replication is not confined to Redis in application
+  + Replication is decomposed into replicator processes and client library. So SMR replication is not confined to Redis in application
 * Consensus based
   + Commands are committed to client for execution by replicator only when the commands are replicated to the configured number of slaves. SMR replication protocol is equivalent to multi-paxos in steady state. When master replicator fails, external oracle component called configuration master safely elects a new master.    
 * State machine replication
@@ -70,7 +70,7 @@ A Redis request is replicated and processed through the following steps.
 ```
 
 * Log ack.
-  - Slave replicator gets the log stream and save the recived portion to the local log file. LSN of the last message in the local log file is acknowledged to the master replicator.
+  - Slave replicator gets the log stream and save the received portion to the local log file. LSN of the last message in the local log file is acknowledged to the master replicator.
 ```
     Redis(lib)   Master      Slave
         |          |         |  |

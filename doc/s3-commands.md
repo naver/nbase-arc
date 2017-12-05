@@ -28,7 +28,7 @@ Following notations are used for describing Java API
 
 #### S3EXPIRE
   * Query: S3EXPIRE ks uuid ttl
-  * Return: returns 1 if at least one value is modified, 0 othereise
+  * Return: returns 1 if at least one value is modified, 0 otherwise
   * Java API
     - slexpire(key, ttl)
     - ssexpire(key, ttl)
