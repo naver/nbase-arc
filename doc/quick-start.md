@@ -1,5 +1,5 @@
 # Quick start
-This guide demonstrates single machine setup of nbase-arc cluster. Please refer to [Admin Guide](doc/admin/AdminGuide.md) for how to install multi-machine, fault-tolerant cluster.
+This guide demonstrates single machine setup of nbase-arc cluster. Please refer to [Admin Guide](admin/AdminGuide.md) for how to install multi-machine, fault-tolerant cluster.
 
 ## Build
 #### Build Requirements
