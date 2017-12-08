@@ -42,6 +42,7 @@ public abstract class CascadingWorkflow {
         }
 
         Logger.info("begin {}", pg);
+        
         try {
             _execute();
             if (cascading) {

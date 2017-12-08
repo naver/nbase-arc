@@ -240,6 +240,10 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         rc = new RoleChangeWorkflow(getPg(), masterHints, context);
         rc.execute();
         assertEquals("{\"master\":1,\"role_slave_error\":[]}", rc.getResultString());
+        
+        doCommand("pg_iq " + getPg().getClusterName() + " " + getPg().getName());
+        assertEquals(3, getPg().getCopy());
+        assertEquals(2, getPg().getQuorum());
     }
     
     @Test
@@ -285,6 +289,10 @@ public class RoleChangeWorkflowTest extends BasicSetting {
         rc = new RoleChangeWorkflow(getPg(), masterHints, context);
         rc.execute();
         assertEquals("{\"master\":1,\"role_slave_error\":[]}", rc.getResultString());
+
+        doCommand("pg_iq " + getPg().getClusterName() + " " + getPg().getName());
+        assertEquals(2, getPg().getCopy());
+        assertEquals(1, getPg().getQuorum());
     }
 
     @Test

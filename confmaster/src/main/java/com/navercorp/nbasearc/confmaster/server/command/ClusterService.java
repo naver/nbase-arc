@@ -24,6 +24,7 @@ import static com.navercorp.nbasearc.confmaster.server.mapping.Param.ArgType.STR
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -242,7 +243,8 @@ public class ClusterService {
         if ((quorumPolicy.size() > 1)
                 && (quorumPolicy.get(quorumPolicy.size() - 2) 
                         >= (quorumPolicy.get(quorumPolicy.size() - 1)))) {
-            throw new MgmtInvalidQuorumPolicyException();
+            throw new MgmtInvalidQuorumPolicyException(
+                    "Invalid quorum policy. " + Arrays.toString(quorumPolicy.toArray()));
         }
     }
     
