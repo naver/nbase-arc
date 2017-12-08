@@ -165,7 +165,7 @@ public class PerformanceTest {
                     try {
                         Thread.sleep(3000);
                         System.out.println("Delete gateway 3");
-                        gcp.delGw(3);
+                        gcp.delGw(3, "127.0.0.1", 6020);
 
                         Thread.sleep(3000);
                         System.out.println("Add gateway 3");
