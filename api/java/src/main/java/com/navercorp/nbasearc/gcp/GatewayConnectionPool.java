@@ -135,8 +135,8 @@ public class GatewayConnectionPool {
                     return;
                 }
                 
-                for (Integer gwid : gwMap.keySet()) {
-                    delGw(gwid).addListener(new Runnable() {
+                for (Gateway gw : gwMap.values()) {
+                    delGw(gw.getId(), gw.getIp(), gw.getPort()).addListener(new Runnable() {
                         @Override
                         public void run() {
                             if (closeGwCnt.decrementAndGet() == 0) {
@@ -169,27 +169,57 @@ public class GatewayConnectionPool {
 
     public ListenableFuture<?> addGw(final Integer gwid, final String ip, final int port, final int concnt,
             final int reconnectInterval) {
-        Gateway gw = new Gateway(gwid, ip, port, concnt);
-        if (gwMap.putIfAbsent(gwid, gw) != null) {
-            throw new IllegalArgumentException("Gateway " + gwid + " is already exist.");
+        synchronized (gwMap) {
+            Gateway gw = new Gateway(gwid, ip, port, concnt);
+            
+            Gateway oldGw = gwMap.get(gwid);
+            if (oldGw != null && oldGw.getIp().equals(ip) && oldGw.getPort() == port) {
+                throw new IllegalArgumentException("Gateway " + gwid + ":" + ip + ":" + port + " is already exist.");
+            }
+            
+            gwMap.put(gwid, gw);
+            if (oldGw != null) {
+                oldGw.unuse(vcConcurrentSet);
+            }
+            
+            updateGatewayList();
+    
+            return gw.init(eventLoopTrunk, reconnectInterval);
         }
-
-        updateGatewayList();
-
-        return gw.init(eventLoopTrunk, reconnectInterval);
     }
 
-    public ListenableFuture<?> delGw(final Integer gwid) {
-        Gateway gw = gwMap.remove(gwid);
-        if (gw != null) {
+    public ListenableFuture<?> delGw(final Integer gwid, final String ip, final int port) {
+        synchronized (gwMap) {
+            Gateway gw = gwMap.get(gwid);
+            if (gw == null || (!gw.getIp().equals(ip) || gw.getPort() != port)) {
+                SettableFuture<?> sf = SettableFuture.create();
+                sf.set(null);
+                return sf;
+            }
+            
+            gwMap.remove(gwid);
+            updateGatewayList();
             return gw.unuse(vcConcurrentSet);
         }
+    }
 
-        updateGatewayList();
+    public void changeGwId(int asis, int tobe) {
+        if (asis == tobe) {
+            return;
+        }
 
-        SettableFuture<?> sf = SettableFuture.create();
-        sf.set(null);
-        return sf;
+        synchronized (gwMap) {
+            Gateway gw = gwMap.get(asis);
+            if (gw == null) {
+                return;
+            }
+            gw.setId(tobe);
+            gwMap.put(tobe, gw);
+            gwMap.remove(asis);
+
+            updateGatewayList();
+        }
+        
     }
     
     private void updateGatewayList() {

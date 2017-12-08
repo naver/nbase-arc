@@ -55,7 +55,7 @@ public class PhysicalConnectionTest {
             }
         });
         
-        gcp.delGw(ID);
+        gcp.delGw(ID, IP, PORT);
     }
 
 }

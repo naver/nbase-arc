@@ -42,7 +42,7 @@ class Gateway {
 
     private static final Logger log = LoggerFactory.getLogger(Gateway.class);
 
-    private final Integer id;
+    private Integer id;
     private final String ip;
     private final int port;
     private final int concnt;
@@ -129,8 +129,20 @@ class Gateway {
             .append("]").toString();
     }
     
+    void setId(Integer id) {
+        this.id = id;
+    }
+    
     Integer getId() {
         return id;
+    }
+    
+    String getIp() {
+        return ip;
+    }
+    
+    Integer getPort() {
+        return port;
     }
 
     PhysicalConnection bestPc() {

@@ -70,7 +70,7 @@ public class NormalScenarioTest {
     private void gwDel(final Integer id)
             throws SecurityException, IllegalArgumentException, NoSuchFieldException, IllegalAccessException {
         final Gateway gw = getGwMap(gcp).get(id);
-        gcp.delGw(id);
+        gcp.delGw(id, gw.getIp(), gw.getPort());
         await().atMost(Duration.ONE_MINUTE).until(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
@@ -164,9 +164,8 @@ public class NormalScenarioTest {
         });
         assertTrue(result.get(10000, TimeUnit.MILLISECONDS));
         
-        gwDel(GW_ID);
-        
         gwAdd(2, "127.0.0.1", 6010, 2);
+        gwDel(GW_ID);
 
         vc.request(CMD_SET, 1000, new RequestCallback() {
             @Override
