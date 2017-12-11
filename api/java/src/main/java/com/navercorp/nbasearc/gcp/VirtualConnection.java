@@ -160,14 +160,9 @@ public class VirtualConnection {
         }
 
         synchronized (con) {
-            if (con.getFirstError() != null) { // No more requests are permitted if there an error.
-                if (con.hasPendingResponse()) {
-                    con.addPendingRequest(rqst);
-                } else {
-                    con.flushPendigRequests(con.getFirstError());
-                    rqst.callback.onResponse(null, con.getFirstError());
-                    qSpace.release();
-                }
+            if (con.getFirstError() != ErrorCode.OK) { // No more requests are permitted if there an error.
+                rqst.callback.onResponse(null, con.getFirstError());
+                qSpace.release();
                 return;
             }
 
@@ -213,12 +208,17 @@ public class VirtualConnection {
         synchronized (con) {
             con.decrementWaitRespCnt();
             
-            if (errCode.isError() && con.getFirstError() == null) {
+            if (errCode.isError() && con.getFirstError() == ErrorCode.OK) {
                 con.setFirstError(errCode);
             }
             
-            if (con.checkAndReallocPc()) {
-                con.flushPendigRequests(ErrorCode.OK);
+            if (con.getFirstError() != ErrorCode.OK) {
+                if (con.hasPendingRequest()) {
+                    con.flushPendigRequests(con.getFirstError());
+                }
+                rqst.callback.onResponse(response, con.getFirstError());
+                qSpace.release();
+                return;
             }
         }
 
@@ -251,7 +251,7 @@ public class VirtualConnection {
             this.waitRespCnt = new AtomicLong(0);
             this.pending = new ArrayDeque<Request>(qSize);
             this.qSize = qSize;
-            this.setFirstError(null);
+            this.setFirstError(ErrorCode.OK);
         }
 
         public void destroy() {
