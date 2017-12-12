@@ -266,7 +266,8 @@ struct redis_connection
   int nrecvq;
   msg_tqh recv_q;
 
-  long long last_active_mstime;
+  long long last_active_rts;
+  long long last_active_wts;
 
   unsigned domain_socket:1;
   unsigned in_service:1;
