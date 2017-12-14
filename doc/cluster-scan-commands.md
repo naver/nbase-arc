@@ -1,5 +1,5 @@
 ## Cluster Scanning
-nBase-ARC supports two kind of scan commands, SCAN and CSCAN. SCAN command is the same as Redis' SCAN and supports for sequential scanning of a whole cluster. CSCAN command supports for parallel scanning of a cluster.
+nBase-ARC supports two kinds of scan commands, SCAN and CSCAN. SCAN command is the same as Redis' SCAN and supports for sequential scanning of a whole cluster. CSCAN command supports for parallel scanning of a cluster.
 
 There is a limitation of these scanning commands. During data migration between partitions, nBase-ARC's scanning commands may miss some keys. Therefore, nBase-ARC supports for CSCANDIGEST command to check whether data migration happens during scanning.
 
