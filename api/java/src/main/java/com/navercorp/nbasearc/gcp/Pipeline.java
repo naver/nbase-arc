@@ -50,12 +50,12 @@ class Pipeline {
         return requests.isEmpty() && sent.isEmpty();
     }
 
-    void clear(ErrorCode errCode) {
-        clearQueue(errCode, sent);
-        clearQueue(errCode, requests);
+    void clear(StatusCode StatusCode) {
+        clearQueue(StatusCode, sent);
+        clearQueue(StatusCode, requests);
     }
     
-    private void clearQueue(ErrorCode errCode, Queue<Request> q) {
+    private void clearQueue(StatusCode StatusCode, Queue<Request> q) {
         while (q.isEmpty() == false) {
             Request rqst = q.remove();
             if (rqst.getType() == Request.Type.SYSTEM) {
@@ -63,7 +63,7 @@ class Pipeline {
             }
             eventLoop.delTimer(rqst);
             if (rqst.isTimeout() == false) {
-                rqst.getVirtualConnection().onResponse(rqst, null, errCode);
+                rqst.getVirtualConnection().onResponse(rqst, null, StatusCode);
             }
         }
     }

@@ -91,7 +91,7 @@ class Request implements Runnable, TimerCallback {
             physicalConnection.removeRequestFromPipeline(this);
         }
 
-        virtualConnection.onResponse(this, null, ErrorCode.TIMEOUT);
+        virtualConnection.onResponse(this, null, StatusCode.TIMEOUT);
     }
 
     @Override

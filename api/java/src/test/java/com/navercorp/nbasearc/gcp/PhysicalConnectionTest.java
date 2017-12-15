@@ -14,7 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.jayway.awaitility.Duration;
-import com.navercorp.nbasearc.gcp.ErrorCode;
+import com.navercorp.nbasearc.gcp.StatusCode;
 import com.navercorp.nbasearc.gcp.GatewayConnectionPool;
 import com.navercorp.nbasearc.gcp.RequestCallback;
 import com.navercorp.nbasearc.gcp.VirtualConnection;
@@ -42,7 +42,7 @@ public class PhysicalConnectionTest {
         for (int i = 0; i < MAX; i++) {
             vc.request(CMD, 3000, new RequestCallback() {
                 @Override
-                public void onResponse(byte[] response, ErrorCode err) {
+                public void onResponse(byte[] response, StatusCode statusCode) {
                     remaining.decrementAndGet();
                 }
             });

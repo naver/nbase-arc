@@ -16,10 +16,10 @@
 
 package com.navercorp.nbasearc.gcp;
 
-public enum ErrorCode {
+public enum StatusCode {
     OK, TIMEOUT, CONNECTION_ERROR, NO_AVAILABLE_CONNECTION, SHUTDOWN, INTERNAL_ERROR;
 
-    boolean isError() {
+    boolean isPermanentError() {
         switch (this) {
         case CONNECTION_ERROR:
         case INTERNAL_ERROR:
