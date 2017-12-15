@@ -22,7 +22,7 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.navercorp.nbasearc.gcp.ErrorCode;
+import com.navercorp.nbasearc.gcp.StatusCode;
 import com.navercorp.nbasearc.gcp.GatewayConnectionPool;
 import com.navercorp.nbasearc.gcp.RequestCallback;
 import com.navercorp.nbasearc.gcp.VirtualConnection;
@@ -59,7 +59,7 @@ public class PerformanceTest {
         }
     }
     
-    final Map<ErrorCode, AtomicInteger> ops = new ConcurrentHashMap<ErrorCode, AtomicInteger>();
+    final Map<StatusCode, AtomicInteger> ops = new ConcurrentHashMap<StatusCode, AtomicInteger>();
     
     class MRC implements RequestCallback {
         AtomicInteger expectedNo;
@@ -69,30 +69,30 @@ public class PerformanceTest {
             this.no = no;
         }
         @Override
-        public void onResponse(byte[] response, ErrorCode err) {
+        public void onResponse(byte[] response, StatusCode statusCode) {
             /*
             if (expectedNo.compareAndSet(no, no+1) == false) {
-                if (err != ErrorCode.TIMEOUT) {
+                if (statusCode != StatusCode.TIMEOUT) {
                     System.out.println("concurrent callback"); 
                 }
             }
             
-            if (err != ErrorCode.OK && err != ErrorCode.TIMEOUT) {
+            if (statusCode != StatusCode.OK && statusCode != StatusCode.TIMEOUT) {
                 //System.out.print("E");
             }
-            if (err == ErrorCode.TIMEOUT) {
+            if (statusCode == StatusCode.TIMEOUT) {
                 //System.out.println("abc");
             }
             //*/
-            ops.get(err).incrementAndGet();
+            ops.get(statusCode).incrementAndGet();
         }
     };
     
     @Ignore
     @Test
     public void performance() throws InterruptedException {
-        for (ErrorCode ec : ErrorCode.values()) {
-            ops.put(ec, new AtomicInteger(0));
+        for (StatusCode statusCode : StatusCode.values()) {
+            ops.put(statusCode, new AtomicInteger(0));
         }
         
         final int MAX_THREAD = 8;
@@ -142,7 +142,7 @@ public class PerformanceTest {
                 StringBuilder sb = new StringBuilder();
                 while (true) {
                     sb.setLength(0);
-                    for (Map.Entry<ErrorCode, AtomicInteger> e : ops.entrySet()) {
+                    for (Map.Entry<StatusCode, AtomicInteger> e : ops.entrySet()) {
                         sb.append(e.getKey()).append(":").append(e.getValue()).append(" ");
                         e.getValue().set(0);
                     }
