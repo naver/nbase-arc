@@ -16,7 +16,7 @@
 
 package com.navercorp.nbasearc.gcp;
 
-import static com.navercorp.nbasearc.gcp.ErrorCode.*;
+import static com.navercorp.nbasearc.gcp.StatusCode.*;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -160,14 +160,9 @@ public class VirtualConnection {
         }
 
         synchronized (con) {
-            if (con.getFirstError() != null) { // No more requests are permitted if there an error.
-                if (con.hasPendingResponse()) {
-                    con.addPendingRequest(rqst);
-                } else {
-                    con.flushPendigRequests(con.getFirstError());
-                    rqst.callback.onResponse(null, con.getFirstError());
-                    qSpace.release();
-                }
+            if (con.getFirstError() != StatusCode.OK) { // No more requests are permitted if there an error.
+                rqst.callback.onResponse(null, con.getFirstError());
+                qSpace.release();
                 return;
             }
 
@@ -184,10 +179,10 @@ public class VirtualConnection {
             }
             
             if (con.checkAndReallocPc()) {
-                con.flushPendigRequests(ErrorCode.OK);
+                con.flushPendigRequests(StatusCode.OK);
                 
                 if (con.pc == null && pending == false) {
-                    rqst.callback.onResponse(null, ErrorCode.NO_AVAILABLE_CONNECTION);
+                    rqst.callback.onResponse(null, StatusCode.NO_AVAILABLE_CONNECTION);
                     qSpace.release();
                     return;
                 }
@@ -200,30 +195,35 @@ public class VirtualConnection {
         }
     }
 
-    void onResponse(Request rqst, byte[] response, ErrorCode errCode) {
+    void onResponse(Request rqst, byte[] response, StatusCode statusCode) {
         if (pipelineMode) {
-            onResponsePipelineMode(rqst, response, errCode);
+            onResponsePipelineMode(rqst, response, statusCode);
         } else {
-            rqst.callback.onResponse(response, errCode);
+            rqst.callback.onResponse(response, statusCode);
         }
     }
     
-    private void onResponsePipelineMode(Request rqst, byte[] response, ErrorCode errCode) {
+    private void onResponsePipelineMode(Request rqst, byte[] response, StatusCode statusCode) {
         // Check and reallocate physical connection
         synchronized (con) {
             con.decrementWaitRespCnt();
             
-            if (errCode.isError() && con.getFirstError() == null) {
-                con.setFirstError(errCode);
+            if (statusCode.isPermanentError() && con.getFirstError() == StatusCode.OK) {
+                con.setFirstError(statusCode);
             }
             
-            if (con.checkAndReallocPc()) {
-                con.flushPendigRequests(ErrorCode.OK);
+            if (con.getFirstError() != StatusCode.OK) {
+                if (con.hasPendingRequest()) {
+                    con.flushPendigRequests(con.getFirstError());
+                }
+                rqst.callback.onResponse(response, con.getFirstError());
+                qSpace.release();
+                return;
             }
         }
 
         // Response callback
-        rqst.callback.onResponse(response, errCode);
+        rqst.callback.onResponse(response, statusCode);
         qSpace.release();
     }
 
@@ -244,14 +244,14 @@ public class VirtualConnection {
         private AtomicLong waitRespCnt;
         private Queue<Request> pending;
         private final int qSize;
-        private ErrorCode firstError;
+        private StatusCode firstError;
 
         private Connection(int qSize) {
             this.pc = null;
             this.waitRespCnt = new AtomicLong(0);
             this.pending = new ArrayDeque<Request>(qSize);
             this.qSize = qSize;
-            this.setFirstError(null);
+            this.setFirstError(StatusCode.OK);
         }
 
         public void destroy() {
@@ -302,10 +302,10 @@ public class VirtualConnection {
             return false;
         }
 
-        private void flushPendigRequests(ErrorCode errCode) {
-            if (errCode != ErrorCode.OK) {
+        private void flushPendigRequests(StatusCode statusCode) {
+            if (statusCode != StatusCode.OK) {
                 while (!pending.isEmpty()) {
-                    pending.poll().callback.onResponse(null, errCode);
+                    pending.poll().callback.onResponse(null, statusCode);
                     qSpace.release();
                 }
                 return;
@@ -314,7 +314,7 @@ public class VirtualConnection {
             if (pc == null) {
                 while (!pending.isEmpty()) {
                     Request rqst = pending.poll();
-                    rqst.callback.onResponse(null, ErrorCode.NO_AVAILABLE_CONNECTION);
+                    rqst.callback.onResponse(null, StatusCode.NO_AVAILABLE_CONNECTION);
                     qSpace.release();
                 }
                 return;
@@ -352,11 +352,11 @@ public class VirtualConnection {
             return pending.isEmpty() == false;
         }
 
-        private ErrorCode getFirstError() {
+        private StatusCode getFirstError() {
             return firstError;
         }
 
-        private void setFirstError(ErrorCode error) {
+        private void setFirstError(StatusCode error) {
             this.firstError = error;
         }
     }

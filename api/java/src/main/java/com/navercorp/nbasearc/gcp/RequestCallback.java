@@ -17,5 +17,5 @@
 package com.navercorp.nbasearc.gcp;
 
 public interface RequestCallback {
-    void onResponse(byte[] response, ErrorCode errCode);
+    void onResponse(byte[] response, StatusCode statusCode);
 }

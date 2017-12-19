@@ -129,7 +129,10 @@ public class Gateway implements GatewayServerData {
             try {
                 if (this.servers.containsKey(address.getName())) {
                     final GatewayServer gatewayServer = this.servers.get(address.getName());
-                    gatewayServer.getAddress().setId(address.getId());
+                    if (gatewayServer.getAddress().getId() != address.getId()) {
+                        gatewayServer.getAddress().setId(address.getId());
+                        this.gcp.changeGwId(gatewayServer.getAddress().getId(), address.getId());
+                    }
                     gatewayServer.setExist(true);
                     log.info("[Gateway] Reuse gateway server " + gatewayServer);
                 } else {
@@ -182,7 +185,8 @@ public class Gateway implements GatewayServerData {
             if (this.servers.remove(server.getAddress().getName()) == null) {
                 log.error("[Gateway] Not found deleted gateway server " + server + ", list=" + this.servers);
             }
-            gcp.delGw(server.getAddress().getId());
+            gcp.delGw(server.getAddress().getId(), server.getAddress().getHost(), 
+                    server.getAddress().getPort());
             log.info("[Gateway] Delete gateway server " + server);
         }
     }
