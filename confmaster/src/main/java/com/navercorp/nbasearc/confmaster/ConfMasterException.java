@@ -193,6 +193,9 @@ public class ConfMasterException extends Exception {
     }
     
     public static class MgmtInvalidQuorumPolicyException extends Exception {
+        public MgmtInvalidQuorumPolicyException(String message) {
+            super(message);
+        }
     }
     
     public static class MgmtDuplicatedReservedCallException extends Exception {

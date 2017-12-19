@@ -41,6 +41,7 @@ import org.springframework.stereotype.Service;
 
 import com.navercorp.nbasearc.confmaster.ConfMaster;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtDuplicatedReservedCallException;
+import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtInvalidQuorumPolicyException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtNoAvaliablePgsException;
 import com.navercorp.nbasearc.confmaster.ConfMasterException.MgmtZooKeeperException;
 import com.navercorp.nbasearc.confmaster.config.Config;
@@ -146,9 +147,9 @@ public class PartitionGroupServerService {
         }
 
         // Do
-		PartitionGroupServer pgs = new PartitionGroupServer(context, clusterName, pgsId, pgId, pmName, pmIp, basePort, backendPort, 0);
-		RedisServer rs = new RedisServer(context, clusterName, pgsId, pmName, pmIp, backendPort, pgs.getPgId(), 0);
-		createPgsObject(cluster, pg, pgs, rs);
+        PartitionGroupServer pgs = new PartitionGroupServer(context, clusterName, pgsId, pgId, pmName, pmIp, basePort, backendPort, 0);
+        RedisServer rs = new RedisServer(context, clusterName, pgsId, pmName, pmIp, backendPort, pgs.getPgId(), 0);
+        createPgsObject(cluster, pg, pgs, rs);
         
         // Log
         workflowLogger.log(0, SEVERITY_MODERATE, 
@@ -169,22 +170,22 @@ public class PartitionGroupServerService {
 
         List<Op> ops = new ArrayList<Op>();
 
-		ops.add(Op.create(pgs.getPath(), pgs.persistentDataToBytes(),
-				ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+        ops.add(Op.create(pgs.getPath(), pgs.persistentDataToBytes(),
+                ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
         ops.add(Op.create(rs.getPath(), rs.persistentDataToBytes(),
                 ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
 
         if (null != pmCluster) {
-        	PhysicalMachineCluster.PmClusterData cimDataClon = pmCluster.clonePersistentData();
+            PhysicalMachineCluster.PmClusterData cimDataClon = pmCluster.clonePersistentData();
             cimDataClon.addPgsId(Integer.valueOf(pgs.getName()));
             ops.add(Op.setData(pmCluster.getPath(),
                     mapper.writeValueAsBytes(cimDataClon), -1));
         } else {
-			cim = new PhysicalMachineCluster(cluster.getName(), pgs.getPmName());
-			cim.addPgsId(Integer.valueOf(pgs.getName()));
-			ops.add(Op.create(cim.getPath(), cim.persistentDataToBytes(),
-					ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
-		}
+            cim = new PhysicalMachineCluster(cluster.getName(), pgs.getPmName());
+            cim.addPgsId(Integer.valueOf(pgs.getName()));
+            ops.add(Op.create(cim.getPath(), cim.persistentDataToBytes(),
+                    ZooDefs.Ids.OPEN_ACL_UNSAFE, CreateMode.PERSISTENT));
+        }
         
         PartitionGroup.PartitionGroupData pgModified = pg.clonePersistentData();
         pgModified.addPgsId(Integer.parseInt(pgs.getName()));
@@ -302,88 +303,88 @@ public class PartitionGroupServerService {
      * 
      * @Return Returns the number of retries if successful.
      */
-	protected int deletePgsZooKeeperNZnodes(String name, String clusterName,
-			PartitionGroup pg, PhysicalMachineCluster pmCluster)
-			throws MgmtZooKeeperException {
+    protected int deletePgsZooKeeperNZnodes(String name, String clusterName,
+            PartitionGroup pg, PhysicalMachineCluster pmCluster)
+            throws MgmtZooKeeperException {
 
-		final String path = PathUtil.pgsPath(name, clusterName);
-		final String pathForRs = PathUtil.rsPath(name, clusterName);
-		final int MAX = config.getServerCommandPgsdelMaxretry();
-		int retryCnt;
+        final String path = PathUtil.pgsPath(name, clusterName);
+        final String pathForRs = PathUtil.rsPath(name, clusterName);
+        final int MAX = config.getServerCommandPgsdelMaxretry();
+        int retryCnt;
 
-		for (retryCnt = 1; retryCnt <= MAX; retryCnt++) {
-			// Delete children(opinions) of PGS
-			try {
-				zk.deleteChildren(path);
-			} catch (MgmtZooKeeperException e) {
-				if (e.getCause() instanceof KeeperException.NoNodeException
-						&& retryCnt != MAX) {
-					// Retry
-					Logger.info("Delete children of {} fail. retry {}",
-							PartitionGroupServer.fullName(clusterName, name),
-							retryCnt, e);
-					continue;
-				} else {
-					throw e;
-				}
-			}
+        for (retryCnt = 1; retryCnt <= MAX; retryCnt++) {
+            // Delete children(opinions) of PGS
+            try {
+                zk.deleteChildren(path);
+            } catch (MgmtZooKeeperException e) {
+                if (e.getCause() instanceof KeeperException.NoNodeException
+                        && retryCnt != MAX) {
+                    // Retry
+                    Logger.info("Delete children of {} fail. retry {}",
+                            PartitionGroupServer.fullName(clusterName, name),
+                            retryCnt, e);
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
 
-			// Delete children(opinions) of RS
-			try {
-				zk.deleteChildren(pathForRs);
-			} catch (MgmtZooKeeperException e) {
-				if (e.getCause() instanceof KeeperException.NoNodeException
-						&& retryCnt != MAX) {
-					// Retry
-					Logger.info("Delete children of {} fail. retry {}",
-							RedisServer.fullName(clusterName, name), retryCnt,
-							e);
-					continue;
-				} else {
-					throw e;
-				}
-			}
+            // Delete children(opinions) of RS
+            try {
+                zk.deleteChildren(pathForRs);
+            } catch (MgmtZooKeeperException e) {
+                if (e.getCause() instanceof KeeperException.NoNodeException
+                        && retryCnt != MAX) {
+                    // Retry
+                    Logger.info("Delete children of {} fail. retry {}",
+                            RedisServer.fullName(clusterName, name), retryCnt,
+                            e);
+                    continue;
+                } else {
+                    throw e;
+                }
+            }
 
-			// Delete PGS and RS & Update PG
-			List<Op> ops = new ArrayList<Op>();
-			ops.add(Op.delete(path, -1));
-			ops.add(Op.delete(pathForRs, -1));
+            // Delete PGS and RS & Update PG
+            List<Op> ops = new ArrayList<Op>();
+            ops.add(Op.delete(path, -1));
+            ops.add(Op.delete(pathForRs, -1));
 
-			PhysicalMachineCluster.PmClusterData cimData = pmCluster.clonePersistentData();
-			cimData.deletePgsId(Integer.valueOf(name));
-			byte cimDataOfBytes[] = mapper.writeValueAsBytes(cimData);
-			ops.add(Op.setData(pmCluster.getPath(), cimDataOfBytes, -1));
+            PhysicalMachineCluster.PmClusterData cimData = pmCluster.clonePersistentData();
+            cimData.deletePgsId(Integer.valueOf(name));
+            byte cimDataOfBytes[] = mapper.writeValueAsBytes(cimData);
+            ops.add(Op.setData(pmCluster.getPath(), cimDataOfBytes, -1));
 
-			PartitionGroup.PartitionGroupData pgModified = pg.clonePersistentData();
-			pgModified.deletePgsId(Integer.parseInt(name));
+            PartitionGroup.PartitionGroupData pgModified = pg.clonePersistentData();
+            pgModified.deletePgsId(Integer.parseInt(name));
 
-			byte pgDataOfBytes[] = mapper.writeValueAsBytes(pgModified);
-			ops.add(Op.setData(pg.getPath(), pgDataOfBytes, -1));
+            byte pgDataOfBytes[] = mapper.writeValueAsBytes(pgModified);
+            ops.add(Op.setData(pg.getPath(), pgDataOfBytes, -1));
 
-			if (cimData.getPgsIdList().isEmpty()
-					&& cimData.getGwIdList().isEmpty()) {
-				ops.add(Op.delete(pmCluster.getPath(), -1));
-			}
+            if (cimData.getPgsIdList().isEmpty()
+                    && cimData.getGwIdList().isEmpty()) {
+                ops.add(Op.delete(pmCluster.getPath(), -1));
+            }
 
-			try {
-				List<OpResult> results = zk.multi(ops);
-				zk.handleResultsOfMulti(results);
-				return retryCnt;
-			} catch (MgmtZooKeeperException e) {
-				if (e.getCause() instanceof KeeperException.NotEmptyException
-						&& retryCnt != MAX) {
-					// Retry
-					Logger.info("Delete {} fail. retry {}",
-							PartitionGroupServer.fullName(clusterName, name),
-							retryCnt, e);
-				} else {
-					throw e;
-				}
-			}
-		}
+            try {
+                List<OpResult> results = zk.multi(ops);
+                zk.handleResultsOfMulti(results);
+                return retryCnt;
+            } catch (MgmtZooKeeperException e) {
+                if (e.getCause() instanceof KeeperException.NotEmptyException
+                        && retryCnt != MAX) {
+                    // Retry
+                    Logger.info("Delete {} fail. retry {}",
+                            PartitionGroupServer.fullName(clusterName, name),
+                            retryCnt, e);
+                } else {
+                    throw e;
+                }
+            }
+        }
 
-		return retryCnt;
-	}
+        return retryCnt;
+    }
     
     @LockMapping(name="pgs_add")
     public void pgsAddLock(HierarchicalLockHelper lockHelper,
@@ -653,13 +654,13 @@ public class PartitionGroupServerService {
 
         PartitionGroup pg = container.getPg(clusterName, String.valueOf(pgs.getPgId()));
         List<PartitionGroupServer> pgsList = pg.getJoinedPgsList(
-        		container.getPgsList(clusterName, String.valueOf(pgs.getPgId())));
+                container.getPgsList(clusterName, String.valueOf(pgs.getPgId())));
         
         if (pgs.getRole().equals(PGS_ROLE_MASTER)) {
             // in order to have confmaster put an opinion quickly
             for (PartitionGroupServer pgsInPg : pgsList) {
                 String path = String.format("%s/%s_%s", pgsInPg.getPath(), 
-                		TEMP_ZNODE_NAME_FOR_CHILDEVENT, config.getIp() + ":" + config.getPort());                
+                        TEMP_ZNODE_NAME_FOR_CHILDEVENT, config.getIp() + ":" + config.getPort());                
                 zk.createEphemeralZNode(path);
                 zk.deleteZNode(path, -1);
             }
@@ -747,24 +748,26 @@ public class PartitionGroupServerService {
             return reply;
         }
         
-		List<PartitionGroupServer> joinedPgsList = pg
-				.getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
-		DecreaseCopyWorkflow dc = new DecreaseCopyWorkflow(pgs, pg, mode, context);
-		try {
-			dc.execute();
-		} catch (MgmtZooKeeperException e) {
+        List<PartitionGroupServer> joinedPgsList = pg
+                .getJoinedPgsList(container.getPgsList(pg.getClusterName(), pg.getName()));
+        DecreaseCopyWorkflow dc = new DecreaseCopyWorkflow(pgs, pg, mode, context);
+        try {
+            dc.execute();
+        } catch (MgmtZooKeeperException e) {
             Logger.error("pgs_leave fail. {}", pgs, e);
             return EXCEPTIONMSG_ZOOKEEPER;
-		} catch (MgmtNoAvaliablePgsException e) {
-			Logger.error("pgs_leave fail {}, PG.COPY: {}, PG.D: {}", 
-					new Object[]{pgs, pg.getCopy(), pg.getD(joinedPgsList)}, e);
-			return EXCEPTIONMSG_NO_AVAILABLE_PGS;
-		}
+        } catch (MgmtNoAvaliablePgsException e) {
+            Logger.error("pgs_leave fail {}, PG.COPY: {}, PG.D: {}", 
+                    new Object[]{pgs, pg.getCopy(), pg.getD(joinedPgsList)}, e);
+            return EXCEPTIONMSG_NO_AVAILABLE_PGS;
+        } catch (MgmtInvalidQuorumPolicyException e) {
+            return ERROR + " " + e.getMessage();
+        }
 
-		joinedPgsList.remove(pgs);
+        joinedPgsList.remove(pgs);
         QuorumAdjustmentWorkflow qa = new QuorumAdjustmentWorkflow(pg, true,
                 context);
-		qa.execute();
+        qa.execute();
         
         String cmd = String.format("pgs_del %s %d", pgsid, pgs.getPgId());
         reply = broadcast.request(clusterName, gwList, cmd, GW_RESPONSE_OK, executor);

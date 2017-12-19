@@ -41,7 +41,13 @@ public abstract class CascadingWorkflow {
             return;
         }
 
+        // If there is no pgs, end this CascadingWorkflow
+        if (pg.getCopy() == 0) {
+            return;
+        }
+
         Logger.info("begin {}", pg);
+        
         try {
             _execute();
             if (cascading) {

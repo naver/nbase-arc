@@ -49,6 +49,7 @@ import com.navercorp.nbasearc.confmaster.server.cluster.PartitionGroupServer;
 import com.navercorp.nbasearc.confmaster.server.leaderelection.LeaderState;
 import com.navercorp.nbasearc.confmaster.server.mimic.IInjector;
 import com.navercorp.nbasearc.confmaster.server.mimic.MimicPGS;
+import com.navercorp.nbasearc.confmaster.server.mimic.MimicSMR;
 
 /*
  * Integrated Test For Confmaster
@@ -525,6 +526,57 @@ public class PgReconfigurationTest extends BasicSetting {
         quorumValidator = new QuorumValidator(mimics[0].mSmr, 1);
         await("quorum validation after pg_iq.").atMost(assertionTimeout,
                 SECONDS).until(quorumValidator);
+    }
+
+    @Test
+    public void decreaseQuorum() throws Exception {
+        init(3);
+
+        // Decrease Quorum. 2 -> 1
+        JobResult result = doCommand("pg_dq " + getPg().getClusterName() + " " + getPg().getName());
+        assertEquals(1, result.getMessages().size());
+        assertEquals(S2C_OK, result.getMessages().get(0));
+        QuorumValidator quorumValidator = new QuorumValidator(mimics[0].mSmr, 1);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // Decrease Quorum. 1 -> 0
+        result = doCommand("pg_dq " + getPg().getClusterName() + " " + getPg().getName());
+        assertEquals(1, result.getMessages().size());
+        assertEquals(S2C_OK, result.getMessages().get(0));
+        quorumValidator = new QuorumValidator(mimics[0].mSmr, 0);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // Decrease Quorum. 0 -> -1
+        result = doCommand("pg_dq " + getPg().getClusterName() + " " + getPg().getName());
+        assertTrue(result.getMessages().get(0).startsWith(ERROR));
+        quorumValidator = new QuorumValidator(mimics[0].mSmr, 0);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // Leave PGS.
+        result = doCommand("pgs_leave " + getPg().getClusterName() + " " + getPgs(1).getName());
+        assertTrue(result.getMessages().get(0).startsWith(ERROR));
+        quorumValidator = new QuorumValidator(mimics[0].mSmr, 0);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // Leave PGS. (FORCED)
+        result = doCommand("pgs_leave " + getPg().getClusterName() + " " + getPgs(1).getName() + " " + FORCED);
+        assertTrue(result.getMessages().get(0).startsWith(ERROR));
+        quorumValidator = new QuorumValidator(mimics[0].mSmr, 0);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
+
+        // Increase Quorum. 0 -> 1
+        result = doCommand("pg_iq " + getPg().getClusterName() + " " + getPg().getName());
+        assertEquals(1, result.getMessages().size());
+        assertEquals(S2C_OK, result.getMessages().get(0));
+        quorumValidator = new QuorumValidator(mimics[0].mSmr, 1);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
+        
+        // Increase Quorum. 1 -> 2 
+        result = doCommand("pg_iq " + getPg().getClusterName() + " " + getPg().getName());
+        assertEquals(1, result.getMessages().size());
+        assertEquals(S2C_OK, result.getMessages().get(0));
+        quorumValidator = new QuorumValidator(mimics[0].mSmr, 2);
+        await().atMost(assertionTimeout, SECONDS).until(quorumValidator);
     }
 
     @Test
