@@ -10,9 +10,14 @@ Use it as a maven dependency:
     <dependency>
         <groupId>com.navercorp</groupId>
         <artifactId>nbase-arc-java-client</artifactId>
-        <version>1.5.0</version>
+        <version>1.5.4</version>
     </dependency>
 </dependencies>
+~~~
+
+Gradle
+~~~
+compile("com.navercorp:nbase-arc-java-client:1.5.4")
 ~~~
 
 To use it just:
