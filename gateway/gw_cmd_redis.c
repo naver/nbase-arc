@@ -31,7 +31,7 @@ get_hash (ParseContext * ctx, int arg_idx)
   ret = getArgumentPosition (ctx, arg_idx, &start_pos, &len);
   assert (ret == OK);
 
-  return sbuf_crc16 (start_pos, len, 0);
+  return sbuf_crc16 (&start_pos, len, 0);
 }
 
 static int
@@ -155,7 +155,7 @@ create_split_queries (command_context * ctx, array_query * ret_queries)
 		  assert (ret == OK);
 		  ret =
 		    stream_append_copy_sbuf_pos_len (mgr->shared_stream,
-						     start, len);
+						     &start, len);
 		  assert (ret == OK);
 		  ret =
 		    stream_append_copy_buf (mgr->shared_stream,
@@ -277,7 +277,7 @@ merge_reply_mget (command_context * ctx)
 	{
 	  continue;
 	}
-      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
+      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, &start, len);
       assert (ret == OK);
       ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
       assert (ret == OK);
@@ -308,11 +308,11 @@ merge_int_replies (command_context * ctx)
       parse_ctx = pool_get_parse_ctx (msg);
 
       getArgumentPosition (parse_ctx, 0, &start, &len);
-      ch = sbuf_char (start);
+      ch = sbuf_char (&start);
       if (ch == ':')
 	{
 	  sbuf_next_pos (&start);	// Skip ':' character
-	  ret = sbuf_string2ll (start, len - 1, &ll);
+	  ret = sbuf_string2ll (&start, len - 1, &ll);
 	  if (ret)
 	    {
 	      count += ll;
@@ -323,8 +323,7 @@ merge_int_replies (command_context * ctx)
       return stream_create_sbuf_printf (mgr->shared_stream,
 					"-ERR bad integer response\r\n");
     }
-  return stream_create_sbuf_printf (mgr->shared_stream, ":%lld\r\n",
-				    count);
+  return stream_create_sbuf_printf (mgr->shared_stream, ":%lld\r\n", count);
 }
 
 void
@@ -563,7 +562,7 @@ create_modified_scan_query (command_context * ctx, unsigned long long cursor,
       getArgumentPosition (ctx->parse_ctx, i, &start, &len);
       ret = stream_append_printf (mgr->shared_stream, "$%ld\r\n", len);
       assert (ret == OK);
-      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
+      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, &start, len);
       assert (ret == OK);
       ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
       assert (ret == OK);
@@ -618,7 +617,7 @@ create_modified_scan_reply (command_context * ctx, redis_msg * handle,
       getArgumentPosition (parse_ctx, i, &start, &len);
       ret = stream_append_printf (mgr->shared_stream, "$%ld\r\n", len);
       assert (ret == OK);
-      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, start, len);
+      ret = stream_append_copy_sbuf_pos_len (mgr->shared_stream, &start, len);
       assert (ret == OK);
       ret = stream_append_copy_buf (mgr->shared_stream, (void *) "\r\n", 2);
       assert (ret == OK);
@@ -646,7 +645,7 @@ cscan_command (command_context * ctx)
   COROUTINE_BEGIN (ctx->coro_line);
 
   getArgumentPosition (ctx->parse_ctx, 1, &start, &len);
-  ok = sbuf_string2ll (start, len, &ll);
+  ok = sbuf_string2ll (&start, len, &ll);
   if (!ok)
     {
       reply =

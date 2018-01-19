@@ -387,30 +387,30 @@ stream_append_printf (sbuf_hdr * hdr, const char *fmt, ...)
 }
 
 int
-stream_append_copy_sbuf_pos (sbuf_hdr * hdr, sbuf_pos start, sbuf_pos last,
-			     size_t * ret_len)
+stream_append_copy_sbuf_pos (sbuf_hdr * hdr, const sbuf_pos * start,
+			     const sbuf_pos * last, size_t * ret_len)
 {
   sbuf_page *page;
   size_t copy_len, copy_offset;
   int ret;
 
   *ret_len = 0;
-  page = start.page;
+  page = start->page;
   TAILQ_FOREACH_FROM (page, &hdr->page_q, page_tqe)
   {
     copy_len = page->size;
-    if (page == start.page)
+    if (page == start->page)
       {
-	copy_len -= start.offset;
-	copy_offset = start.offset;
+	copy_len -= start->offset;
+	copy_offset = start->offset;
       }
     else
       {
 	copy_offset = 0;
       }
-    if (page == last.page)
+    if (page == last->page)
       {
-	copy_len -= page->size - last.offset;
+	copy_len -= page->size - last->offset;
       }
     ret = stream_append_copy_buf (hdr, page->data + copy_offset, copy_len);
     if (ret == ERR)
@@ -418,7 +418,7 @@ stream_append_copy_sbuf_pos (sbuf_hdr * hdr, sbuf_pos start, sbuf_pos last,
 	return ERR;
       }
     *ret_len += copy_len;
-    if (page == last.page)
+    if (page == last->page)
       {
 	/* Find last page */
 	return OK;
@@ -429,23 +429,24 @@ stream_append_copy_sbuf_pos (sbuf_hdr * hdr, sbuf_pos start, sbuf_pos last,
 }
 
 int
-stream_append_copy_sbuf_pos_len (sbuf_hdr * hdr, sbuf_pos start, size_t len)
+stream_append_copy_sbuf_pos_len (sbuf_hdr * hdr, const sbuf_pos * start,
+				 size_t len)
 {
   sbuf_hdr *src;
   sbuf_page *page;
   size_t copy_len, copy_offset, total_len;
   int ret;
 
-  src = start.page->my_hdr;
+  src = start->page->my_hdr;
   total_len = 0;
-  page = start.page;
+  page = start->page;
   TAILQ_FOREACH_FROM (page, &src->page_q, page_tqe)
   {
     copy_len = page->size;
-    if (page == start.page)
+    if (page == start->page)
       {
-	copy_len -= start.offset;
-	copy_offset = start.offset;
+	copy_len -= start->offset;
+	copy_offset = start->offset;
       }
     else
       {
@@ -474,7 +475,7 @@ stream_append_copy_sbuf (sbuf_hdr * hdr, sbuf * buf)
 {
   size_t len;
 
-  return stream_append_copy_sbuf_pos (hdr, buf->start, buf->last, &len);
+  return stream_append_copy_sbuf_pos (hdr, &buf->start, &buf->last, &len);
 }
 
 ssize_t
@@ -528,16 +529,16 @@ stream_discard_appended (sbuf_hdr * hdr)
   }
 }
 
-sbuf_pos
+sbuf_pos *
 stream_start_pos (sbuf_hdr * hdr)
 {
-  return hdr->stream_start;
+  return &hdr->stream_start;
 }
 
-sbuf_pos
+sbuf_pos *
 stream_last_pos (sbuf_hdr * hdr)
 {
-  return hdr->stream_last;
+  return &hdr->stream_last;
 }
 
 size_t
@@ -561,7 +562,7 @@ stream_fragmentation_ratio (sbuf_hdr * hdr)
 }
 
 sbuf *
-stream_create_sbuf (sbuf_hdr * hdr, sbuf_pos last_pos)
+stream_create_sbuf (sbuf_hdr * hdr, const sbuf_pos * last_pos)
 {
   sbuf *buf;
 
@@ -574,9 +575,9 @@ stream_create_sbuf (sbuf_hdr * hdr, sbuf_pos last_pos)
 
   buf->my_hdr = hdr;
   buf->start = hdr->stream_start;
-  buf->last = last_pos;
+  buf->last = *last_pos;
   buf->write_marker = buf->start;
-  buf->len = sbuf_offset_len (buf->start, buf->last);
+  buf->len = sbuf_offset_len (&buf->start, &buf->last);
   if (buf->len == -1)
     {
       mempool_free (hdr->mp_sbuf, buf);
@@ -584,7 +585,7 @@ stream_create_sbuf (sbuf_hdr * hdr, sbuf_pos last_pos)
     }
 
   TAILQ_INSERT_TAIL (&hdr->sbuf_q, buf, sbuf_tqe);
-  hdr->stream_start = last_pos;
+  hdr->stream_start = *last_pos;
   hdr->num_sbuf++;
 
   return buf;
@@ -628,23 +629,23 @@ stream_create_sbuf_printf (sbuf_hdr * hdr, const char *fmt, ...)
 }
 
 int
-sbuf_copy_buf (void *s, sbuf_pos start, size_t n)
+sbuf_copy_buf (void *s, const sbuf_pos * start, size_t n)
 {
   sbuf_hdr *hdr;
   sbuf_page *page;
   size_t copy_len, copy_offset, pos;
 
-  hdr = start.page->my_hdr;
+  hdr = start->page->my_hdr;
 
   pos = 0;
-  page = start.page;
+  page = start->page;
   TAILQ_FOREACH_FROM (page, &hdr->page_q, page_tqe)
   {
     copy_len = page->size;
-    if (page == start.page)
+    if (page == start->page)
       {
-	copy_len -= start.offset;
-	copy_offset = start.offset;
+	copy_len -= start->offset;
+	copy_offset = start->offset;
       }
     else
       {
@@ -662,22 +663,23 @@ sbuf_copy_buf (void *s, sbuf_pos start, size_t n)
 }
 
 int
-sbuf_offset (sbuf_pos start, sbuf_pos last, size_t offset, sbuf_pos * ret_pos)
+sbuf_offset (const sbuf_pos * start, const sbuf_pos * last, size_t offset,
+	     sbuf_pos * ret_pos)
 {
   sbuf_hdr *hdr;
   sbuf_page *page;
   size_t len, pos;
 
-  hdr = start.page->my_hdr;
+  hdr = start->page->my_hdr;
 
   pos = 0;
-  page = start.page;
+  page = start->page;
   TAILQ_FOREACH_FROM (page, &hdr->page_q, page_tqe)
   {
     len = page->size;
-    if (page == start.page)
+    if (page == start->page)
       {
-	len -= start.offset;
+	len -= start->offset;
       }
     if (pos + len <= offset)
       {
@@ -687,18 +689,18 @@ sbuf_offset (sbuf_pos start, sbuf_pos last, size_t offset, sbuf_pos * ret_pos)
       {
 	ret_pos->page = page;
 	ret_pos->offset = offset - pos;
-	if (page == start.page)
+	if (page == start->page)
 	  {
-	    ret_pos->offset += start.offset;
+	    ret_pos->offset += start->offset;
 	  }
 	/* Check pos is in range between start and last */
-	if (page == last.page && ret_pos->offset > last.offset)
+	if (page == last->page && ret_pos->offset > last->offset)
 	  {
 	    break;
 	  }
 	return OK;
       }
-    if (page == last.page)
+    if (page == last->page)
       {
 	break;
       }
@@ -709,27 +711,27 @@ sbuf_offset (sbuf_pos start, sbuf_pos last, size_t offset, sbuf_pos * ret_pos)
 }
 
 ssize_t
-sbuf_offset_len (sbuf_pos start, sbuf_pos last)
+sbuf_offset_len (const sbuf_pos * start, const sbuf_pos * last)
 {
   sbuf_hdr *hdr;
   sbuf_page *page;
   ssize_t len;
 
-  hdr = start.page->my_hdr;
+  hdr = start->page->my_hdr;
 
   len = 0;
-  page = start.page;
+  page = start->page;
   TAILQ_FOREACH_FROM (page, &hdr->page_q, page_tqe)
   {
     len += page->size;
-    if (page == start.page)
+    if (page == start->page)
       {
-	len -= start.offset;
+	len -= start->offset;
       }
-    if (page == last.page)
+    if (page == last->page)
       {
 	/* Find 'last' page */
-	len -= page->size - last.offset;
+	len -= page->size - last->offset;
 	return len;
       }
   }
@@ -738,8 +740,8 @@ sbuf_offset_len (sbuf_pos start, sbuf_pos last)
 }
 
 int
-sbuf_offset_char (sbuf_pos start, sbuf_pos last, size_t offset,
-		  char *ret_char)
+sbuf_offset_char (const sbuf_pos * start, const sbuf_pos * last,
+		  size_t offset, char *ret_char)
 {
   sbuf_pos find;
   int ret;
@@ -754,33 +756,33 @@ sbuf_offset_char (sbuf_pos start, sbuf_pos last, size_t offset,
 }
 
 int
-sbuf_strchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
-	     size_t * ret_offset)
+sbuf_strchr (const sbuf_pos * start, const sbuf_pos * last, int c,
+	     sbuf_pos * ret_pos, size_t * ret_offset)
 {
   sbuf_hdr *hdr;
   sbuf_page *page;
   size_t len, pos, offset;
   char *ptr;
 
-  hdr = start.page->my_hdr;
+  hdr = start->page->my_hdr;
 
   pos = 0;
-  page = start.page;
+  page = start->page;
   TAILQ_FOREACH_FROM (page, &hdr->page_q, page_tqe)
   {
     len = page->size;
-    if (page == start.page)
+    if (page == start->page)
       {
-	len -= start.offset;
-	offset = start.offset;
+	len -= start->offset;
+	offset = start->offset;
       }
     else
       {
 	offset = 0;
       }
-    if (page == last.page)
+    if (page == last->page)
       {
-	len -= page->size - last.offset;
+	len -= page->size - last->offset;
       }
     ptr = strchrnul (page->data + offset, c);
     // Make sure ptr doesn't cross the boundary of next buffer.
@@ -796,7 +798,7 @@ sbuf_strchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
       {
 	break;
       }
-    if (page == last.page)
+    if (page == last->page)
       {
 	break;
       }
@@ -875,7 +877,7 @@ sbuf_writev (sbuf ** bufv, ssize_t nbuf, int fd)
 	}
       else
 	{
-	  offset_len = sbuf_offset_len (buf->write_marker, buf->last);
+	  offset_len = sbuf_offset_len (&buf->write_marker, &buf->last);
 	}
       if (len + offset_len < nwritten)
 	{
@@ -885,7 +887,7 @@ sbuf_writev (sbuf ** bufv, ssize_t nbuf, int fd)
 	}
 
       ret =
-	sbuf_offset (buf->write_marker, buf->last, nwritten - len,
+	sbuf_offset (&buf->write_marker, &buf->last, nwritten - len,
 		     &new_marker);
       if (ret == ERR)
 	{
@@ -924,16 +926,16 @@ sbuf_check_write_finish (sbuf * buf)
   return ERR;
 }
 
-sbuf_pos
+sbuf_pos *
 sbuf_start_pos (sbuf * buf)
 {
-  return buf->start;
+  return &buf->start;
 }
 
-sbuf_pos
+sbuf_pos *
 sbuf_last_pos (sbuf * buf)
 {
-  return buf->last;
+  return &buf->last;
 }
 
 size_t
@@ -943,9 +945,9 @@ sbuf_len (sbuf * buf)
 }
 
 char
-sbuf_char (sbuf_pos pos)
+sbuf_char (const sbuf_pos * pos)
 {
-  return *(pos.page->data + pos.offset);
+  return *(pos->page->data + pos->offset);
 }
 
 void
@@ -1069,24 +1071,24 @@ static const unsigned short crc16tab[256] = {
 };
 
 unsigned short
-sbuf_crc16 (sbuf_pos start_pos, size_t len, unsigned short sd)
+sbuf_crc16 (const sbuf_pos * start_pos, size_t len, unsigned short sd)
 {
-  sbuf_pos pos = start_pos;
+  sbuf_pos pos = *start_pos;
   int counter;
   unsigned short crc = sd;
 
   for (counter = 0; counter < (signed) len; counter++)
     {
-      crc = (crc << 8) ^ crc16tab[((crc >> 8) ^ sbuf_char (pos)) & 0x00FF];
+      crc = (crc << 8) ^ crc16tab[((crc >> 8) ^ sbuf_char (&pos)) & 0x00FF];
       sbuf_next_pos (&pos);
     }
   return crc;
 }
 
 int
-sbuf_string2ll (sbuf_pos start_pos, size_t slen, long long *value)
+sbuf_string2ll (const sbuf_pos * start_pos, size_t slen, long long *value)
 {
-  sbuf_pos p = start_pos;
+  sbuf_pos p = *start_pos;
   char c;
   size_t plen = 0;
   int negative = 0;
@@ -1096,14 +1098,14 @@ sbuf_string2ll (sbuf_pos start_pos, size_t slen, long long *value)
     return 0;
 
   /* Special case: first and only digit is 0. */
-  if (slen == 1 && sbuf_char (p) == '0')
+  if (slen == 1 && sbuf_char (&p) == '0')
     {
       if (value != NULL)
 	*value = 0;
       return 1;
     }
 
-  if (sbuf_char (p) == '-')
+  if (sbuf_char (&p) == '-')
     {
       negative = 1;
       sbuf_next_pos (&p);
@@ -1115,7 +1117,7 @@ sbuf_string2ll (sbuf_pos start_pos, size_t slen, long long *value)
     }
 
   /* First digit should be 1-9, otherwise the string should just be 0. */
-  c = sbuf_char (p);
+  c = sbuf_char (&p);
   if (c >= '1' && c <= '9')
     {
       v = c - '0';
@@ -1132,7 +1134,7 @@ sbuf_string2ll (sbuf_pos start_pos, size_t slen, long long *value)
       return 0;
     }
 
-  c = sbuf_char (p);
+  c = sbuf_char (&p);
   while (plen < slen && c >= '0' && c <= '9')
     {
       if (v > (ULLONG_MAX / 10))	/* Overflow. */
@@ -1144,7 +1146,7 @@ sbuf_string2ll (sbuf_pos start_pos, size_t slen, long long *value)
       v += c - '0';
 
       sbuf_next_pos (&p);
-      c = sbuf_char (p);
+      c = sbuf_char (&p);
       plen++;
     }
 

@@ -59,40 +59,42 @@ int stream_append_copy_buf (sbuf_hdr * hdr, void *buf, size_t len);
 int stream_append_copy_str (sbuf_hdr * hdr, const char *str);
 int stream_append_vprintf (sbuf_hdr * hdr, const char *fmt, va_list ap);
 int stream_append_printf (sbuf_hdr * hdr, const char *fmt, ...);
-int stream_append_copy_sbuf_pos (sbuf_hdr * hdr, sbuf_pos start,
-				 sbuf_pos last, size_t * ret_len);
-int stream_append_copy_sbuf_pos_len (sbuf_hdr * hdr, sbuf_pos start,
+int stream_append_copy_sbuf_pos (sbuf_hdr * hdr, const sbuf_pos * start,
+				 const sbuf_pos * last, size_t * ret_len);
+int stream_append_copy_sbuf_pos_len (sbuf_hdr * hdr, const sbuf_pos * start,
 				     size_t len);
 int stream_append_copy_sbuf (sbuf_hdr * hdr, sbuf * buf);
 ssize_t stream_append_read (sbuf_hdr * hdr, int fd);
 void stream_discard_appended (sbuf_hdr * hdr);
-sbuf_pos stream_start_pos (sbuf_hdr * hdr);
-sbuf_pos stream_last_pos (sbuf_hdr * hdr);
+sbuf_pos *stream_start_pos (sbuf_hdr * hdr);
+sbuf_pos *stream_last_pos (sbuf_hdr * hdr);
 size_t stream_mem_used (sbuf_hdr * hdr);
 size_t stream_mem_alloc (sbuf_hdr * hdr);
 float stream_fragmentation_ratio (sbuf_hdr * hdr);
-sbuf *stream_create_sbuf (sbuf_hdr * hdr, sbuf_pos last_pos);
+sbuf *stream_create_sbuf (sbuf_hdr * hdr, const sbuf_pos * last_pos);
 sbuf *stream_create_sbuf_buf (sbuf_hdr * hdr, void *buf, size_t len);
 sbuf *stream_create_sbuf_str (sbuf_hdr * hdr, const char *str);
 sbuf *stream_create_sbuf_printf (sbuf_hdr * hdr, const char *fmt, ...);
-int sbuf_copy_buf (void *s, sbuf_pos start, size_t n);
-int sbuf_offset (sbuf_pos start, sbuf_pos last, size_t offset,
+int sbuf_copy_buf (void *s, const sbuf_pos * start, size_t n);
+int sbuf_offset (const sbuf_pos * start, const sbuf_pos * last, size_t offset,
 		 sbuf_pos * ret_pos);
-ssize_t sbuf_offset_len (sbuf_pos start, sbuf_pos last);
-int sbuf_offset_char (sbuf_pos start, sbuf_pos last, size_t offset,
-		      char *ret_char);
-int sbuf_strchr (sbuf_pos start, sbuf_pos last, int c, sbuf_pos * ret_pos,
-		 size_t * ret_offset);
+ssize_t sbuf_offset_len (const sbuf_pos * start, const sbuf_pos * last);
+int sbuf_offset_char (const sbuf_pos * start, const sbuf_pos * last,
+		      size_t offset, char *ret_char);
+int sbuf_strchr (const sbuf_pos * start, const sbuf_pos * last, int c,
+		 sbuf_pos * ret_pos, size_t * ret_offset);
 ssize_t sbuf_writev (sbuf ** bufv, ssize_t nbuf, int fd);
 void sbuf_reset_write_marker (sbuf * buf);
 int sbuf_check_write_none (sbuf * buf);
 int sbuf_check_write_finish (sbuf * buf);
-sbuf_pos sbuf_start_pos (sbuf * buf);
-sbuf_pos sbuf_last_pos (sbuf * buf);
+sbuf_pos *sbuf_start_pos (sbuf * buf);
+sbuf_pos *sbuf_last_pos (sbuf * buf);
 size_t sbuf_len (sbuf * buf);
-char sbuf_char (sbuf_pos pos);
+char sbuf_char (const sbuf_pos * pos);
 void sbuf_next_pos (sbuf_pos * pos);
 void sbuf_free (sbuf * buf);
-unsigned short sbuf_crc16 (sbuf_pos start_pos, size_t len, unsigned short sd);
-int sbuf_string2ll (sbuf_pos start_pos, size_t slen, long long *value);
+unsigned short sbuf_crc16 (const sbuf_pos * start_pos, size_t len,
+			   unsigned short sd);
+int sbuf_string2ll (const sbuf_pos * start_pos, size_t slen,
+		    long long *value);
 #endif

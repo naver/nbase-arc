@@ -377,7 +377,7 @@ get_redis_command (command_manager * mgr, ParseContext * ctx)
       return NULL;
     }
 
-  ret = sbuf_copy_buf (cmdbuf, start_pos, len);
+  ret = sbuf_copy_buf (cmdbuf, &start_pos, len);
   assert (ret == OK);
   cmdbuf[len] = '\0';
 
