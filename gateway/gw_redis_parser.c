@@ -87,18 +87,18 @@ getRequestType (char c)
 }
 
 static void
-appendArgposToArray (ParseContext * ctx, sbuf_pos start, ssize_t len)
+appendArgposToArray (ParseContext * ctx, const sbuf_pos * start, ssize_t len)
 {
   ArgPos a;
 
-  a.start = start;
+  a.start = *start;
   a.len = len;
 
   ARRAY_PUSH (&ctx->args, a);
 }
 
 static int
-parseLine (sbuf_pos start, sbuf_pos last, sbuf_pos * ret_next,
+parseLine (const sbuf_pos * start, const sbuf_pos * last, sbuf_pos * ret_next,
 	   ArgPos * ret_arg)
 {
   sbuf_pos newline;
@@ -111,20 +111,20 @@ parseLine (sbuf_pos start, sbuf_pos last, sbuf_pos * ret_next,
       return PARSE_INSUFFICIENT_DATA;
     }
 
-  ret = sbuf_offset (newline, last, 2, ret_next);
+  ret = sbuf_offset (&newline, last, 2, ret_next);
   if (ret == ERR)
     {
       return PARSE_INSUFFICIENT_DATA;
     }
 
-  ret_arg->start = start;
+  ret_arg->start = *start;
   ret_arg->len = offset;
   return PARSE_COMPLETE;
 }
 
 static int
-parseNumber (sbuf_pos start, sbuf_pos last, sbuf_pos * ret_next,
-	     long long *ret_ll)
+parseNumber (const sbuf_pos * start, const sbuf_pos * last,
+	     sbuf_pos * ret_next, long long *ret_ll)
 {
   ArgPos arg;
   int ret, ok;
@@ -141,7 +141,7 @@ parseNumber (sbuf_pos start, sbuf_pos last, sbuf_pos * ret_next,
     }
 
   sbuf_next_pos (&arg.start);	// Skip '$' character
-  ok = sbuf_string2ll (arg.start, arg.len - 1, ret_ll);
+  ok = sbuf_string2ll (&arg.start, arg.len - 1, ret_ll);
   if (!ok)
     {
       return PARSE_ERROR;
@@ -151,7 +151,7 @@ parseNumber (sbuf_pos start, sbuf_pos last, sbuf_pos * ret_next,
 }
 
 static int
-parseBulkStr (sbuf_pos start, sbuf_pos last, size_t bulklen,
+parseBulkStr (const sbuf_pos * start, const sbuf_pos * last, size_t bulklen,
 	      sbuf_pos * ret_next)
 {
   int ret;
@@ -180,7 +180,7 @@ makeSdsFromSbuf (sbuf * buf)
 static int
 inlineParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
 {
-  sbuf_pos last, newline, next_pos;
+  sbuf_pos *last, newline, next_pos;
   sbuf *tmp_sbuf;
   size_t len;
   sds aux, remaining, *argv;
@@ -188,10 +188,10 @@ inlineParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
 
   last = stream_last_pos (stream);
 
-  ret = sbuf_strchr (ctx->pos, last, '\n', &newline, &len);
+  ret = sbuf_strchr (&ctx->pos, last, '\n', &newline, &len);
   if (ret == ERR)
     {
-      if (sbuf_offset_len (ctx->pos, last) > PARSE_INLINE_MAX_SIZE)
+      if (sbuf_offset_len (&ctx->pos, last) > PARSE_INLINE_MAX_SIZE)
 	{
 	  *err = sdsnew ("Protocol error: too big inline request");
 	  return PARSE_ERROR;
@@ -199,13 +199,13 @@ inlineParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
       return PARSE_INSUFFICIENT_DATA;
     }
 
-  ret = sbuf_offset (newline, last, 1, &next_pos);
+  ret = sbuf_offset (&newline, last, 1, &next_pos);
   if (ret == ERR)
     {
       return PARSE_INSUFFICIENT_DATA;
     }
   // Copy parsed data to sds and free the data from the stream.
-  tmp_sbuf = stream_create_sbuf (stream, next_pos);
+  tmp_sbuf = stream_create_sbuf (stream, &next_pos);
   aux = makeSdsFromSbuf (tmp_sbuf);
   sbuf_free (tmp_sbuf);
 
@@ -262,7 +262,7 @@ static int
 multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 		 sds * err)
 {
-  sbuf_pos last, next_pos;
+  sbuf_pos *last, next_pos;
   long long ll;
   int ret;
 
@@ -271,10 +271,10 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
   /* Get Multibulk Length */
   if (ctx->mbulklen[ctx->mbulkdepth] == 0)
     {
-      ret = parseNumber (ctx->pos, last, &next_pos, &ll);
+      ret = parseNumber (&ctx->pos, last, &next_pos, &ll);
       if (ret == PARSE_INSUFFICIENT_DATA)
 	{
-	  if (sbuf_offset_len (ctx->pos, last) > PARSE_INLINE_MAX_SIZE)
+	  if (sbuf_offset_len (&ctx->pos, last) > PARSE_INLINE_MAX_SIZE)
 	    {
 	      *err = sdsnew ("Protocol error: too big mbulk count string");
 	      return PARSE_ERROR;
@@ -292,7 +292,7 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
       /* Null Bulk */
       if (ll <= 0)
 	{
-	  *query = stream_create_sbuf (stream, ctx->pos);
+	  *query = stream_create_sbuf (stream, &ctx->pos);
 	  return PARSE_COMPLETE;
 	}
     }
@@ -302,22 +302,22 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
       /* Get Bulk Length */
       if (ctx->bulklen == -1)
 	{
-	  ret = parseNumber (ctx->pos, last, &next_pos, &ll);
+	  ret = parseNumber (&ctx->pos, last, &next_pos, &ll);
 	  if (ret == PARSE_INSUFFICIENT_DATA)
 	    {
-	      if (sbuf_offset_len (ctx->pos, last) > PARSE_INLINE_MAX_SIZE)
+	      if (sbuf_offset_len (&ctx->pos, last) > PARSE_INLINE_MAX_SIZE)
 		{
 		  *err = sdsnew ("Protocol error: too big bulk count string");
 		  return PARSE_ERROR;
 		}
 	      return PARSE_INSUFFICIENT_DATA;
 	    }
-	  if (sbuf_char (ctx->pos) != '$')
+	  if (sbuf_char (&ctx->pos) != '$')
 	    {
 	      *err =
 		sdscatprintf (sdsempty (),
 			      "Protocol error: expected '$', got '%c'",
-			      sbuf_char (ctx->pos));
+			      sbuf_char (&ctx->pos));
 	      return PARSE_ERROR;
 	    }
 	  if (ret == PARSE_ERROR
@@ -332,18 +332,18 @@ multibulkParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	}
 
       /* Get Bulk String */
-      ret = parseBulkStr (ctx->pos, last, ctx->bulklen, &next_pos);
+      ret = parseBulkStr (&ctx->pos, last, ctx->bulklen, &next_pos);
       if (ret == PARSE_INSUFFICIENT_DATA)
 	{
 	  return PARSE_INSUFFICIENT_DATA;
 	}
-      appendArgposToArray (ctx, ctx->pos, ctx->bulklen);
+      appendArgposToArray (ctx, &ctx->pos, ctx->bulklen);
       ctx->pos = next_pos;
       ctx->bulklen = -1;
       ctx->mbulklen[ctx->mbulkdepth]--;
     }
 
-  *query = stream_create_sbuf (stream, ctx->pos);
+  *query = stream_create_sbuf (stream, &ctx->pos);
   return PARSE_COMPLETE;
 }
 
@@ -352,7 +352,7 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 		 sds * err)
 {
   ArgPos arg;
-  sbuf_pos last, next_pos;
+  sbuf_pos *last, next_pos;
   long long ll;
   int type, ret;
 
@@ -373,26 +373,26 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 
       if (ctx->bulklen == -1)
 	{
-	  if (SBUF_POS_EQUAL (&ctx->pos, &last))
+	  if (SBUF_POS_EQUAL (&ctx->pos, last))
 	    {
 	      return PARSE_INSUFFICIENT_DATA;
 	    }
-	  type = getReplyType (sbuf_char (ctx->pos));
+	  type = getReplyType (sbuf_char (&ctx->pos));
 
 	  switch (type)
 	    {
 	    case TYPE_INLINE:
-	      ret = parseLine (ctx->pos, last, &next_pos, &arg);
+	      ret = parseLine (&ctx->pos, last, &next_pos, &arg);
 	      if (ret == PARSE_INSUFFICIENT_DATA)
 		{
 		  return PARSE_INSUFFICIENT_DATA;
 		}
-	      appendArgposToArray (ctx, arg.start, arg.len);
+	      appendArgposToArray (ctx, &arg.start, arg.len);
 	      ctx->pos = next_pos;
 	      ctx->mbulklen[ctx->mbulkdepth]--;
 	      break;
 	    case TYPE_BULK:
-	      ret = parseNumber (ctx->pos, last, &next_pos, &ll);
+	      ret = parseNumber (&ctx->pos, last, &next_pos, &ll);
 	      if (ret == PARSE_INSUFFICIENT_DATA)
 		{
 		  return PARSE_INSUFFICIENT_DATA;
@@ -408,13 +408,13 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	      /* Null Bulk */
 	      if (ll < 0)
 		{
-		  appendArgposToArray (ctx, ctx->pos, ll);
+		  appendArgposToArray (ctx, &ctx->pos, ll);
 		  ctx->bulklen = -1;
 		  ctx->mbulklen[ctx->mbulkdepth]--;
 		}
 	      break;
 	    case TYPE_MULTIBULK:
-	      ret = parseNumber (ctx->pos, last, &next_pos, &ll);
+	      ret = parseNumber (&ctx->pos, last, &next_pos, &ll);
 	      if (ret == PARSE_INSUFFICIENT_DATA)
 		{
 		  return PARSE_INSUFFICIENT_DATA;
@@ -448,7 +448,7 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	      *err =
 		sdscatprintf (sdsempty (),
 			      "Protocol error, got %c as reply type byte",
-			      sbuf_char (ctx->pos));
+			      sbuf_char (&ctx->pos));
 	      return PARSE_ERROR;
 	    }
 	}
@@ -457,17 +457,17 @@ replyParserLoop (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	{
 	  continue;
 	}
-      ret = parseBulkStr (ctx->pos, last, ctx->bulklen, &next_pos);
+      ret = parseBulkStr (&ctx->pos, last, ctx->bulklen, &next_pos);
       if (ret == PARSE_INSUFFICIENT_DATA)
 	{
 	  return PARSE_INSUFFICIENT_DATA;
 	}
-      appendArgposToArray (ctx, ctx->pos, ctx->bulklen);
+      appendArgposToArray (ctx, &ctx->pos, ctx->bulklen);
       ctx->pos = next_pos;
       ctx->bulklen = -1;
       ctx->mbulklen[ctx->mbulkdepth]--;
     }
-  *query = stream_create_sbuf (stream, ctx->pos);
+  *query = stream_create_sbuf (stream, &ctx->pos);
   return PARSE_COMPLETE;
 }
 
@@ -524,7 +524,7 @@ getParsedStr (ParseContext * ctx, int idx, char **ret_str)
   assert (ret == OK);
 
   val = zmalloc (len + 1);
-  ret = sbuf_copy_buf (val, start_pos, len);
+  ret = sbuf_copy_buf (val, &start_pos, len);
   assert (ret == OK);
   val[len] = '\0';
 
@@ -546,7 +546,7 @@ getParsedNumber (ParseContext * ctx, int idx, long long *ret_ll)
 
   ret = getArgumentPosition (ctx, idx, &start_pos, &len);
   assert (ret == OK);
-  ret = sbuf_string2ll (start_pos, len, ret_ll);
+  ret = sbuf_string2ll (&start_pos, len, ret_ll);
   if (!ret)
     {
       return ERR;
@@ -566,7 +566,7 @@ createParseContext (mempool_hdr_t * mp_parse_ctx, sbuf_hdr * stream)
     }
 
   ctx->type = 0;
-  ctx->pos = stream_start_pos (stream);
+  ctx->pos = *stream_start_pos (stream);
   ctx->mbulkdepth = 0;
   ctx->mbulklen[ctx->mbulkdepth] = 0;
   ctx->bulklen = -1;
@@ -578,7 +578,7 @@ createParseContext (mempool_hdr_t * mp_parse_ctx, sbuf_hdr * stream)
 void
 resetParseContext (ParseContext * ctx, sbuf_hdr * stream)
 {
-  ctx->pos = stream_start_pos (stream);
+  ctx->pos = *stream_start_pos (stream);
   ctx->type = 0;
   ctx->mbulkdepth = 0;
   ctx->mbulklen[ctx->mbulkdepth] = 0;
@@ -597,17 +597,17 @@ int
 requestParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 	       sds * err)
 {
-  sbuf_pos last;
+  sbuf_pos *last;
 
   last = stream_last_pos (stream);
 
-  if (SBUF_POS_EQUAL (&ctx->pos, &last))
+  if (SBUF_POS_EQUAL (&ctx->pos, last))
     {
       return PARSE_INSUFFICIENT_DATA;
     }
   if (ctx->type == 0)
     {
-      ctx->type = getRequestType (sbuf_char (ctx->pos));
+      ctx->type = getRequestType (sbuf_char (&ctx->pos));
     }
   if (ctx->type == TYPE_MULTIBULK)
     {
@@ -620,25 +620,25 @@ requestParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query,
 int
 replyParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
 {
-  sbuf_pos last, next_pos;
+  sbuf_pos *last, next_pos;
   long long ll;
   int ret;
 
   last = stream_last_pos (stream);
 
-  if (SBUF_POS_EQUAL (&ctx->pos, &last))
+  if (SBUF_POS_EQUAL (&ctx->pos, last))
     {
       return PARSE_INSUFFICIENT_DATA;
     }
   if (ctx->type == 0)
     {
-      ctx->type = getReplyType (sbuf_char (ctx->pos));
+      ctx->type = getReplyType (sbuf_char (&ctx->pos));
       if (ctx->type == TYPE_UNKNOWN)
 	{
 	  *err =
 	    sdscatprintf (sdsempty (),
 			  "Protocol error, got %c as reply type byte",
-			  sbuf_char (ctx->pos));
+			  sbuf_char (&ctx->pos));
 	  return PARSE_ERROR;
 	}
     }
@@ -649,7 +649,7 @@ replyParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
     case TYPE_MULTIBULK:
       if (ctx->mbulkdepth == 0 && ctx->mbulklen[ctx->mbulkdepth] == 0)
 	{
-	  ret = parseNumber (ctx->pos, last, &next_pos, &ll);
+	  ret = parseNumber (&ctx->pos, last, &next_pos, &ll);
 	  if (ret == PARSE_INSUFFICIENT_DATA)
 	    {
 	      return PARSE_INSUFFICIENT_DATA;
@@ -666,7 +666,7 @@ replyParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
 	  /*  Null Multibulk */
 	  if (ctx->mbulklen[ctx->mbulkdepth] <= 0)
 	    {
-	      *query = stream_create_sbuf (stream, ctx->pos);
+	      *query = stream_create_sbuf (stream, &ctx->pos);
 	      return PARSE_COMPLETE;
 	    }
 	}
@@ -680,7 +680,7 @@ replyParser (ParseContext * ctx, sbuf_hdr * stream, sbuf ** query, sds * err)
       *err =
 	sdscatprintf (sdsempty (),
 		      "Protocol error, got %c as reply type byte",
-		      sbuf_char (ctx->pos));
+		      sbuf_char (&ctx->pos));
       return PARSE_ERROR;
     default:
       break;

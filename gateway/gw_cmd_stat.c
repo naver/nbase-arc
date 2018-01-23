@@ -554,7 +554,7 @@ aggregate_redis_stat (command_context * ctx, struct redis_info_stat_s *aggr)
 
       getArgumentPosition (parse_ctx, 0, &start, &len);
       buf = sdsMakeRoomFor (sdsempty (), len + 1);
-      sbuf_copy_buf (buf, start, len);
+      sbuf_copy_buf (buf, &start, len);
       sdsIncrLen (buf, len);
 
       memset (&stat, 0, sizeof (stat));
@@ -970,7 +970,7 @@ merge_reply_dbsize (command_context * ctx)
 	{
 	  getArgumentPosition (parse_ctx, 0, &start, &len);
 	  sbuf_next_pos (&start);	// Skip ':' character
-	  ret = sbuf_string2ll (start, len - 1, &ll);
+	  ret = sbuf_string2ll (&start, len - 1, &ll);
 	  assert (ret);		// Redis DBSIZE command always returns in ':<number>\r\n' format.
 	  count += ll;
 	}
