@@ -56,7 +56,7 @@ public class NodeWatcher implements Watcher {
 
     private CountDownLatch connLatcher;
 
-    private ZooKeeper zk;
+    private volatile ZooKeeper zk;
     private GatewayConfig config;
     private GatewayServerData gatewayServerData;
     private ObjectMapper objectMapper = new ObjectMapper();
@@ -78,7 +78,9 @@ public class NodeWatcher implements Watcher {
 
         this.connLatcher = new CountDownLatch(1);
         connectExecutor.submit(zkConnector);
-        this.connLatcher.await(config.getZkConnectTimeout(), TimeUnit.MILLISECONDS);
+        if (this.connLatcher.await(config.getZkConnectTimeout(), TimeUnit.MILLISECONDS) == false) {
+            throw new TimeoutException("[NodeWatcher] ZooKeeper Connect timeout. zkConnectTimeout=" + config.getZkConnectTimeout());
+        }
     }
 
     private Runnable zkConnector = new Runnable() {
