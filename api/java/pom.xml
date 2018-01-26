@@ -4,7 +4,7 @@
     <groupId>com.navercorp</groupId>
     <artifactId>nbase-arc-java-client</artifactId>
     <packaging>jar</packaging>
-    <version>1.5.3</version>
+    <version>1.5.4.1</version>
     <name>nbase-arc java client</name>
     <description>nbase-arc java client</description>
     <url>https://github.com/naver/nbase-arc</url>
