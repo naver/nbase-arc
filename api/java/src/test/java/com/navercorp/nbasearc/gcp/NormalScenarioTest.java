@@ -22,7 +22,7 @@ import org.junit.Test;
 import com.google.common.base.Charsets;
 import com.google.common.util.concurrent.SettableFuture;
 import com.jayway.awaitility.Duration;
-import com.navercorp.nbasearc.gcp.ErrorCode;
+import com.navercorp.nbasearc.gcp.StatusCode;
 import com.navercorp.nbasearc.gcp.Gateway;
 import com.navercorp.nbasearc.gcp.GatewayConnectionPool;
 import com.navercorp.nbasearc.gcp.RequestCallback;
@@ -70,7 +70,7 @@ public class NormalScenarioTest {
     private void gwDel(final Integer id)
             throws SecurityException, IllegalArgumentException, NoSuchFieldException, IllegalAccessException {
         final Gateway gw = getGwMap(gcp).get(id);
-        gcp.delGw(id);
+        gcp.delGw(id, gw.getIp(), gw.getPort());
         await().atMost(Duration.ONE_MINUTE).until(new Callable<Boolean>() {
             @Override
             public Boolean call() throws Exception {
@@ -109,13 +109,13 @@ public class NormalScenarioTest {
                     for (int i = 0; i < 10000; i++) {
                         vc.request(CMD_SET, 3000, new RequestCallback() {
                             @Override
-                            public void onResponse(byte[] response, ErrorCode err) {
+                            public void onResponse(byte[] response, StatusCode statusCode) {
                             }
                         });
 
                         vc.request(CMD_GET, 3000, new RequestCallback() {
                             @Override
-                            public void onResponse(byte[] response, ErrorCode err) {
+                            public void onResponse(byte[] response, StatusCode statusCode) {
                             }
                         });
                     }
@@ -141,9 +141,9 @@ public class NormalScenarioTest {
         vc.allocPc(0, AffinityState.READ, true);
         vc.request(CMD_SET, 1000, new RequestCallback() {
             @Override
-            public void onResponse(byte[] response, ErrorCode err) {
+            public void onResponse(byte[] response, StatusCode statusCode) {
                 String s = new String(response, Charsets.UTF_8);
-                result.set(s.equals("+OK\r\n") && err == ErrorCode.OK);
+                result.set(s.equals("+OK\r\n") && statusCode == StatusCode.OK);
             }
         });
         assertTrue(result.get(10000, TimeUnit.MILLISECONDS));
@@ -157,22 +157,21 @@ public class NormalScenarioTest {
         vc.allocPc(0, AffinityState.READ, true);
         vc.request(CMD_SET, 1000, new RequestCallback() {
             @Override
-            public void onResponse(byte[] response, ErrorCode err) {
+            public void onResponse(byte[] response, StatusCode statusCode) {
                 String s = new String(response, Charsets.UTF_8);
-                result.set(s.equals("+OK\r\n") && err == ErrorCode.OK);
+                result.set(s.equals("+OK\r\n") && statusCode == StatusCode.OK);
             }
         });
         assertTrue(result.get(10000, TimeUnit.MILLISECONDS));
         
-        gwDel(GW_ID);
-        
         gwAdd(2, "127.0.0.1", 6010, 2);
+        gwDel(GW_ID);
 
         vc.request(CMD_SET, 1000, new RequestCallback() {
             @Override
-            public void onResponse(byte[] response, ErrorCode err) {
+            public void onResponse(byte[] response, StatusCode statusCode) {
                 String s = new String(response, Charsets.UTF_8);
-                result.set(s.equals("OK") && err == ErrorCode.OK);
+                result.set(s.equals("OK") && statusCode == StatusCode.OK);
             }
         });
         assertTrue(result.get(10000, TimeUnit.MILLISECONDS));

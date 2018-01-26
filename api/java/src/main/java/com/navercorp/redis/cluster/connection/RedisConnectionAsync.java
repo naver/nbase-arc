@@ -37,7 +37,7 @@ import com.google.common.base.Function;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
-import com.navercorp.nbasearc.gcp.ErrorCode;
+import com.navercorp.nbasearc.gcp.StatusCode;
 import com.navercorp.nbasearc.gcp.RequestCallback;
 import com.navercorp.nbasearc.gcp.VirtualConnection;
 import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
@@ -175,8 +175,8 @@ class RedisConnectionAsync implements RedisConnectionImpl {
         
         vc.request(cmdBytes, activeTimeout, new RequestCallback() {
             @Override
-            public void onResponse(byte[] response, ErrorCode errCode) {
-                switch (errCode) {
+            public void onResponse(byte[] response, StatusCode statusCode) {
+                switch (statusCode) {
                 case OK:
                     future.set(response);
                     break;

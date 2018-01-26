@@ -16,7 +16,7 @@
 
 package com.navercorp.nbasearc.gcp;
 
-import static com.navercorp.nbasearc.gcp.ErrorCode.*;
+import static com.navercorp.nbasearc.gcp.StatusCode.*;
 import static com.navercorp.nbasearc.gcp.PhysicalConnection.State.*;
 
 import java.util.ArrayList;
