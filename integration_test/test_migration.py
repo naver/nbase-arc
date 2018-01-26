@@ -27,6 +27,7 @@ import load_generator
 import config
 import random
 import json
+import redis_sock
 
 class TestMigration(unittest.TestCase):
     cluster = config.clusters[1]
@@ -123,6 +124,34 @@ class TestMigration(unittest.TestCase):
 
     def tearDown(self):
         testbase.defaultTearDown(self)
+
+    def test_migrate_empty_s3obj(self):
+        util.print_frame()
+        ip, port = util.get_rand_gateway(self.cluster)
+        client = redis_sock.RedisClient(ip, port)
+
+        # Fill some string and empty s3 objects
+        keyprefix = 'test_migrate_empty_s3obj'
+        for i in range (1000):
+            ok, data = client.do_request('set %s_string_%d %d\r\n' % (keyprefix, i, i))
+            assert (ok == True)
+            ok, data = client.do_request('s3ladd ks %s_s3_%d svc key val 0\r\n' % (keyprefix, i))
+            assert (ok == True and data == 1)
+            ok, data = client.do_request('s3lrem ks %s_s3_%d svc key val\r\n' % (keyprefix, i))
+            assert (ok == True and data == 1)
+
+        ## migration pg0 -> pg1 then pg1 -> pg0
+        ret = util.migration(self.cluster, 0, 1, 4096, 8191, 40000)
+        self.assertEqual(True, ret, 'Migration Fail')
+        ret = util.migration(self.cluster, 1, 0, 4096, 8191, 40000)
+        self.assertEqual(True, ret, 'Migration Fail')
+
+        # Check string object
+        for i in range (1000):
+            ok, data = client.do_request('get %s_string_%d\r\n' % (keyprefix, i))
+            assert (ok == True and int(data) == i)
+
+        client.close()
 
     def test_migrate_all(self):
         util.print_frame()

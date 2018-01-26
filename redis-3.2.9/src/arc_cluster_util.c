@@ -40,8 +40,8 @@ struct dumpState
 /* Local declaration */
 /* ----------------- */
 static void exit_with_usage (void);
-static int cat_load_command (dumpScan * scan, rio * aof);
-static int cat_del_command (dumpScan * scan, rio * aof);
+static int cat_load_command (dumpScan * scan, rio * aof, int *is_eof);
+static int cat_del_command (dumpScan * scan, rio * aof, int *is_eof);
 static void playdump_write_handler (aeEventLoop * el, int fd, void *data,
 				    int mask);
 static void playdump_read_handler (aeEventLoop * el, int fd, void *data,
@@ -88,16 +88,21 @@ exit_with_usage (void)
 
 // returns 0 (EOF), -1 (ERROR), number of op emitted 
 static int
-cat_load_command (dumpScan * scan, rio * aof)
+cat_load_command (dumpScan * scan, rio * aof, int *is_eof)
 {
   robj *key = NULL, *val = NULL;
 
+  *is_eof = 0;
   while (1)
     {
       int ret, count;
 
       if ((ret = arcx_dumpscan_iterate (scan)) <= 0)
 	{
+	  if (ret == 0)
+	    {
+	      *is_eof = 1;
+	    }
 	  return ret;
 	}
 
@@ -188,16 +193,21 @@ err:
 
 // returns 0 (EOF), -1 (ERROR), number of op emitted 
 static int
-cat_del_command (dumpScan * scan, rio * aof)
+cat_del_command (dumpScan * scan, rio * aof, int *is_eof)
 {
   robj *key = NULL, *val = NULL;
 
+  *is_eof = 0;
   while (1)
     {
       int ret;
 
       if ((ret = arcx_dumpscan_iterate (scan)) <= 0)
 	{
+	  if (ret == 0)
+	    {
+	      *is_eof = 1;
+	    }
 	  return ret;
 	}
 
@@ -259,17 +269,19 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 
   if (ds->aof.io.buffer.pos == 0)
     {
+      int is_eof = 0;
+
       /* fill buffer */
       do
 	{
 	  int count;
 	  if (ds->flags == PLAYDUMP_LOAD)
 	    {
-	      ret = count = cat_load_command (ds->scan, &ds->aof);
+	      ret = count = cat_load_command (ds->scan, &ds->aof, &is_eof);
 	    }
 	  else if (ds->flags == PLAYDUMP_RANGEDEL)
 	    {
-	      ret = count = cat_del_command (ds->scan, &ds->aof);
+	      ret = count = cat_del_command (ds->scan, &ds->aof, &is_eof);
 	    }
 	  else
 	    {
@@ -282,13 +294,13 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 	      break;
 	    }
 	}
-      while (ret > 0 && ds->aof.io.buffer.pos < PROTO_IOBUF_LEN);
+      while (!is_eof && ret >= 0 && ds->aof.io.buffer.pos < PROTO_IOBUF_LEN);
 
       if (ret == -1)
 	{
 	  goto err;
 	}
-      else if (ret == 0)
+      if (is_eof)
 	{
 	  char pingcmd[] = "*1\r\n$4\r\nPING\r\n";
 	  if (rioWrite (&ds->aof, pingcmd, sizeof (pingcmd) - 1) == 0)
