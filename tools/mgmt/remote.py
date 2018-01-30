@@ -187,6 +187,9 @@ def copy_binary():
     local_redis_path = config.LOCAL_BINARY_PATH + '/*-' + config.REDIS_VERSION
     local_gw_path = config.LOCAL_BINARY_PATH + '/*-' + config.GW_VERSION
     local_smr_path = config.LOCAL_BINARY_PATH + '/*-' + config.SMR_VERSION
+    util_files = [
+            'cluster-util-' + config.CLUSTER_UTIL_VERSION
+            ]
     remote_path = config.REMOTE_BIN_DIR
 
     if exists(remote_path) == False:
@@ -218,6 +221,17 @@ def copy_binary():
             return False
         put(local_smr_path, remote_path)
         run('chmod +x %s/*' % remote_path)
+
+    for util_file in util_files:
+        local_util_path = config.LOCAL_BINARY_PATH + '/' + util_file
+        remote_util_path = remote_path + '/' + util_file
+        if exists(remote_util_path) == False:
+            run('ls %s' % remote_path)
+            if config.confirm_mode and not confirm('Copy %s to [%s]%s. Continue?' % (local_util_path, env.host, remote_util_path)):
+                warn("Aborting at user request.")
+                return False
+            put(local_util_path, remote_path)
+            run('chmod +x %s' % remote_util_path)
 
     return True
 
@@ -428,7 +442,7 @@ def smr_logutil(arg):
 
 def get_checkpoint(src_ip, src_port, file_name, pn_pg_map, smr_base_port):
     path = config.REMOTE_PGS_DIR + '/' + str(smr_base_port) + '/redis'
-    exec_str = "cluster-util-%s --getdump %s %d %s %s" % (config.REDIS_VERSION, src_ip, src_port, file_name, pn_pg_map)
+    exec_str = "cluster-util-%s --getdump %s %d %s %s" % (config.CLUSTER_UTIL_VERSION, src_ip, src_port, file_name, pn_pg_map)
 
     if config.confirm_mode and not confirm(cyan('[%s] Get checkpoint from %s:%d. Continue?' % (env.host_string, src_ip, src_port))):
         warn("Aborting at user request.")
@@ -455,7 +469,7 @@ def get_checkpoint(src_ip, src_port, file_name, pn_pg_map, smr_base_port):
 
 def checkpoint_and_play(src_ip, src_port, dst_ip, dst_port, range_from, range_to, tps):
     seq = -1
-    exec_str = "cluster-util-%s --getandplay %s %d %s %d %d-%d %d" % (config.REDIS_VERSION, src_ip, src_port, dst_ip, dst_port, range_from, range_to, tps)
+    exec_str = "cluster-util-%s --getandplay %s %d %s %d %d-%d %d" % (config.CLUSTER_UTIL_VERSION, src_ip, src_port, dst_ip, dst_port, range_from, range_to, tps)
     print cyan(exec_str)
     if config.confirm_mode and not confirm(cyan('[%s] Copy checkpoint from [%s:%d] to [%s:%d]. Continue?' % (env.host_string, src_ip, src_port, dst_ip, dst_port))):
         warn("Aborting at user request.")
@@ -473,7 +487,7 @@ def checkpoint_and_play(src_ip, src_port, dst_ip, dst_port, range_from, range_to
     return True, seq
 
 def rangedel(src_ip, src_port, range_from, range_to, tps):
-    exec_str = "cluster-util-%s --rangedel %s %d %d-%d %d" % (config.REDIS_VERSION, src_ip, src_port, range_from, range_to, tps)
+    exec_str = "cluster-util-%s --rangedel %s %d %d-%d %d" % (config.CLUSTER_UTIL_VERSION, src_ip, src_port, range_from, range_to, tps)
     print cyan(exec_str)
     if config.confirm_mode and not confirm(cyan('[%s] Rangedel, PGS:%s:%d, RANGE:%d-%d, Continue?' % (env.host_string, src_ip, src_port, range_from, range_to))):
         warn("Aborting at user request.")

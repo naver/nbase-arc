@@ -14,9 +14,10 @@
 # limitations under the License.
 #
 
-REDIS_VERSION = "v1.2.5"
-GW_VERSION = "v1.2.5"
-SMR_VERSION = "v1.2.5"
+REDIS_VERSION = "v1.4.1"
+GW_VERSION = "v1.4.1"
+SMR_VERSION = "v1.4.1"
+CLUSTER_UTIL_VERSION = "v1.4.2"
 
 GW_BASE_PORT = 6000
 PGS_BASE_PORT = 7000

@@ -47,7 +47,7 @@ def check_local_binary_exist(bins=None):
     if bins == None:
         with settings(warn_only=True):
             if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
-            if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
+            if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.CLUSTER_UTIL_VERSION)).failed: return False
             if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.GW_VERSION)).failed: return False
             if local('test -e %s/smr-replicator-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
             if local('test -e %s/smr-logutil-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
@@ -56,7 +56,7 @@ def check_local_binary_exist(bins=None):
             if bin == 'redis':
                 if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
             elif bin == 'cluster-util':
-                if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
+                if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.CLUSTER_UTIL_VERSION)).failed: return False
             elif bin == 'gateway':
                 if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.GW_VERSION)).failed: return False
             elif bin == 'smr':
