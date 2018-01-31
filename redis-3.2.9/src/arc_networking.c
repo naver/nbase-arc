@@ -367,8 +367,12 @@ process_command (client * c)
     {
       if (c->smr->cmd->proc == bpingCommand)
 	{
-	  bpingCommand (c);
-	  return C_OK;
+	  // Try to skip replication if there are no pending requests in the connection.
+	  if (dlisth_is_empty (&c->smr->client_callbacks))
+	    {
+	      bpingCommand (c);
+	      return C_OK;
+	    }
 	}
       else if (c->smr->cmd->proc == quitCommand)
 	{
@@ -620,8 +624,8 @@ void
 arc_smrc_create (client * c)
 {
   c->smr = NULL;
-  // supersede read handler
-  if (arc.cluster_mode)
+  // supersede connection read handler
+  if (arc.cluster_mode && c->fd != -1)
     {
       // hack: previous call was successful in createClient. no error check is needed
       (void) aeCreateFileEvent (server.el, c->fd, AE_READABLE,
