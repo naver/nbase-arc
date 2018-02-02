@@ -532,9 +532,8 @@ def gw_add(cluster_name, gw_id, pm_name, ip, port):
 def gw_del(cluster_name, gw_id, ip, port):
     host = ip
     print magenta("\n[%s] GW Del" % host)
-    cm_conn.write('gw_info %s %d\r\n' % (cluster_name, gw_id))
-    ret = cm_conn.read_until('\r\n', config.TELNET_TIMEOUT)
-    print ret.strip() + '\n'
+    info = gw_info(cluster_name, gw_id)
+    print info
             
     if config.confirm_mode and not confirm(cyan('[%s] GW Del, GW_ID:%d. Continue?' % (host, gw_id))):
         warn("Aborting at user request.")
@@ -591,11 +590,21 @@ def gw_del(cluster_name, gw_id, ip, port):
                     print yellow('[%s:%d] >>> gateway_connected_clients:%d' % (host, port, num_of_clients))
                     print yellow('[%s:%d] >>> gateway_total_commands_processed:%d (normally +2)' % (host, port, total_commands))
 
-                    if not confirm(cyan('[%s:%d] GW Del, number of client connection is %d. Wait?' % (host, port, gw_cmd.info_num_of_clients()))):
+                    ret = prompt(cyan('[%s:%d] GW Del, number of client connection is %d. Wait? (Y/n/r)' % (host, port, gw_cmd.info_num_of_clients()))).strip().upper()
+                    if ret == 'N':
                         break
+                    elif ret == 'R':
+                        # Rollback & Exit
+                        warn(red("Rollback and Quit at user request"))
+                        if gw_add(cluster_name, gw_id, info['data']['pm_Name'].encode('ascii'), ip, port) != True:
+                            warn(red("[%s] Failed to rollback GW Del, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
+                            return False
+                        return False
                 
     except:
-        warn(red('[%s] GW Del fail, Can not connect to Gateway server. %s:%d' % (host, ip, port)))
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
+        warn(red('[%s] GW Del fail. %s:%d' % (host, ip, port)))
         return False
 
     print green('[%s] GW Del success' % host)
