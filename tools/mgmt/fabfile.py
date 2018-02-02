@@ -1343,8 +1343,14 @@ def upgrade_gw(cluster_name, gw_id):
         warn(red("[%s] GW Add fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return False
 
+    # Wait for clients to connect to gateway
+    for i in xrange(10):
+        if util.check_gateway_warmup(ip, port, serviced_num_clnt * 0.8, serviced_ops * 0.8):
+            break
+        time.sleep(1)
+
     while True:
-        if util.confirm_gateway_on_service(ip, port, serviced_num_clnt, serviced_ops):
+        if util.confirm_gw_add_completion(ip, port, serviced_num_clnt, serviced_ops):
             break
 
     print green('\n #### UPGRADE SUCCESS CLUSTER:%s GWID:%d IP:%s Port:%d #### \n' % (cluster_name, gw_id, ip, port))
