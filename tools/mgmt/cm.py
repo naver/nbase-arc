@@ -495,7 +495,7 @@ def gw_info(cluster_name, gw_id):
         return None
     return json_data
 
-def gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=0):
+def gw_add(cluster_name, gw_id, pm_name, ip, port):
     host = ip
     print magenta("\n[%s] GW Add" % host)
             
@@ -514,27 +514,13 @@ def gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=0):
     # Check gateway client connection
     try:
         with GwCmd(ip, port) as gw_cmd:
-            # Auto mode
-            ok = False
             for i in range(15):
                 print yellow('[%s:%d] >>> inactive_connections:%d' % (host, port, gw_cmd.info_redis_discoons()))
                 print yellow('[%s:%d] >>> gateway_connected_clients:%d' % (host, port, gw_cmd.info_num_of_clients()))
-                if gw_cmd.info_redis_discoons() == 0 and gw_cmd.info_num_of_clients() >= 1 + config.CONF_MASTER_MGMT_CONS + additional_clnt:
-                    ok = True
+                if gw_cmd.info_redis_discoons() == 0 and gw_cmd.info_num_of_clients() >= 1 + config.CONF_MASTER_MGMT_CONS:
                     break
                 else:
                     time.sleep(0.5)
-
-            if ok == False:
-                # Manual mode
-                print magenta('\n[%s:%d] Begin manual mode.' % (host, port))
-
-                while True:
-                    print yellow('[%s:%d] >>> gateway_connected_clients:%d' % (host, port, gw_cmd.info_num_of_clients()))
-                    print yellow('[%s:%d] >>> gateway_total_commands_processed:%d' % (host, port, gw_cmd.info_total_commands_processed()))
-
-                    if not confirm(cyan('[%s:%d] GW Add, number of client connection is %d. Wait?' % (host, port, gw_cmd.info_num_of_clients()))):
-                        break
                 
     except:
         warn(red('[%s] GW Add fail, Can not connect to Gateway server. %s:%d' % (host, ip, port)))

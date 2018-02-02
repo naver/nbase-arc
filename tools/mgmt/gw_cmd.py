@@ -139,3 +139,10 @@ class GwCmd():
             return -1
         return value
 
+    def info_ops(self):
+        success, value = self.command('info gateway', 'gateway_instantaneous_ops_per_sec')
+        if success == False:
+            warn(red('[%s:%d] info_ops() fail.' % (self.ip, self.port)))
+            return -1
+        return value
+

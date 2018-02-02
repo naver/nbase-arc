@@ -580,3 +580,18 @@ def cronsave_table():
         table.append((d + d / 60 * 3) % 60)
     return table
 
+def confirm_gateway_on_service(ip, port, serviced_num_clnt, serviced_ops):
+    try:
+        with GwCmd(ip, port) as gw_cmd:
+            print yellow('[%s:%d] >>> gateway_connected_clients: %d / %d' % (ip, port, gw_cmd.info_num_of_clients(), serviced_num_clnt))
+            print yellow('[%s:%d] >>> gateway_ops: %d / %d' % (ip, port, gw_cmd.info_ops(), serviced_ops))
+
+        return confirm(cyan('[%s:%d] Check gateway-state and decide whether to wait(Y) or pass(n).' % (ip, port))) == False
+    except:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
+
+        if confirm(cyan('[%s:%d] Failed to get gateway state. retry(Y) or quit(n)' % (ip, port))):
+            return False
+        else:
+            sys.exit(1)

@@ -1318,6 +1318,11 @@ def upgrade_gw(cluster_name, gw_id):
         warn(red("[%s] '%s' doesn't exist." % (host, path)))
         return False
 
+    # Get gateway_connected_clients and gateway_ops
+    with GwCmd(ip, port) as gw_cmd:
+        serviced_num_clnt = gw_cmd.info_num_of_clients()
+        serviced_ops = gw_cmd.info_ops()
+
     # GW Del
     if cm.gw_del(cluster_name, gw_id, ip, port) != True:
         warn(red("[%s] GW Del fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
@@ -1339,9 +1344,13 @@ def upgrade_gw(cluster_name, gw_id):
         return False
 
     # Configure GW information to mgmt-cc
-    if cm.gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=config.NUM_CLNT_MIN) != True:
+    if cm.gw_add(cluster_name, gw_id, pm_name, ip, port) != True:
         warn(red("[%s] GW Add fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return False
+
+    while True:
+        if util.confirm_gateway_on_service(ip, port, serviced_num_clnt, serviced_ops):
+            break
 
     print green('\n #### UPGRADE SUCCESS CLUSTER:%s GWID:%d IP:%s Port:%d #### \n' % (cluster_name, gw_id, ip, port))
     print '===================================================================='
