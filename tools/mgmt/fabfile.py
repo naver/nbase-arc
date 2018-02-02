@@ -2183,9 +2183,9 @@ def migration(host, cluster_name, src_pg_id, dst_pg_id, src_ip, src_port, dst_ip
     with RedisCmd(dst_ip, dst_redis_port) as redis_cmd:
         before_dst_kcnt = redis_cmd.info_key_count()
     print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| \t\t\t| SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
+    print yellow("|                   | SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
     print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| KEY COUNT(before)\t| %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
+    print yellow("| KEY COUNT(before) | %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
     print yellow("+-------------------+---------------------------+---------------------------+\n")
 
     if config.confirm_mode and not confirm(cyan('Check key count above. Continue?')):
@@ -2207,6 +2207,12 @@ def migration(host, cluster_name, src_pg_id, dst_pg_id, src_ip, src_port, dst_ip
         warn(red("[%s] Copy checkpoint from source to destination fail, SRC:%s:%d, DEST:%s:%d, RANGE:%d-%d, TPS:%d" % (host, src_ip, src_redis_port, dst_ip, dst_redis_port, range_from, range_to, tps)))
         return False
     print cyan('Sequence : %d' % seq)
+
+    # Confirm loaded key count
+    show_info.show_key_variation(src_ip, src_redis_port, dst_ip, dst_redis_port, before_src_kcnt, before_dst_kcnt)
+    if confirm(cyan("Getandplay done. Check key count above. Continue?")) == False:
+        warn(red("Aborting at user request."))
+        return False
 
     # Remote catchup
     num_part = 8192
@@ -2311,17 +2317,7 @@ def migration(host, cluster_name, src_pg_id, dst_pg_id, src_ip, src_port, dst_ip
         return False
     print yellow("\nPN PG MAP: %s" % cluster_json_data['data']['cluster_info']['PN_PG_Map'])
 
-    with RedisCmd(src_ip, src_redis_port) as redis_cmd:
-        after_src_kcnt = redis_cmd.info_key_count()
-    with RedisCmd(dst_ip, dst_redis_port) as redis_cmd:
-        after_dst_kcnt = redis_cmd.info_key_count()
-    print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| \t\t\t| SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
-    print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| KEY COUNT(before)\t| %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
-    print yellow("| KEY COUNT(after)\t| %-25d | %-25d |" % (after_src_kcnt, after_dst_kcnt))
-    print yellow("| KEY COUNT(diff)\t| %-25d | %-25d |" % (after_src_kcnt - before_src_kcnt, after_dst_kcnt - before_dst_kcnt ))
-    print yellow("+-------------------+---------------------------+---------------------------+\n")
+    show_info.show_key_variation(src_ip, src_redis_port, dst_ip, dst_redis_port, before_src_kcnt, before_dst_kcnt)
 
     return True
 
