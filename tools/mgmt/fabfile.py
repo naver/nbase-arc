@@ -686,9 +686,6 @@ def menu_upgrade_pgs():
             cluster_name_list.sort()
             for cluster_name in cluster_name_list:
                 cluster_name = cluster_name.encode('ascii')
-                if 'java_client_test' in cluster_name:
-                    continue
-
                 print yellow('\n #### UPGRADE PGS BEGIN CLUSTER:%s #### \n' % cluster_name)
                 if upgrade_all_pgs_in_cluster(cluster_name, new_cronsave_num) == False:
                     return False
@@ -1236,8 +1233,6 @@ def menu_upgrade_gw():
             cluster_name_list.sort()
             for name in cluster_name_list:
                 name = name.encode('ascii')
-                if 'java_client_test' in name:
-                    continue
                 print yellow('\n #### UPGRADE GW BEGIN CLUSTER:%s #### \n' % name)
                 if upgrade_all_gw_in_cluster(name) == False:
                     return False
