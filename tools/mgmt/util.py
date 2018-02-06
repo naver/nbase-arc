@@ -591,7 +591,7 @@ def check_gateway_warmup(ip, port, required_num_clnt, required_ops):
             return (num_clnt > required_num_clnt) and (ops > required_ops)
     except:
         traceback.print_exception(*sys.exc_info())
-        warn(red('[%s] Failed to check gateway warmup. %s:%d' % (ip, port)))
+        warn(red('[%s] Failed to check gateway warmup. %s:%d' % (ip, ip, port)))
         return False
 
 def confirm_gw_add_completion(ip, port, serviced_num_clnt, serviced_ops):
