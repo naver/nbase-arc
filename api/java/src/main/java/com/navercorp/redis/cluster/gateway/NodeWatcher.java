@@ -29,6 +29,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.util.concurrent.SettableFuture;
 import com.navercorp.redis.cluster.util.DaemonThreadFactory;
 
 import org.apache.zookeeper.KeeperException;
@@ -55,6 +56,7 @@ public class NodeWatcher implements Watcher {
     private final Logger log = LoggerFactory.getLogger(NodeWatcher.class);
 
     private CountDownLatch connLatcher;
+    private volatile SettableFuture<Boolean> zkCreationFuture;
 
     private volatile ZooKeeper zk;
     private GatewayConfig config;
@@ -91,10 +93,13 @@ public class NodeWatcher implements Watcher {
             while (shutdown.get() == false) {
                 try {
                     log.warn("[NodeWatcher] try to connect to zookeeper.");
+                    zkCreationFuture = SettableFuture.create();
                     zk = new ZooKeeper(config.getZkAddress(), config.getZkSessionTimeout(), NodeWatcher.this);
+                    zkCreationFuture.set(true);
                     return;
                 } catch (IOException e) {
                     log.warn("[NodeWatcher] failed to connect to zookeeper.", e);
+                    zkCreationFuture.set(false);
                     retryDelay *= 2;
                     if (retryDelay > 8000)
                         retryDelay = 8000;
@@ -202,10 +207,20 @@ public class NodeWatcher implements Watcher {
      * @see org.apache.zookeeper.Watcher#process(org.apache.zookeeper.WatchedEvent)
      */
     public void process(WatchedEvent event) {
-        log.debug("[NodeWatcher] Zookeeper watched");
-        log.info("[NodeWatcher] Event {type=" + event.getType() + ", state=" + event.getState() + ", path="
-                + event.getPath() + "}");
+        log.info("[NodeWatcher] Get " + event);
 
+        try {
+            if (zkCreationFuture.get() == false) {
+                return;
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("[NodeWatcher] Failed to wait zookeeper assignment.", e);
+        } catch (ExecutionException e) {
+            throw new RuntimeException("[NodeWatcher] Failed to wait zookeeper assignment.", e);
+        }
+
+        log.info("[NodeWatcher] Process " + event);
+        
         if (event.getType() == Event.EventType.None) {
             switch (event.getState()) {
                 case SyncConnected:
