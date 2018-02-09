@@ -47,7 +47,7 @@ def check_local_binary_exist(bins=None):
     if bins == None:
         with settings(warn_only=True):
             if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
-            if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
+            if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.CLUSTER_UTIL_VERSION)).failed: return False
             if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.GW_VERSION)).failed: return False
             if local('test -e %s/smr-replicator-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
             if local('test -e %s/smr-logutil-%s' % (config.LOCAL_BINARY_PATH, config.SMR_VERSION)).failed: return False
@@ -56,7 +56,7 @@ def check_local_binary_exist(bins=None):
             if bin == 'redis':
                 if local('test -e %s/redis-arc-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
             elif bin == 'cluster-util':
-                if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.REDIS_VERSION)).failed: return False
+                if local('test -e %s/cluster-util-%s' % (config.LOCAL_BINARY_PATH, config.CLUSTER_UTIL_VERSION)).failed: return False
             elif bin == 'gateway':
                 if local('test -e %s/redis-gateway-%s' % (config.LOCAL_BINARY_PATH, config.GW_VERSION)).failed: return False
             elif bin == 'smr':
@@ -686,9 +686,6 @@ def menu_upgrade_pgs():
             cluster_name_list.sort()
             for cluster_name in cluster_name_list:
                 cluster_name = cluster_name.encode('ascii')
-                if 'java_client_test' in cluster_name:
-                    continue
-
                 print yellow('\n #### UPGRADE PGS BEGIN CLUSTER:%s #### \n' % cluster_name)
                 if upgrade_all_pgs_in_cluster(cluster_name, new_cronsave_num) == False:
                     return False
@@ -1236,8 +1233,6 @@ def menu_upgrade_gw():
             cluster_name_list.sort()
             for name in cluster_name_list:
                 name = name.encode('ascii')
-                if 'java_client_test' in name:
-                    continue
                 print yellow('\n #### UPGRADE GW BEGIN CLUSTER:%s #### \n' % name)
                 if upgrade_all_gw_in_cluster(name) == False:
                     return False
@@ -1318,6 +1313,11 @@ def upgrade_gw(cluster_name, gw_id):
         warn(red("[%s] '%s' doesn't exist." % (host, path)))
         return False
 
+    # Get gateway_connected_clients and gateway_ops
+    with GwCmd(ip, port) as gw_cmd:
+        serviced_num_clnt = gw_cmd.info_num_of_clients()
+        serviced_ops = gw_cmd.info_ops()
+
     # GW Del
     if cm.gw_del(cluster_name, gw_id, ip, port) != True:
         warn(red("[%s] GW Del fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
@@ -1339,9 +1339,19 @@ def upgrade_gw(cluster_name, gw_id):
         return False
 
     # Configure GW information to mgmt-cc
-    if cm.gw_add(cluster_name, gw_id, pm_name, ip, port, additional_clnt=config.NUM_CLNT_MIN) != True:
+    if cm.gw_add(cluster_name, gw_id, pm_name, ip, port) != True:
         warn(red("[%s] GW Add fail, GW_ID:%d, PORT:%d" % (host, gw_id, port)))
         return False
+
+    # Wait for clients to connect to gateway
+    for i in xrange(10):
+        if util.check_gateway_warmup(ip, port, serviced_num_clnt * 0.8, serviced_ops * 0.8):
+            break
+        time.sleep(1)
+
+    while True:
+        if util.confirm_gw_add_completion(ip, port, serviced_num_clnt, serviced_ops):
+            break
 
     print green('\n #### UPGRADE SUCCESS CLUSTER:%s GWID:%d IP:%s Port:%d #### \n' % (cluster_name, gw_id, ip, port))
     print '===================================================================='
@@ -2173,9 +2183,9 @@ def migration(host, cluster_name, src_pg_id, dst_pg_id, src_ip, src_port, dst_ip
     with RedisCmd(dst_ip, dst_redis_port) as redis_cmd:
         before_dst_kcnt = redis_cmd.info_key_count()
     print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| \t\t\t| SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
+    print yellow("|                   | SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
     print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| KEY COUNT(before)\t| %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
+    print yellow("| KEY COUNT(before) | %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
     print yellow("+-------------------+---------------------------+---------------------------+\n")
 
     if config.confirm_mode and not confirm(cyan('Check key count above. Continue?')):
@@ -2197,6 +2207,12 @@ def migration(host, cluster_name, src_pg_id, dst_pg_id, src_ip, src_port, dst_ip
         warn(red("[%s] Copy checkpoint from source to destination fail, SRC:%s:%d, DEST:%s:%d, RANGE:%d-%d, TPS:%d" % (host, src_ip, src_redis_port, dst_ip, dst_redis_port, range_from, range_to, tps)))
         return False
     print cyan('Sequence : %d' % seq)
+
+    # Confirm loaded key count
+    show_info.show_key_variation(src_ip, src_redis_port, dst_ip, dst_redis_port, before_src_kcnt, before_dst_kcnt)
+    if confirm(cyan("Getandplay done. Check key count above. Continue?")) == False:
+        warn(red("Aborting at user request."))
+        return False
 
     # Remote catchup
     num_part = 8192
@@ -2301,17 +2317,7 @@ def migration(host, cluster_name, src_pg_id, dst_pg_id, src_ip, src_port, dst_ip
         return False
     print yellow("\nPN PG MAP: %s" % cluster_json_data['data']['cluster_info']['PN_PG_Map'])
 
-    with RedisCmd(src_ip, src_redis_port) as redis_cmd:
-        after_src_kcnt = redis_cmd.info_key_count()
-    with RedisCmd(dst_ip, dst_redis_port) as redis_cmd:
-        after_dst_kcnt = redis_cmd.info_key_count()
-    print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| \t\t\t| SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
-    print yellow("+-------------------+---------------------------+---------------------------+")
-    print yellow("| KEY COUNT(before)\t| %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
-    print yellow("| KEY COUNT(after)\t| %-25d | %-25d |" % (after_src_kcnt, after_dst_kcnt))
-    print yellow("| KEY COUNT(diff)\t| %-25d | %-25d |" % (after_src_kcnt - before_src_kcnt, after_dst_kcnt - before_dst_kcnt ))
-    print yellow("+-------------------+---------------------------+---------------------------+\n")
+    show_info.show_key_variation(src_ip, src_redis_port, dst_ip, dst_redis_port, before_src_kcnt, before_dst_kcnt)
 
     return True
 

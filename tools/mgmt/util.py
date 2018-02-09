@@ -580,3 +580,31 @@ def cronsave_table():
         table.append((d + d / 60 * 3) % 60)
     return table
 
+def check_gateway_warmup(ip, port, required_num_clnt, required_ops):
+    try:
+        with GwCmd(ip, port) as gw_cmd:
+            num_clnt = gw_cmd.info_num_of_clients()
+            ops = gw_cmd.info_ops()
+            print yellow('[%s:%d] >>> gateway_connected_clients: %d / %d' % (ip, port, num_clnt, required_num_clnt))
+            print yellow('[%s:%d] >>> gateway_ops: %d / %d' % (ip, port, ops, required_ops))
+
+            return (num_clnt > required_num_clnt) and (ops > required_ops)
+    except:
+        traceback.print_exception(*sys.exc_info())
+        warn(red('[%s] Failed to check gateway warmup. %s:%d' % (ip, ip, port)))
+        return False
+
+def confirm_gw_add_completion(ip, port, serviced_num_clnt, serviced_ops):
+    try:
+        with GwCmd(ip, port) as gw_cmd:
+            print yellow('[%s:%d] >>> gateway_connected_clients: %d / %d' % (ip, port, gw_cmd.info_num_of_clients(), serviced_num_clnt))
+            print yellow('[%s:%d] >>> gateway_ops: %d / %d' % (ip, port, gw_cmd.info_ops(), serviced_ops))
+
+        return confirm(cyan('[%s:%d] Check gateway-state and decide whether to wait(Y) or pass(n).' % (ip, port))) == False
+    except:
+        traceback.print_exception(*sys.exc_info())
+
+        if confirm(cyan('[%s:%d] Failed to get gateway state. retry(Y) or quit(n)' % (ip, port))):
+            return False
+        else:
+            sys.exit(1)

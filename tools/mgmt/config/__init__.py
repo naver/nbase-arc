@@ -57,7 +57,6 @@ def check_config():
              "CRONSAVE_BASE_HOUR",
              "CRONSAVE_BASE_MIN",
              "NUM_WORKERS_PER_GATEWAY",
-             "NUM_CLNT_MIN",
              "CLIENT_TIMEOUT"]
 
 

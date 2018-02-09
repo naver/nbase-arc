@@ -26,6 +26,7 @@ from fabric.colors import *
 from fabric.contrib.console import *
 from fabric.contrib.files import *
 from gw_cmd import *
+from redis_cmd import *
 import remote
 import util
 import cm
@@ -539,4 +540,21 @@ def menu_check_memlog_option(cluster_name):
             if pgs['memlog'] != opt_memlog:
                 print color_function(PGS_FORMAT % pgs, bold)
         print yellow(PGS_PARTITION + '\n')
+
+def show_key_variation(src_ip, src_redis_port, dst_ip, dst_redis_port, before_src_kcnt, before_dst_kcnt):
+    with RedisCmd(src_ip, src_redis_port) as redis_cmd:
+        after_src_kcnt = redis_cmd.info_key_count()
+    with RedisCmd(dst_ip, dst_redis_port) as redis_cmd:
+        after_dst_kcnt = redis_cmd.info_key_count()
+    diff_src_kcnt = after_src_kcnt - before_src_kcnt
+    diff_dst_kcnt = after_dst_kcnt - before_dst_kcnt
+    print yellow("+-------------------+---------------------------+---------------------------+")
+    print yellow("|                   | SRC %-21s | DST %-21s |" % ("%s:%d" % (src_ip, src_redis_port), "%s:%d" % (dst_ip, dst_redis_port)))
+    print yellow("+-------------------+---------------------------+---------------------------+")
+    print yellow("| KEY COUNT(before) | %-25d | %-25d |" % (before_src_kcnt, before_dst_kcnt))
+    print yellow("| KEY COUNT(after)  | %-25d | %-25d |" % (after_src_kcnt, after_dst_kcnt))
+    print yellow("| KEY COUNT(diff)   | %-25d | %-25d |" % (diff_src_kcnt, diff_dst_kcnt))
+    print yellow("| KEY COUNT(diff%%)  | %-25s | %-25s |" % ("%.2f%%" % (float(diff_src_kcnt) / (1 if before_src_kcnt == 0 else before_src_kcnt) * 100),
+                                                             "%.2f%%" % (float(diff_dst_kcnt) / (1 if before_dst_kcnt == 0 else before_dst_kcnt) * 100)))
+    print yellow("+-------------------+---------------------------+---------------------------+\n")
 
