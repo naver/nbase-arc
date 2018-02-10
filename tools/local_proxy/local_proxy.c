@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/socket.h>
-#include <sys/select.h>
+#include <sys/poll.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -1094,7 +1094,7 @@ static void *
 clientThread (void *arg)
 {
   client_t *c = (client_t *) arg;
-  fd_set rfds, wfds;
+  struct pollfd pfd;
   int ret;
 
   c->querybuf = sdsMakeRoomFor (sdsempty (), DEFAULT_QUERY_BUF_SIZE);
@@ -1109,26 +1109,23 @@ clientThread (void *arg)
   c->flags = 0;
   c->total_append_command = 0;
 
-  FD_ZERO (&rfds);
-  FD_ZERO (&wfds);
+  pfd.fd = c->fd;
 
   while (1)
     {
-      struct timeval timeout;
-
-      FD_CLR (c->fd, &rfds);
-      FD_CLR (c->fd, &wfds);
+      pfd.events = 0;
       if (!(c->flags & REDIS_CLOSE_AFTER_REPLY))
-	FD_SET (c->fd, &rfds);
+	{
+	  pfd.events |= POLLIN;
+	}
       if (sdslen (c->replybuf) > 0)
-	FD_SET (c->fd, &wfds);
-
-      timeout.tv_sec = 1;
-      timeout.tv_usec = 0;
-      ret = select (c->fd + 1, &rfds, &wfds, NULL, &timeout);
+	{
+	  pfd.events |= POLLOUT;
+	}
+      ret = poll (&pfd, 1, 1000);
       if (ret == -1)
 	{
-	  perror ("select");
+	  perror ("poll");
 	  freeClient (c);
 	}
 
@@ -1138,7 +1135,7 @@ clientThread (void *arg)
 	}
 
       /* readable */
-      if (FD_ISSET (c->fd, &rfds))
+      if (pfd.revents & POLLIN)
 	{
 	  int pos = sdslen (c->querybuf);
 	  int avail = sdsavail (c->querybuf);
@@ -1214,7 +1211,7 @@ clientThread (void *arg)
 	}
 
       /* writable */
-      if (FD_ISSET (c->fd, &wfds))
+      if (pfd.revents & POLLOUT)
 	{
 	  int pos = 0;
 	  int avail = sdslen (c->replybuf);
