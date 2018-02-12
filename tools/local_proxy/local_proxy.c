@@ -73,6 +73,7 @@ typedef struct conf_t
   int port;
   int daemonize;
   int query_timeout_millis;
+  int max_num_clients;
   arc_conf_t capi_conf;
 } conf_t;
 
@@ -108,6 +109,10 @@ typedef struct server_t
 
   /* CAPI query timeout */
   int query_timeout_millis;
+
+  /* maximun number of clients to accept */
+  int max_num_clients;
+  int num_clients;
 } server_t;
 
 server_t server;
@@ -367,13 +372,15 @@ initFromConfigBuffer (sds config, conf_t * conf)
 	}
       else if (!strcasecmp (argv[0], "max_fd") && argc == 2)
 	{
-	  conf->capi_conf.max_fd = atoi (argv[1]);
-	  if (conf->capi_conf.max_fd < 1024 || conf->capi_conf.max_fd > 16000)
+	  conf->max_num_clients = atoi (argv[1]);
+	  if (conf->max_num_clients < 1024 || conf->max_num_clients > 16000)
 	    {
 	      sdsfreesplitres (argv, argc);
 	      err = "Invalid max_fd value";
 	      goto err;
 	    }
+	  // client conns + gw conns
+	  conf->capi_conf.max_fd = conf->max_num_clients * 2;
 	}
       else if (!strcasecmp (argv[0], "conn_reconnect_millis") && argc == 2)
 	{
@@ -449,7 +456,9 @@ initializeConfigStructure (conf_t * conf)
   conf->port = -1;
   conf->daemonize = 0;
   conf->query_timeout_millis = 3000;
+  conf->max_num_clients = 4096;
   arc_init_conf (&conf->capi_conf);
+  conf->capi_conf.max_fd = conf->max_num_clients * 2;
 }
 
 static void
@@ -605,6 +614,8 @@ initConfig (int argc, char **argv)
       exit (EXIT_FAILURE);
     }
   server.query_timeout_millis = server.conf->query_timeout_millis;
+  server.max_num_clients = server.conf->max_num_clients;
+  server.num_clients = 0;
 }
 
 static arc_t *
@@ -676,6 +687,7 @@ reconfigThread (arc_t * initial_arc)
 	  tmp_conf = server.conf;
 	  server.conf = new_conf;
 	  server.query_timeout_millis = server.conf->query_timeout_millis;
+	  server.max_num_clients = server.conf->max_num_clients;
 	  pthread_mutex_unlock (&server.reconfig_lock);
 
 	  release_arc_ref (tmp_arc_ref);
@@ -786,6 +798,9 @@ freeClient (client_t * c)
   resetClient (c);
   close (c->fd);
   free (c);
+  pthread_mutex_lock (&server.reconfig_lock);
+  server.num_clients--;
+  pthread_mutex_unlock (&server.reconfig_lock);
   pthread_exit (0);
 }
 
@@ -1097,6 +1112,10 @@ clientThread (void *arg)
   struct pollfd pfd;
   int ret;
 
+  pthread_mutex_lock (&server.reconfig_lock);
+  server.num_clients++;
+  pthread_mutex_unlock (&server.reconfig_lock);
+
   c->querybuf = sdsMakeRoomFor (sdsempty (), DEFAULT_QUERY_BUF_SIZE);
   c->replybuf = sdsMakeRoomFor (sdsempty (), DEFAULT_QUERY_BUF_SIZE);
   c->argc = 0;
@@ -1280,10 +1299,11 @@ runServer ()
 
   while (!server.shutdown_signal)
     {
-      int cfd;
+      int cfd, ret;
       struct sockaddr_in sa;
       socklen_t salen = sizeof (sa);;
       client_t *c;
+      int can_accept;
 
       /* accpet */
       cfd = accept (server.fd, (struct sockaddr *) &sa, &salen);
@@ -1307,29 +1327,51 @@ runServer ()
 	    }
 	}
 
+      /* pthread join */
+      if (server.client_tid[cfd])
+	{
+	  ret = pthread_join (server.client_tid[cfd], NULL);
+	  if (ret != 0)
+	    {
+	      perror ("pthread_join failed");
+	      return -1;
+	    }
+	  server.client_tid[cfd] = 0;
+	}
+
+      /* limit client conn */
+      pthread_mutex_lock (&server.reconfig_lock);
+      can_accept = (server.num_clients < server.max_num_clients);
+      pthread_mutex_unlock (&server.reconfig_lock);
+      if (!can_accept)
+	{
+	  char *err = "-ERR max number of clients reached\r\n";
+	  (void) write (cfd, err, strlen (err));
+	  close (cfd);
+	  continue;
+	}
+
+      /* set sock options */
       if (setSocketNonBlock (cfd) == -1)
 	{
 	  perror ("Set socket nonblock");
 	  return -1;
 	}
-
       if (setSocketTcpNoDelay (cfd) == -1)
 	{
 	  perror ("Set socket tcp_nodelay");
 	  return -1;
 	}
 
-      /* pthread join */
-      if (server.client_tid[cfd])
-	{
-	  pthread_join (server.client_tid[cfd], NULL);
-	  server.client_tid[cfd] = 0;
-	}
-
       /* create client thread */
       c = malloc (sizeof (client_t));
       c->fd = cfd;
-      pthread_create (&server.client_tid[cfd], NULL, clientThread, c);
+      ret = pthread_create (&server.client_tid[cfd], NULL, clientThread, c);
+      if (ret != 0)
+	{
+	  perror ("pthread_create failed");
+	  return -1;
+	}
     }
   close (server.fd);
 
