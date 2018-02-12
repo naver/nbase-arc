@@ -44,6 +44,13 @@
 #define MAX_LISTEN_BACKLOG 8192
 #define PIDFILE "local_proxy.pid"
 
+/* error used as exit hint (assumes EXIT_SUCCESS < 100) */
+#define LPERR_PTHREAD_CREATE 100
+#define LPERR_PTHREAD_JOIN   101
+#define LPERR_SOCK_ACCEPT    102
+#define LPERR_SOCK_OPT_NB    103
+#define LPERR_SOCK_OPT_ND    104
+
 /* Structures */
 typedef struct client_t
 {
@@ -1293,7 +1300,7 @@ setSocketTcpNoDelay (int fd)
 }
 
 static int
-runServer ()
+runServer (int *exithint)
 {
   int i;
 
@@ -1323,6 +1330,7 @@ runServer ()
 	  else
 	    {
 	      perror ("accept");
+	      *exithint = LPERR_SOCK_ACCEPT;
 	      return -1;
 	    }
 	}
@@ -1334,6 +1342,7 @@ runServer ()
 	  if (ret != 0)
 	    {
 	      perror ("pthread_join failed");
+	      *exithint = LPERR_PTHREAD_JOIN;
 	      return -1;
 	    }
 	  server.client_tid[cfd] = 0;
@@ -1355,11 +1364,13 @@ runServer ()
       if (setSocketNonBlock (cfd) == -1)
 	{
 	  perror ("Set socket nonblock");
+	  *exithint = LPERR_SOCK_OPT_NB;
 	  return -1;
 	}
       if (setSocketTcpNoDelay (cfd) == -1)
 	{
 	  perror ("Set socket tcp_nodelay");
+	  *exithint = LPERR_SOCK_OPT_ND;
 	  return -1;
 	}
 
@@ -1370,6 +1381,7 @@ runServer ()
       if (ret != 0)
 	{
 	  perror ("pthread_create failed");
+	  *exithint = LPERR_PTHREAD_CREATE;
 	  return -1;
 	}
     }
@@ -1432,6 +1444,7 @@ setupSignalHandlers ()
 int
 main (int argc, char **argv)
 {
+  int exithint = EXIT_SUCCESS;
   /* Signal 
    * -TERM : Gracefully shutdown 
    * -HUP : Reload configuration file */
@@ -1440,9 +1453,20 @@ main (int argc, char **argv)
 
   initConfig (argc, argv);
   if (initServer () == -1)
-    exit (EXIT_FAILURE);
-  if (runServer () == -1)
-    exit (EXIT_FAILURE);
+    {
+      exit (EXIT_FAILURE);
+    }
+  if (runServer (&exithint) == -1)
+    {
+      if (exithint != EXIT_SUCCESS)
+	{
+	  exit (exithint);
+	}
+      else
+	{
+	  exit (EXIT_FAILURE);
+	}
+    }
   finalizeServer ();
 
   exit (EXIT_SUCCESS);
