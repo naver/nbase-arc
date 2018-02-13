@@ -19,7 +19,6 @@ import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.*;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.geo.Circle;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResults;
@@ -56,13 +56,13 @@ import org.springframework.data.redis.core.types.RedisClientInfo;
 
 import redis.clients.jedis.GeoCoordinate;
 import redis.clients.jedis.GeoUnit;
-import redis.clients.jedis.ScanParams;
-import redis.clients.jedis.ScanResult;
 import redis.clients.jedis.exceptions.JedisDataException;
 
 import com.navercorp.redis.cluster.gateway.GatewayClient;
 import com.navercorp.redis.cluster.pipeline.RedisClusterPipeline;
 import com.navercorp.redis.cluster.pipeline.Response;
+import com.navercorp.redis.cluster.util.ScanIteratorFactory;
+import com.navercorp.redis.cluster.util.ScanIteratorFactory.ScanIterator;
 
 /**
  * The Class RedisClusterConnection.
@@ -2999,160 +2999,143 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public void pfMerge(byte[] arg0, byte[]... arg1) {
         throw new UnsupportedOperationException("not supported operation!");
     }
-    
-    public static class ScanCursor implements Cursor<byte[]> {
-        private byte[] cursor = ScanParams.SCAN_POINTER_START.getBytes();
-        private ScanResult<byte[]> result;
-        private final GatewayClient client;
-        private final ScanOptions options;
-        private int resultIndex = 0;
-        
-        public ScanCursor(GatewayClient client, ScanOptions options) {
-            this.client = client;
-            this.options = options;
-            this.result = this.client.scan(cursor, JedisConverters.toScanParams(options));
-        }
-        
-        @Override
-        public boolean hasNext() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY)) {
-                    return false;
-                }
-            }
-            return true;
+
+    abstract static class DefaultScanCursor<T, T2> implements Cursor<T> {
+        enum State {
+            READY, OPEN, CLOSED
+        };
+
+        protected final ScanIterator<T2> iterator;
+        private State state;
+
+        protected DefaultScanCursor(ScanIterator<T2> iterator) {
+            this.iterator = iterator;
+            this.state = State.READY;
         }
 
         @Override
-        public byte[] next() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY) == false) {
-                    result = this.client.scan(result.getCursorAsBytes(), JedisConverters.toScanParams(options));
-                    resultIndex = 0;
-                }
+        public boolean hasNext() {
+            assertCursorIsOpen();
+            return iterator.hasNext();
+        }
+
+        abstract public T next();
+
+        protected void assertCursorIsOpen() {
+            if (state != State.OPEN) {
+                throw new InvalidDataAccessApiUsageException(
+                        "Cannot access closed cursor. Did you forget to call open()?");
             }
-            return result.getResult().get(resultIndex++);
         }
 
         @Override
         public void remove() {
-            throw new UnsupportedOperationException("not supported operation!");
+            throw new UnsupportedOperationException("Remove is not supported operation!");
         }
 
         @Override
         public void close() throws IOException {
-            // do nothing
-        }
-
-        @Override
-        public long getCursorId() {
-            throw new UnsupportedOperationException("not supported operation!");
+            state = State.CLOSED;
         }
 
         @Override
         public boolean isClosed() {
-            if (result.getResult().size() == resultIndex) {
-                if (result.getCursorAsBytes().equals(ScanParams.SCAN_POINTER_START)) {
-                    return true;
-                }
-            }
-            return false;
+            return state == State.CLOSED;
         }
 
         @Override
-        public Cursor<byte[]> open() {
-            throw new UnsupportedOperationException("not supported operation!");
+        public long getCursorId() {
+            return iterator.getCursor();
+        }
+
+        @Override
+        public Cursor<T> open() {
+            if (state != State.READY) {
+                throw new InvalidDataAccessApiUsageException("Cursor already " + state + ". Cannot (re)open it.");
+            }
+            state = State.OPEN;
+            return this;
         }
 
         @Override
         public long getPosition() {
-            throw new UnsupportedOperationException("not supported operation!");
+            return iterator.getPosition();
         }
+    }
+
+    static Cursor<byte[]> createScanCursor(
+        final GatewayClient client, final ScanOptions options) { 
+    
+        return new DefaultScanCursor<byte[], byte[]>(
+                ScanIteratorFactory.createScanIterator(client, JedisConverters.toScanParams(options))) {
+            @Override
+            public byte[] next() {
+                assertCursorIsOpen();
+                return iterator.next();
+            }
+        };
+    }
+    
+    static Cursor<byte[]> createSScanCursor(final GatewayClient client, final byte[] key,
+            final ScanOptions options) {
+
+        return new DefaultScanCursor<byte[], byte[]>(
+                ScanIteratorFactory.createSScanIterator(client, key, JedisConverters.toScanParams(options))) {
+            @Override
+            public byte[] next() {
+                assertCursorIsOpen();
+                return iterator.next();
+            }
+        };
+    }
+
+    private static final Converter<redis.clients.jedis.Tuple, Tuple> TUPLE_CONVERTER;
+    static {
+        TUPLE_CONVERTER = new Converter<redis.clients.jedis.Tuple, Tuple>() {
+            public Tuple convert(redis.clients.jedis.Tuple source) {
+                return source != null ? new DefaultTuple(source.getBinaryElement(), source.getScore()) : null;
+            }
+        };
+    }
+
+    static Cursor<Tuple> createZScanCursor(
+        final GatewayClient client, final byte[] key, final ScanOptions options) {
+        
+        return new DefaultScanCursor<Tuple, redis.clients.jedis.Tuple>( 
+                ScanIteratorFactory.createZScanIterator(client, key, JedisConverters.toScanParams(options))) {
+            @Override
+            public Tuple next() {
+                assertCursorIsOpen();
+                return TUPLE_CONVERTER.convert(iterator.next());
+            }
+        };
+    }
+
+    static Cursor<Entry<byte[], byte[]>> createHScanCursor(
+        final GatewayClient client, final byte[] key, final ScanOptions options) {
+        
+        return new DefaultScanCursor<Entry<byte[], byte[]>, Entry<byte[], byte[]>>(
+                ScanIteratorFactory.createHScanIterator(client, key, JedisConverters.toScanParams(options))) {
+            @Override
+            public Entry<byte[], byte[]> next() {
+                assertCursorIsOpen();
+                return iterator.next();
+            }
+        };
     }
 
     @Override
     public Cursor<byte[]> scan(ScanOptions options) {
         try {
             if (isPipelined()) {
-                throw new UnsupportedOperationException("not supported operation!");
+                throw new UnsupportedOperationException("'SCAN' cannot be called in pipeline mode.");
             }
 
-            return new ScanCursor(this.client, options);
+            Cursor<byte[]> cursor = createScanCursor(client, options);
+            cursor.open();
+            return cursor;
         } catch (Exception ex) {
             throw convertException(ex);
-        }
-    }
-
-    public static class SScanCursor implements Cursor<byte[]> {
-        private final GatewayClient client;
-        private final byte[] key;
-        private final ScanOptions options;
-
-        private byte[] cursor = ScanParams.SCAN_POINTER_START.getBytes();
-        private ScanResult<byte[]> result;
-        private int resultIndex = 0;
-        
-        public SScanCursor(GatewayClient client, byte[] key, ScanOptions options) {
-            this.client = client;
-            this.key = key;
-            this.options = options;
-            this.result = this.client.sscan(key, cursor, JedisConverters.toScanParams(options));
-        }
-        
-        @Override
-        public boolean hasNext() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        public byte[] next() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY) == false) {
-                    result = this.client.sscan(key, result.getCursorAsBytes(), JedisConverters.toScanParams(options));
-                    resultIndex = 0;
-                }
-            }
-            return result.getResult().get(resultIndex++);
-        }
-
-        @Override
-        public void remove() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public void close() throws IOException {
-            // do nothing
-        }
-
-        @Override
-        public long getCursorId() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public boolean isClosed() {
-            if (result.getResult().size() == resultIndex) {
-                if (result.getCursorAsBytes().equals(ScanParams.SCAN_POINTER_START)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public Cursor<byte[]> open() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public long getPosition() {
-            throw new UnsupportedOperationException("not supported operation!");
         }
     }
     
@@ -3160,91 +3143,14 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public Cursor<byte[]> sScan(byte[] key, ScanOptions options) {
         try {
             if (isPipelined()) {
-                throw new UnsupportedOperationException("not supported operation!");
+                throw new UnsupportedOperationException("'SSCAN' cannot be called in pipeline mode.");
             }
 
-            return new SScanCursor(this.client, key, options);
+            Cursor<byte[]> cursor = createSScanCursor(this.client, key, options);
+            cursor.open();
+            return cursor;
         } catch (Exception ex) {
             throw convertException(ex);
-        }
-    }
-
-    public static class ZScanCursor implements Cursor<Tuple> {
-        private final GatewayClient client;
-        private final byte[] key;
-        private final ScanOptions options;
-
-        private byte[] cursor = ScanParams.SCAN_POINTER_START.getBytes();
-        private ScanResult<redis.clients.jedis.Tuple> result;
-        private int resultIndex = 0;
-        
-        private static final Converter<redis.clients.jedis.Tuple, Tuple> TUPLE_CONVERTER = new Converter<redis.clients.jedis.Tuple, Tuple>() {
-            public Tuple convert(redis.clients.jedis.Tuple source) {
-                return source != null ? new DefaultTuple(source.getBinaryElement(), source.getScore()) : null;
-            }
-        };
-
-        public ZScanCursor(GatewayClient client, byte[] key, ScanOptions options) {
-            this.client = client;
-            this.key = key;
-            this.options = options;
-            this.result = this.client.zscan(key, cursor, JedisConverters.toScanParams(options));
-        }
-        
-        @Override
-        public boolean hasNext() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        public Tuple next() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY) == false) {
-                    result = this.client.zscan(key, result.getCursorAsBytes(), JedisConverters.toScanParams(options));
-                    resultIndex = 0;
-                }
-            }
-            return TUPLE_CONVERTER.convert(result.getResult().get(resultIndex++));
-        }
-
-        @Override
-        public void remove() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public void close() throws IOException {
-            // do nothing
-        }
-
-        @Override
-        public long getCursorId() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public boolean isClosed() {
-            if (result.getResult().size() == resultIndex) {
-                if (result.getCursorAsBytes().equals(ScanParams.SCAN_POINTER_START)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public Cursor<Tuple> open() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public long getPosition() {
-            throw new UnsupportedOperationException("not supported operation!");
         }
     }
     
@@ -3252,85 +3158,14 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public Cursor<Tuple> zScan(byte[] key, ScanOptions options) {
         try {
             if (isPipelined()) {
-                throw new UnsupportedOperationException("not supported operation!");
+                throw new UnsupportedOperationException("'ZSCAN' cannot be called in pipeline mode.");
             }
 
-            return new ZScanCursor(this.client, key, options);
+            Cursor<Tuple> cursor = createZScanCursor(this.client, key, options);
+            cursor.open();
+            return cursor;
         } catch (Exception ex) {
             throw convertException(ex);
-        }
-    }
-
-    public static class HScanCursor implements Cursor<Entry<byte[], byte[]>> {
-        private final GatewayClient client;
-        private final byte[] key;
-        private final ScanOptions options;
-
-        private byte[] cursor = ScanParams.SCAN_POINTER_START.getBytes();
-        private ScanResult<Entry<byte[], byte[]>> result;
-        private int resultIndex = 0;
-        
-        public HScanCursor(GatewayClient client, byte[] key, ScanOptions options) {
-            this.client = client;
-            this.key = key;
-            this.options = options;
-            this.result = this.client.hscan(key, cursor, JedisConverters.toScanParams(options));
-        }
-        
-        @Override
-        public boolean hasNext() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        @Override
-        public Entry<byte[], byte[]> next() {
-            if (result.getResult().size() == resultIndex) {
-                if (Arrays.equals(result.getCursorAsBytes(), ScanParams.SCAN_POINTER_START_BINARY) == false) {
-                    result = this.client.hscan(key, result.getCursorAsBytes(), JedisConverters.toScanParams(options));
-                    resultIndex = 0;
-                }
-            }
-            return result.getResult().get(resultIndex++);
-        }
-
-        @Override
-        public void remove() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public void close() throws IOException {
-            // do nothing
-        }
-
-        @Override
-        public long getCursorId() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public boolean isClosed() {
-            if (result.getResult().size() == resultIndex) {
-                if (result.getCursorAsBytes().equals(ScanParams.SCAN_POINTER_START)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        @Override
-        public Cursor<Entry<byte[], byte[]>> open() {
-            throw new UnsupportedOperationException("not supported operation!");
-        }
-
-        @Override
-        public long getPosition() {
-            throw new UnsupportedOperationException("not supported operation!");
         }
     }
     
@@ -3338,10 +3173,12 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public Cursor<Entry<byte[], byte[]>> hScan(byte[] key, ScanOptions options) {
         try {
             if (isPipelined()) {
-                throw new UnsupportedOperationException("not supported operation!");
+                throw new UnsupportedOperationException("'HSCAN' cannot be called in pipeline mode.");
             }
 
-            return new HScanCursor(this.client, key, options);
+            Cursor<Entry<byte[], byte[]>> cursor = createHScanCursor(this.client, key, options);
+            cursor.open();
+            return cursor;
         } catch (Exception ex) {
             throw convertException(ex);
         }
