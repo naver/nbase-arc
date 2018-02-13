@@ -21,7 +21,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/socket.h>
-#include <sys/select.h>
+#include <sys/poll.h>
 #include <sys/time.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -43,6 +43,13 @@
 #define MAX_CLIENT_THREAD 16384
 #define MAX_LISTEN_BACKLOG 8192
 #define PIDFILE "local_proxy.pid"
+
+/* error used as exit hint (assumes EXIT_SUCCESS < 100) */
+#define LPERR_PTHREAD_CREATE 100
+#define LPERR_PTHREAD_JOIN   101
+#define LPERR_SOCK_ACCEPT    102
+#define LPERR_SOCK_OPT_NB    103
+#define LPERR_SOCK_OPT_ND    104
 
 /* Structures */
 typedef struct client_t
@@ -73,6 +80,7 @@ typedef struct conf_t
   int port;
   int daemonize;
   int query_timeout_millis;
+  int max_num_clients;
   arc_conf_t capi_conf;
 } conf_t;
 
@@ -108,6 +116,10 @@ typedef struct server_t
 
   /* CAPI query timeout */
   int query_timeout_millis;
+
+  /* maximun number of clients to accept */
+  int max_num_clients;
+  int num_clients;
 } server_t;
 
 server_t server;
@@ -367,13 +379,15 @@ initFromConfigBuffer (sds config, conf_t * conf)
 	}
       else if (!strcasecmp (argv[0], "max_fd") && argc == 2)
 	{
-	  conf->capi_conf.max_fd = atoi (argv[1]);
-	  if (conf->capi_conf.max_fd < 1024 || conf->capi_conf.max_fd > 16000)
+	  conf->max_num_clients = atoi (argv[1]);
+	  if (conf->max_num_clients < 1024 || conf->max_num_clients > 16000)
 	    {
 	      sdsfreesplitres (argv, argc);
 	      err = "Invalid max_fd value";
 	      goto err;
 	    }
+	  // client conns + gw conns
+	  conf->capi_conf.max_fd = conf->max_num_clients * 2;
 	}
       else if (!strcasecmp (argv[0], "conn_reconnect_millis") && argc == 2)
 	{
@@ -449,7 +463,9 @@ initializeConfigStructure (conf_t * conf)
   conf->port = -1;
   conf->daemonize = 0;
   conf->query_timeout_millis = 3000;
+  conf->max_num_clients = 4096;
   arc_init_conf (&conf->capi_conf);
+  conf->capi_conf.max_fd = conf->max_num_clients * 2;
 }
 
 static void
@@ -605,6 +621,8 @@ initConfig (int argc, char **argv)
       exit (EXIT_FAILURE);
     }
   server.query_timeout_millis = server.conf->query_timeout_millis;
+  server.max_num_clients = server.conf->max_num_clients;
+  server.num_clients = 0;
 }
 
 static arc_t *
@@ -676,6 +694,7 @@ reconfigThread (arc_t * initial_arc)
 	  tmp_conf = server.conf;
 	  server.conf = new_conf;
 	  server.query_timeout_millis = server.conf->query_timeout_millis;
+	  server.max_num_clients = server.conf->max_num_clients;
 	  pthread_mutex_unlock (&server.reconfig_lock);
 
 	  release_arc_ref (tmp_arc_ref);
@@ -786,6 +805,9 @@ freeClient (client_t * c)
   resetClient (c);
   close (c->fd);
   free (c);
+  pthread_mutex_lock (&server.reconfig_lock);
+  server.num_clients--;
+  pthread_mutex_unlock (&server.reconfig_lock);
   pthread_exit (0);
 }
 
@@ -1094,8 +1116,12 @@ static void *
 clientThread (void *arg)
 {
   client_t *c = (client_t *) arg;
-  fd_set rfds, wfds;
+  struct pollfd pfd;
   int ret;
+
+  pthread_mutex_lock (&server.reconfig_lock);
+  server.num_clients++;
+  pthread_mutex_unlock (&server.reconfig_lock);
 
   c->querybuf = sdsMakeRoomFor (sdsempty (), DEFAULT_QUERY_BUF_SIZE);
   c->replybuf = sdsMakeRoomFor (sdsempty (), DEFAULT_QUERY_BUF_SIZE);
@@ -1109,26 +1135,23 @@ clientThread (void *arg)
   c->flags = 0;
   c->total_append_command = 0;
 
-  FD_ZERO (&rfds);
-  FD_ZERO (&wfds);
+  pfd.fd = c->fd;
 
   while (1)
     {
-      struct timeval timeout;
-
-      FD_CLR (c->fd, &rfds);
-      FD_CLR (c->fd, &wfds);
+      pfd.events = 0;
       if (!(c->flags & REDIS_CLOSE_AFTER_REPLY))
-	FD_SET (c->fd, &rfds);
+	{
+	  pfd.events |= POLLIN;
+	}
       if (sdslen (c->replybuf) > 0)
-	FD_SET (c->fd, &wfds);
-
-      timeout.tv_sec = 1;
-      timeout.tv_usec = 0;
-      ret = select (c->fd + 1, &rfds, &wfds, NULL, &timeout);
+	{
+	  pfd.events |= POLLOUT;
+	}
+      ret = poll (&pfd, 1, 1000);
       if (ret == -1)
 	{
-	  perror ("select");
+	  perror ("poll");
 	  freeClient (c);
 	}
 
@@ -1138,7 +1161,7 @@ clientThread (void *arg)
 	}
 
       /* readable */
-      if (FD_ISSET (c->fd, &rfds))
+      if (pfd.revents & POLLIN)
 	{
 	  int pos = sdslen (c->querybuf);
 	  int avail = sdsavail (c->querybuf);
@@ -1214,7 +1237,7 @@ clientThread (void *arg)
 	}
 
       /* writable */
-      if (FD_ISSET (c->fd, &wfds))
+      if (pfd.revents & POLLOUT)
 	{
 	  int pos = 0;
 	  int avail = sdslen (c->replybuf);
@@ -1277,16 +1300,17 @@ setSocketTcpNoDelay (int fd)
 }
 
 static int
-runServer ()
+runServer (int *exithint)
 {
   int i;
 
   while (!server.shutdown_signal)
     {
-      int cfd;
+      int cfd, ret;
       struct sockaddr_in sa;
       socklen_t salen = sizeof (sa);;
       client_t *c;
+      int can_accept;
 
       /* accpet */
       cfd = accept (server.fd, (struct sockaddr *) &sa, &salen);
@@ -1306,33 +1330,60 @@ runServer ()
 	  else
 	    {
 	      perror ("accept");
+	      *exithint = LPERR_SOCK_ACCEPT;
 	      return -1;
 	    }
-	}
-
-      if (setSocketNonBlock (cfd) == -1)
-	{
-	  perror ("Set socket nonblock");
-	  return -1;
-	}
-
-      if (setSocketTcpNoDelay (cfd) == -1)
-	{
-	  perror ("Set socket tcp_nodelay");
-	  return -1;
 	}
 
       /* pthread join */
       if (server.client_tid[cfd])
 	{
-	  pthread_join (server.client_tid[cfd], NULL);
+	  ret = pthread_join (server.client_tid[cfd], NULL);
+	  if (ret != 0)
+	    {
+	      perror ("pthread_join failed");
+	      *exithint = LPERR_PTHREAD_JOIN;
+	      return -1;
+	    }
 	  server.client_tid[cfd] = 0;
+	}
+
+      /* limit client conn */
+      pthread_mutex_lock (&server.reconfig_lock);
+      can_accept = (server.num_clients < server.max_num_clients);
+      pthread_mutex_unlock (&server.reconfig_lock);
+      if (!can_accept)
+	{
+	  char *err = "-ERR max number of clients reached\r\n";
+	  (void) write (cfd, err, strlen (err));
+	  close (cfd);
+	  continue;
+	}
+
+      /* set sock options */
+      if (setSocketNonBlock (cfd) == -1)
+	{
+	  perror ("Set socket nonblock");
+	  *exithint = LPERR_SOCK_OPT_NB;
+	  return -1;
+	}
+      if (setSocketTcpNoDelay (cfd) == -1)
+	{
+	  perror ("Set socket tcp_nodelay");
+	  *exithint = LPERR_SOCK_OPT_ND;
+	  return -1;
 	}
 
       /* create client thread */
       c = malloc (sizeof (client_t));
       c->fd = cfd;
-      pthread_create (&server.client_tid[cfd], NULL, clientThread, c);
+      ret = pthread_create (&server.client_tid[cfd], NULL, clientThread, c);
+      if (ret != 0)
+	{
+	  perror ("pthread_create failed");
+	  *exithint = LPERR_PTHREAD_CREATE;
+	  return -1;
+	}
     }
   close (server.fd);
 
@@ -1393,6 +1444,7 @@ setupSignalHandlers ()
 int
 main (int argc, char **argv)
 {
+  int exithint = EXIT_SUCCESS;
   /* Signal 
    * -TERM : Gracefully shutdown 
    * -HUP : Reload configuration file */
@@ -1401,9 +1453,20 @@ main (int argc, char **argv)
 
   initConfig (argc, argv);
   if (initServer () == -1)
-    exit (EXIT_FAILURE);
-  if (runServer () == -1)
-    exit (EXIT_FAILURE);
+    {
+      exit (EXIT_FAILURE);
+    }
+  if (runServer (&exithint) == -1)
+    {
+      if (exithint != EXIT_SUCCESS)
+	{
+	  exit (exithint);
+	}
+      else
+	{
+	  exit (EXIT_FAILURE);
+	}
+    }
   finalizeServer ();
 
   exit (EXIT_SUCCESS);
