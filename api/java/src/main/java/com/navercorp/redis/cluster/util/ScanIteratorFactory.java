@@ -125,5 +125,18 @@ public class ScanIteratorFactory {
 
         return new ScanIterator<Entry<byte[], byte[]>>(options, scanner);
     }
+    
+    public static ScanIterator<byte[]> createCScanIterator(
+            final GatewayClient client, final int partitionID, final ScanParams options) {
+
+        Scanner<byte[]> scanner = new Scanner<byte[]>() {
+            @Override
+            public ScanResult<byte[]> scan(byte[] cursor, ScanParams params) {
+                return client.cscan(partitionID, cursor, params);
+            }
+        };
+
+        return new ScanIterator<byte[]>(options, scanner);
+    }
 
 }

@@ -8,6 +8,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Queue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
 import org.junit.Before;
@@ -245,6 +248,55 @@ public class ScanIteratorFactoryTest {
 
         for (String key : keys) {
             assertTrue(key + " isn't scaned", scanResults.contains(key));
+        }
+    }
+    
+    @Test
+    public void cscanIterator() throws InterruptedException {
+        String[] keys = { "test:string:scan1", "test:string:scan2", "test:string:scan3" };
+        final List<String> scanResults = new ArrayList<String>();
+
+        for (int i = 0; i < keys.length; i++) {
+            gatewayClient.del(keys[i]);
+        }
+
+        for (int i = 0; i < keys.length; i++) {
+            gatewayClient.setrange(keys[i], 5, keys[i]);
+        }
+
+        long maxPartition = gatewayClient.cscanlen();
+        ExecutorService executor = Executors.newFixedThreadPool((int)maxPartition);
+        
+        for (int i = 0; i < maxPartition; i++) {
+            final int partitionID = i;
+            Runnable cscanner = new Runnable() {
+                @Override
+                public void run() {
+                    ScanIterator<byte[]> scanIterator = 
+                        ScanIteratorFactory.createCScanIterator(
+                            gatewayClient, 
+                            partitionID, 
+                            new ScanParams().count(2).match("test:string:scan*")
+                        );
+                    
+                    while (scanIterator.hasNext()) {
+                        synchronized (scanResults) {
+                            scanResults.add(SafeEncoder.encode(scanIterator.next()));
+                        }
+                    }
+                }
+            };
+            
+            executor.submit(cscanner);
+        }
+        executor.shutdown();
+        executor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
+
+        assertEquals(keys.length, scanResults.size());
+        synchronized(scanResults) {
+            for (String key : keys) {
+                assertTrue(key + " isn't scaned", scanResults.contains(key));
+            }
         }
     }
 
