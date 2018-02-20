@@ -52,6 +52,7 @@ public class NodeWatcher implements Watcher {
     private static final String KEY_PORT = "port";
     private static final String KEY_GW_ID = "gw_id";
     private static final String KEY_AFFINITY = "affinity";
+    private static final Long MAX_RETRY_DELAY = 8000L;
 
     private final Logger log = LoggerFactory.getLogger(NodeWatcher.class);
 
@@ -88,7 +89,7 @@ public class NodeWatcher implements Watcher {
     private Runnable zkConnector = new Runnable() {
         @Override
         public void run() {
-            int retryDelay = 500;
+            long retryDelay = 500;
 
             while (shutdown.get() == false) {
                 try {
@@ -101,8 +102,8 @@ public class NodeWatcher implements Watcher {
                     log.warn("[NodeWatcher] failed to connect to zookeeper.", e);
                     zkCreationFuture.set(false);
                     retryDelay *= 2;
-                    if (retryDelay > 8000)
-                        retryDelay = 8000;
+                    if (retryDelay > MAX_RETRY_DELAY)
+                        retryDelay = MAX_RETRY_DELAY;
                 }
                 
                 try {
@@ -190,6 +191,11 @@ public class NodeWatcher implements Watcher {
 
         shutdown.set(true);
         connectExecutor.shutdown();
+        try {
+            connectExecutor.awaitTermination(MAX_RETRY_DELAY * 2, TimeUnit.MILLISECONDS);
+        } catch (InterruptedException e) {
+            log.error("[NodeWatcher] Failed to shutdown connectExecutor", e);
+        }
         
         if (zk == null) {
             return;
