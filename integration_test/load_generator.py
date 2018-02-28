@@ -21,16 +21,18 @@ import crc16
 import util
 import sys
 import random
+import time
 from arcci.arcci import *
 
 
 class LoadGenerator(threading.Thread):
     quit = False
 
-    def __init__( self, id, telnet_ip, telnet_port, timeout=3 ):
+    def __init__( self, id, telnet_ip, telnet_port, timeout=3, ops_limit=None ):
         threading.Thread.__init__( self )
 
         self.timeout = timeout
+        self.ops_limit = ops_limit
 
         self.ip = telnet_ip
         self.port = telnet_port
@@ -76,6 +78,8 @@ class LoadGenerator(threading.Thread):
             if i > 50000:
                 i = 0
             i = i + 1
+
+            start_time = time.time()
 
             try:
                 self.server.write( pipelined_multikey_cmd )
@@ -156,6 +160,12 @@ class LoadGenerator(threading.Thread):
                 #util.log( 'Value Error in LoadGenerator, ret:%s' % response[:-2] )
                 self.consistency = False
                 return
+
+            num_commands = 35
+            if self.ops_limit != None:
+                brake_time = 1.0 / self.ops_limit * num_commands - (time.time() - start_time)
+                if brake_time > 0:
+                    time.sleep(brake_time)
 
 
 def is_reply_ok(reply):
