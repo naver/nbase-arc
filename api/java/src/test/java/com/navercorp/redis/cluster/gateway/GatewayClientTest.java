@@ -48,6 +48,10 @@ import org.junit.runner.RunWith;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.jedis.JedisConverters;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.ScanOptions.ScanOptionsBuilder;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -1976,5 +1980,40 @@ public class GatewayClientTest {
                 return gatewayClient.get("foo");
             }
         }.run();
+    }
+    
+    @Test
+    public void scanWholeMatchingKeys() {
+        String[] keys = {"test:string:scan1", "test:string:scan2", "test:string:scan3"};
+        ScanOptions options = new ScanOptionsBuilder()
+                .match("test:string:scan*")
+                .count(2)
+                .build();
+        
+        for (int i = 0; i < keys.length; i++) {
+            gatewayClient.del(keys[i]);
+        }
+
+        // Scan
+        List<String> scanResults = new ArrayList<String>();
+        for (int i = 0; i < keys.length; i++) {
+            gatewayClient.setrange(keys[i], 5, keys[i]);
+        }
+        
+        ScanResult<String> result = gatewayClient.scan("0", JedisConverters.toScanParams(options));
+        while (result.getCursor() != 0 || result.getResult().size() > 0) {
+            if (result.getResult().size() > 0) {
+                scanResults.addAll(result.getResult());
+            }
+            result = gatewayClient.scan(result.getStringCursor(), JedisConverters.toScanParams(options));
+            
+            if (result.getCursor() == 0) {
+                break;
+            }
+        }
+        
+        for (String key : keys) {
+            assertTrue(key + " isn't scaned", scanResults.contains(key));
+        }
     }
 }

@@ -30,6 +30,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.equalTo;
 
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -39,6 +40,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -50,6 +52,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.geo.Circle;
 import org.springframework.data.geo.Distance;
 import org.springframework.data.geo.GeoResults;
@@ -72,12 +75,15 @@ import org.springframework.data.redis.connection.StringRedisConnection.StringTup
 import org.springframework.data.redis.connection.jedis.JedisConverters;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.ScanOptions.ScanOptionsBuilder;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationUtils;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
+
+import com.navercorp.redis.cluster.gateway.GatewayClient;
 
 /**
  * @author seongminwoo
@@ -1426,6 +1432,7 @@ public class RedisClusterConnectionTest {
         values = connection.zRangeByLex(KEY_1, Range.range().gte("e"));
         assertEquals(new LinkedHashSet<String>(Arrays.asList(new String[] { "e", "f", "g" })), values);
     }
+    
     @Test
     public void scanShouldReadEntireValueRange() {
         Set<String> keys = new HashSet<String>();
@@ -1502,6 +1509,137 @@ public class RedisClusterConnectionTest {
         assertThat(i, is(nrOfValues));
     }
     
+    @Test(expected = InvalidDataAccessApiUsageException.class)
+    public void shouldThrowExceptionWhenAccessingClosedCursor() throws IOException {
+        Cursor<byte[]> cursor = RedisClusterConnection.createScanCursor(
+                (GatewayClient) connection.getNativeConnection(), ScanOptions.NONE);
+
+        try {
+            assertFalse(cursor.isClosed());
+            cursor.next();
+        } finally {
+            cursor.close();
+        }
+    }
+    
+    @Test
+    public void shouldReadEntireValueRangeWhenAccessingOpenCursor() throws IOException {
+        int numOfValues = 321;
+        for (int i = 0; i < numOfValues; i++) {
+            connection.hSet(KEY_1_BYTES, JedisConverters.toBytes("key" + i), JedisConverters.toBytes("value-" + i));
+        }
+
+        Cursor<Entry<byte[], byte[]>> cursor = RedisClusterConnection.createHScanCursor(
+                (GatewayClient) connection.getNativeConnection(), KEY_1_BYTES, ScanOptions.NONE);
+        cursor.open();
+        
+        int i = 0;
+        while (cursor.hasNext()) {
+            cursor.next();
+            i++;
+        }
+
+        assertThat(i, is(numOfValues));
+        cursor.close();
+    }
+
+    @Test(expected = InvalidDataAccessApiUsageException.class)
+    public void repoeningCursorShouldHappenAtLastPosition() throws IOException {
+        Cursor<byte[]> cursor = connection.scan(ScanOptions.NONE);
+        while (cursor.hasNext()) {
+            cursor.next();
+        }
+        cursor.close();
+        assertTrue(cursor.isClosed());
+        
+        cursor.open();
+    }
+    
+    @Test
+    public void scanEmptyKeys() {
+        String key = "not_exist_key";
+        ScanOptions options = scanOptions().match(key + "*").build();
+        
+        connection.del(key);
+        assertCursorEmpty(connection.scan(options));
+        assertCursorEmpty(connection.hScan(key, options));
+        assertCursorEmpty(connection.sScan(key, options));
+        assertCursorEmpty(connection.zScan(key, options));
+    }
+    
+    @Test
+    public void scanWholeMatchingKeys() {
+        String containerKey = "containerKey";
+        String[] keys = {"test:string:scan1", "test:string:scan2", "test:string:scan3"};
+        ScanOptions options = new ScanOptionsBuilder()
+                .match("test:string:scan*")
+                .count(2)
+                .build();
+        
+        connection.del(containerKey);
+        for (int i = 0; i < keys.length; i++) {
+            connection.del(keys[i]);
+        }
+
+        // Scan
+        List<String> scanResults = new ArrayList<String>();
+        for (int i = 0; i < keys.length; i++) {
+            connection.setRange(keys[i], keys[i], 5);
+        }
+        Cursor<byte[]> scanCursor = connection.scan(options);
+        while (scanCursor.hasNext()) {
+            scanResults.add(new String(scanCursor.next()));
+        }
+        for (String key : keys) {
+            assertTrue(key + " isn't scaned", scanResults.contains(key));
+        }
+        scanResults.clear();
+        
+        // Sscan
+        for (int i = 0; i < keys.length; i++) {
+            connection.sAdd(containerKey, keys[i]);
+        }
+        Cursor<String> sscanCursor = connection.sScan(containerKey, options);
+        while (sscanCursor.hasNext()) {
+            scanResults.add(sscanCursor.next());
+        }
+        for (String key : keys) {
+            assertTrue(key + " isn't scaned", scanResults.contains(key));
+        }
+        
+        // Hscan
+        connection.del(containerKey);
+        Map<String, String> hscanResults = new HashMap<String, String>();
+        for (int i = 0; i < keys.length; i++) {
+            connection.hSet(containerKey, keys[i], keys[i] + "v");
+        }
+        Cursor<Entry<String, String>> hscanCursor = connection.hScan(containerKey, options);
+        while (hscanCursor.hasNext()) {
+            Entry<String, String> e = hscanCursor.next();
+            hscanResults.put(e.getKey(), e.getValue());
+        }
+        for (String key : keys) {
+            assertTrue(key + " isn't scaned", hscanResults.get(key).equals(key + "v"));
+        }
+        hscanResults.clear();
+        
+        // Zscan
+        connection.del(containerKey);
+        Map<String, Double> zscanResults = new HashMap<String, Double>();
+        for (int i = 0; i < keys.length; i++) {
+            connection.zAdd(containerKey, i, keys[i]);
+        }
+        Cursor<StringTuple> zscanCursor = connection.zScan(containerKey, options);
+        while (zscanCursor.hasNext()) {
+            StringTuple st = zscanCursor.next();
+            zscanResults.put(st.getValueAsString(), st.getScore());
+        }
+        for (int i = 0; i < keys.length; i++) {
+            assertTrue(keys[i] + " isn't scaned", zscanResults.get(keys[i]) == i);
+        }
+        zscanResults.clear();
+    }
+    
     protected void verifyResults(List<Object> expected, List<Object> actual) {
         assertEquals(expected, actual);
     }
@@ -1520,6 +1658,16 @@ public class RedisClusterConnectionTest {
             }
         }
         return exists;
+    }
+    
+    protected <T> void assertCursorEmpty(Cursor<T> cursor) {
+        List<T> results = new ArrayList<T>();
+        
+        while (cursor.hasNext()) {
+            results.add(cursor.next());
+        }
+        
+        assertTrue(results.isEmpty());
     }
 }
 

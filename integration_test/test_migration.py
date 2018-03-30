@@ -31,7 +31,7 @@ import redis_sock
 
 class TestMigration(unittest.TestCase):
     cluster = config.clusters[1]
-    max_load_generator = 128
+    max_load_generator = 10
 
     def isExist(self, redis, key):
         cmd = 'get %s\r\n' % key
@@ -161,7 +161,7 @@ class TestMigration(unittest.TestCase):
         util.log("start load_generator")
         for i in range(self.max_load_generator):
             ip, port = util.get_rand_gateway(self.cluster)
-            load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
+            load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port, ops_limit=500)
             load_gen_thrd_list[i].start()
 
         time.sleep(5) # generate load for 5 sec
@@ -199,7 +199,7 @@ class TestMigration(unittest.TestCase):
         util.log("start load_generator")
         for i in range(self.max_load_generator):
             ip, port = util.get_rand_gateway(self.cluster)
-            load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
+            load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port, ops_limit=500)
             load_gen_thrd_list[i].start()
 
         ret = util.migration(self.cluster, 0, 1, 4096, 8191, 40000)
@@ -268,7 +268,7 @@ class TestMigration(unittest.TestCase):
         load_gen_thrd_list = {}
         for i in range(1):
             ip, port = util.get_rand_gateway(self.cluster)
-            load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
+            load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port, ops_limit=500)
             load_gen_thrd_list[i].start()
 
         time.sleep(5) # generate load for 5 sec
