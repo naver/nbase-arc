@@ -148,7 +148,7 @@ static void term_replicator (smrReplicator * rep);
 /* basic event handling */
 /* -------------------- */
 /* master role */
-static int check_client_nid (smrReplicator * rep, short nid);
+static int check_client_nid (smrReplicator * rep, short nid, int *duplicated);
 static int check_slave_nid (smrReplicator * rep, short nid, int *duplicated);
 static int prepare_slaves_for_write (smrReplicator * rep);
 static int seq_compar (const void *v1, const void *v2);
@@ -308,9 +308,13 @@ static SFI_CB_RET fi_rw_delay_callback (const char *name,
 					sfi_probe_arg * pargs, void *arg);
 static SFI_CB_RET fi_rw_return_callback (const char *name,
 					 sfi_probe_arg * pargs, void *arg);
+static int fi_once (const char *name);
+static SFI_CB_RET fi_once_callback (const char *name, sfi_probe_arg * pargs,
+				    void *arg);
 #endif
 
 static int fi_delay_request (mgmtConn * conn, char **tokens, int num_tok);
+static int fi_once_request (mgmtConn * conn, char **tokens, int num_tok);
 static int fi_rw_request (char *rw, mgmtConn * conn, char **tokens,
 			  int num_tok);
 
@@ -601,7 +605,7 @@ term_replicator (smrReplicator * rep)
 }
 
 static int
-check_client_nid (smrReplicator * rep, short nid)
+check_client_nid (smrReplicator * rep, short nid, int *duplicated)
 {
   dlisth *h;
 
@@ -617,6 +621,7 @@ check_client_nid (smrReplicator * rep, short nid)
       clientConn *cc = (clientConn *) h;
       if (cc->nid == nid)
 	{
+	  *duplicated = 1;
 	  return -1;
 	}
     }
@@ -2250,6 +2255,7 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   long long net_seq;
   int ret;
   long long deadline;
+  int duplicated = 0;
 
   assert (fd == rep->client_lfd);
 
@@ -2311,10 +2317,19 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   cc->nid = ntohs (net_nid);
-  if (check_client_nid (rep, cc->nid) < 0)
+  if (check_client_nid (rep, cc->nid, &duplicated) < 0)
     {
-      LOG (LG_ERROR, "bad nid from new client:%d", cc->nid);
-      goto error;
+      if (duplicated)
+	{
+	  LOG (LG_WARN, "duplicated client nid. close current client: %d",
+	       cc->nid);
+	  free_client_conn_by_nid (rep, cc->nid);
+	}
+      else
+	{
+	  LOG (LG_ERROR, "bad nid from new client:%d", cc->nid);
+	  goto error;
+	}
     }
 
   net_seq = htonll (rep->commit_seq);
@@ -2359,7 +2374,12 @@ free_client_conn (clientConn * cc)
 
   assert (cc != NULL);
   rep = cc->rep;
-
+  if (fi_once ("__no_free_client_conn"))
+    {
+      aeDeleteFileEvent (rep->el, cc->fd, AE_READABLE);
+      aeDeleteFileEvent (rep->el, cc->fd, AE_WRITABLE);
+      return;
+    }
   LOG (LG_WARN, "close client connection");
   dlisth_delete (&cc->head);
 
@@ -4569,6 +4589,22 @@ fi_rw_return_callback (const char *name, sfi_probe_arg * pargs, void *arg)
   errno = s->erno;
   return CB_OK_DONE;
 }
+
+static int
+fi_once (const char *name)
+{
+  int called = 0;
+  SFI_PROBE1 (name, (long) &called);
+  return called;
+}
+
+static SFI_CB_RET
+fi_once_callback (const char *name, sfi_probe_arg * pargs, void *arg)
+{
+  int *called = (int *) pargs->arg1;
+  *called = 1;
+  return CB_OK_DONE;
+}
 #endif
 
 /*
@@ -4610,6 +4646,29 @@ fi_delay_request (mgmtConn * conn, char **tokens, int num_tok)
   s->per_sleep_msec = per_sleep_msec;
 
   sfi_enable (probe, fi_delay_callback, free, s);
+  return mgmt_reply_cstring (conn, "+OK");
+#else
+  return mgmt_reply_cstring (conn, "-ERR not supported");
+#endif
+}
+
+static int
+fi_once_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+#ifdef SFI_ENABLED
+  char *flag;
+
+  if (num_tok != 1)
+    {
+      return mgmt_reply_cstring (conn, "-ERR <flag>");
+    }
+  flag = tokens[0];
+  // all flags must start with underscore char
+  if (strlen (flag) == 0 || flag[0] != '_')
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad flag");
+    }
+  sfi_enable (flag, fi_once_callback, NULL, NULL);
   return mgmt_reply_cstring (conn, "+OK");
 #else
   return mgmt_reply_cstring (conn, "-ERR not supported");
@@ -4720,6 +4779,10 @@ fi_request (mgmtConn * conn, char **tokens, int num_tok)
 	   || strcasecmp (tokens[0], "accept") == 0)
     {
       return fi_rw_request (tokens[0], conn, tokens + 1, num_tok - 1);
+    }
+  else if (strcasecmp (tokens[0], "once") == 0)
+    {
+      return fi_once_request (conn, tokens + 1, num_tok - 1);
     }
   else if (strcasecmp (tokens[0], "clear") == 0)
     {
