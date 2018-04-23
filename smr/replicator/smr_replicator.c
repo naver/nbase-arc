@@ -311,6 +311,8 @@ static SFI_CB_RET fi_rw_return_callback (const char *name,
 static int fi_once (const char *name);
 static SFI_CB_RET fi_once_callback (const char *name, sfi_probe_arg * pargs,
 				    void *arg);
+#else
+#define fi_once(n) 0
 #endif
 
 static int fi_delay_request (mgmtConn * conn, char **tokens, int num_tok);
