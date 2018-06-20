@@ -28,9 +28,9 @@ class RedisClient:
     def close(self):
         self.sock.close()
 
-    def io_read(self, len = -1):
+    def io_read(self, length = -1):
         s = self.sock
-        if len == -1: # read a line that ends with \r\n
+        if length == -1: # read a line that ends with \r\n
 	    prev_c = c = None
             ret = ''
             while True:
@@ -42,10 +42,13 @@ class RedisClient:
 		  return ret[:-1]
 		ret = ret + c
         else:
-            c = s.recv(len)
-            if not c:
-                raise 'socket receive error'
-            return c
+            ret = ''
+            while length > len(ret):
+                c = s.recv(length - len(ret))
+                if not c:
+                    raise 'socket receive error'
+                ret = ret + c
+            return ret
 
     def read_response(self):
         payload = self.io_read()
