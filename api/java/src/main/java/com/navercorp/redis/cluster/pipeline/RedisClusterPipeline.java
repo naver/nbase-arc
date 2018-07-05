@@ -69,9 +69,11 @@ public class RedisClusterPipeline extends Queable {
     }
 
     public void setTimeout(final int timeoutMillisec) {
-        this.timeoutMillisec = timeoutMillisec;
-        if (this.client != null) {
-            this.client.commitActiveTimeout(this.timeoutMillisec);
+        synchronized (lock) {
+            this.timeoutMillisec = timeoutMillisec;
+            if (this.client != null) {
+                this.client.commitActiveTimeout(this.timeoutMillisec);
+            }
         }
     }
 
@@ -80,6 +82,9 @@ public class RedisClusterPipeline extends Queable {
         this.redis = server.getResource();
         this.client = redis.getClient();
         this.keyspace = redis.getKeyspace();
+        if (this.timeoutMillisec != -1) {
+            this.client.commitActiveTimeout(this.timeoutMillisec);
+        }
     }
 
     public GatewayServer getServer() {
