@@ -263,7 +263,8 @@ static void
 playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 {
   struct dumpState *ds = (struct dumpState *) data;
-  int ret = 0, nw, len;
+  int ret = 0, nw;
+  off_t len;
   UNUSED (mask);
 
 
