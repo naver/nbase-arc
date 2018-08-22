@@ -162,7 +162,7 @@ arc_rdb_save_sss_object (rio * rdb, robj * o)
     }
   arcx_sss_type_release_iterator (si);
   serverAssert (val_cnt == emit_cnt);
-  return 0;
+  return nwritten;
 }
 
 robj *

@@ -873,6 +873,14 @@ class TestSSS (unittest.TestCase):
         assert(int(self.r('s3sttl', 'ks', 'uuid', 'svc4', 'key', 'val')) <= 8000)
         assert(int(self.r('s3lttl', 'ks', 'uuid', 'svc5', 'key', 'val')) <= 8000)
 
+    def test_dump_restore(self):
+        self.r('del', 'uuid')
+        self.r('s3sadd', 'ks', 'uuid', 'svc1', 'key1', 'val', '100000')
+        payload = self.r('dump', 'uuid')
+        self.r('del', 'uuid')
+        self.r('restore', 'uuid', '0', payload)
+        assert(self.r('s3sget', 'ks', 'uuid', 'svc1', 'key1') == ['val'])
+
 if __name__ == '__main__':
     if len(sys.argv) == 2:
         access_port = int(sys.argv.pop())
