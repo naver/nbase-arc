@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.navercorp.redis.cluster.RedisCluster;
 import com.navercorp.redis.cluster.RedisClusterClient;
+import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
 import com.navercorp.redis.cluster.gateway.AffinityState;
 import com.navercorp.redis.cluster.gateway.Gateway;
 import com.navercorp.redis.cluster.gateway.GatewayException;
@@ -1013,7 +1014,24 @@ public class RedisClusterPipeline extends Queable {
             }
         });
     }
-    
+
+	public Response<String> set(final byte[]... args) {
+		return this.executeCallback(new PipelineCallback<Response<String>>() {
+			public Response<String> doInPipeline() {
+				client.execute(Command.SET, args);
+				return getResponse(BuilderFactory.STRING);
+			}
+
+			public int getPartitionNumber() {
+				return GatewayPartitionNumber.get(args[0]);
+			}
+
+			public AffinityState getState() {
+				return AffinityState.WRITE;
+			}
+		});
+	}
+
     public Response<Boolean> setbit(final String key, final long offset, final boolean value) {
         return this.executeCallback(new PipelineCallback<Response<Boolean>>() {
             public Response<Boolean> doInPipeline() {

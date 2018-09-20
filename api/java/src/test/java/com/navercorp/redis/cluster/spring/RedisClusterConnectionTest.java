@@ -66,6 +66,7 @@ import org.springframework.data.redis.connection.DefaultTuple;
 import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.data.redis.connection.RedisGeoCommands.GeoLocation;
 import org.springframework.data.redis.connection.RedisListCommands.Position;
+import org.springframework.data.redis.connection.RedisStringCommands.SetOption;
 import org.springframework.data.redis.connection.RedisZSetCommands.Aggregate;
 import org.springframework.data.redis.connection.RedisZSetCommands.Range;
 import org.springframework.data.redis.connection.RedisZSetCommands.Tuple;
@@ -76,6 +77,7 @@ import org.springframework.data.redis.connection.jedis.JedisConverters;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.ScanOptions.ScanOptionsBuilder;
+import org.springframework.data.redis.core.types.Expiration;
 import org.springframework.data.redis.serializer.JdkSerializationRedisSerializer;
 import org.springframework.data.redis.serializer.RedisSerializer;
 import org.springframework.data.redis.serializer.SerializationUtils;
@@ -225,6 +227,49 @@ public class RedisClusterConnectionTest {
 
         connection.del("expy");
     }
+
+	@Test
+	public void setWithOptions() {
+		// XX
+		connection.set(KEY_1_BYTES, VALUE_1_BYTES, Expiration.seconds(60), SetOption.ifAbsent());
+		assertArrayEquals(VALUE_1_BYTES, connection.get(KEY_1_BYTES));
+		assertTrue(connection.pTtl(KEY_1_BYTES) > 0);
+
+		// XX for an already existing key. The value of KEY_1_BYTES must not be changed.
+		connection.set(KEY_1_BYTES, VALUE_2_BYTES, Expiration.seconds(60), SetOption.ifAbsent());
+		assertArrayEquals(VALUE_1_BYTES, connection.get(KEY_1_BYTES));
+
+		// NX for an already existing key. The valud of KEY_1_BYTES must be changed.
+		connection.set(KEY_1_BYTES, VALUE_3_BYTES, Expiration.seconds(60), SetOption.ifPresent());
+		assertArrayEquals(VALUE_3_BYTES, connection.get(KEY_1_BYTES));
+
+		// NX for not existing key.
+		connection.del(KEY_1_BYTES);
+		connection.set(KEY_1_BYTES, VALUE_2_BYTES, Expiration.seconds(60), SetOption.ifPresent());
+		assertEquals(Boolean.FALSE, connection.exists(KEY_1_BYTES));
+
+		// No expiration
+		connection.del(KEY_1_BYTES);
+		connection.set(KEY_1_BYTES, VALUE_1_BYTES, Expiration.persistent(), SetOption.upsert());
+		assertEquals(Long.valueOf(-1), connection.pTtl(KEY_1_BYTES));
+		
+		// pipeline mode
+		connection.openPipeline();
+		try {
+			connection.set(KEY_1_BYTES, VALUE_1_BYTES, Expiration.seconds(60), SetOption.ifAbsent());
+			connection.get(KEY_1_BYTES);
+			connection.set(KEY_1_BYTES, VALUE_2_BYTES, Expiration.seconds(60), SetOption.ifAbsent());
+			connection.get(KEY_1_BYTES);
+			connection.set(KEY_1_BYTES, VALUE_3_BYTES, Expiration.seconds(60), SetOption.ifPresent());
+			connection.get(KEY_1_BYTES);
+		} finally {
+			List<Object> results = connection.closePipeline();
+			assertEquals(3, results.size());
+			assertArrayEquals(VALUE_1_BYTES, (byte[]) results.get(0));
+			assertArrayEquals(VALUE_1_BYTES, (byte[]) results.get(1));
+			assertArrayEquals(VALUE_3_BYTES, (byte[]) results.get(2));
+		}
+	}
 
     @Test(expected = UnsupportedOperationException.class)
     public void testBRPopTimeout() throws Exception {

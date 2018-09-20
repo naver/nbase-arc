@@ -1341,7 +1341,9 @@ public final class RedisProtocol {
         OVERFLOW,
         
         PX, 
-        
+
+        NX,
+
         XX;
 
         /**

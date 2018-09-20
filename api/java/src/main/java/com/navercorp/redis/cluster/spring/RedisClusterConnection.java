@@ -18,6 +18,7 @@ package com.navercorp.redis.cluster.spring;
 import static com.navercorp.redis.cluster.connection.RedisProtocol.Keyword.*;
 
 import java.io.IOException;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -3212,41 +3213,44 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         }
     }
 
-    @Override
-    public void set(byte[] key, byte[] value, Expiration expiration, SetOption option) {
-        try {
-            if (isPipelined()) {
-                switch (option) {
-                case SET_IF_ABSENT:
-                    pipeline(new JedisStatusResult(
-                            pipeline.set(key, value, XX.raw, PX.raw, expiration.getExpirationTimeInSeconds())));
-                    break;
-                case SET_IF_PRESENT:
-                    pipeline(new JedisStatusResult(
-                            pipeline.set(key, value, XX.raw, PX.raw, expiration.getExpirationTimeInSeconds())));
-                    break;
-                case UPSERT:
-                    pipeline(new JedisStatusResult(
-                            pipeline.set(key, value, XX.raw, PX.raw, expiration.getExpirationTimeInSeconds())));
-                    break;
-                }
-            }
+	@Override
+	public void set(byte[] key, byte[] value, Expiration expiration, SetOption option) {
+		List<byte[]> options = new ArrayList<byte[]>();
 
-            switch (option) {
-            case SET_IF_ABSENT:
-                this.client.set(key, value, XX.raw, PX.raw, expiration.getExpirationTimeInSeconds());
-                break;
-            case SET_IF_PRESENT:
-                this.client.set(key, value, XX.raw, PX.raw, expiration.getExpirationTimeInSeconds());
-                break;
-            case UPSERT:
-                this.client.set(key, value, XX.raw, PX.raw, expiration.getExpirationTimeInSeconds());
-                break;
-            }
-        } catch (Exception ex) {
-            throw convertException(ex);
-        }
-    }
+		switch (option) {
+		case SET_IF_ABSENT:
+			options.add(NX.raw);
+			break;
+		case SET_IF_PRESENT:
+			options.add(XX.raw);
+			break;
+		case UPSERT:
+			// Do nothing
+			break;
+		}
+
+		if (expiration.isPersistent() == false) {
+			options.add(PX.raw);
+			options.add(String.valueOf(expiration.getExpirationTimeInMilliseconds()).getBytes(Charset.forName("UTF-8")));
+		}
+
+		byte[][] args = new byte[options.size() + 2][];
+		args[0] = key;
+		args[1] = value;
+		for (int i = 0; i < options.size(); i++) {
+			args[2 + i] = options.get(i);
+		}
+
+		try {
+			if (isPipelined()) {
+				pipeline(new JedisStatusResult(pipeline.set(args)));
+				return;
+			}
+			this.client.set(args);
+		} catch (Exception ex) {
+			throw convertException(ex);
+		}
+	}
     
     private byte[] minToBytesForZRange(Range range) {
         return JedisConverters.boundaryToBytesForZRange(range.getMin(), JedisConverters.MINUS_BYTES);
