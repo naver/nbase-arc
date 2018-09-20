@@ -99,7 +99,7 @@ class RedisDecoder {
      */
     private boolean processError(ByteBuf in) {
         int length = lineLength(in);
-        if (length == 0) {
+        if (length == -1) {
             return false;
         }
         
