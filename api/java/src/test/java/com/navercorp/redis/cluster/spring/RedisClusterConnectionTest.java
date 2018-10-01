@@ -29,18 +29,25 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.equalTo;
+import static com.navercorp.redis.cluster.RedisClusterTestBase.*;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Array;
+import java.lang.reflect.Method;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.concurrent.TimeUnit;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
@@ -55,7 +62,9 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.data.geo.Circle;
 import org.springframework.data.geo.Distance;
+import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.GeoResults;
+import org.springframework.data.geo.Metric;
 import org.springframework.data.geo.Metrics;
 import org.springframework.data.geo.Point;
 import org.springframework.data.redis.connection.DataType;
@@ -64,10 +73,16 @@ import org.springframework.data.redis.connection.DefaultStringRedisConnection;
 import org.springframework.data.redis.connection.DefaultStringTuple;
 import org.springframework.data.redis.connection.DefaultTuple;
 import org.springframework.data.redis.connection.RedisGeoCommands;
+import org.springframework.data.redis.connection.RedisNode;
+import org.springframework.data.redis.connection.RedisServerCommands.MigrateOption;
+import org.springframework.data.redis.connection.RedisGeoCommands.DistanceUnit;
 import org.springframework.data.redis.connection.RedisGeoCommands.GeoLocation;
+import org.springframework.data.redis.connection.RedisGeoCommands.GeoRadiusCommandArgs;
 import org.springframework.data.redis.connection.RedisListCommands.Position;
+import org.springframework.data.redis.connection.RedisStringCommands.BitOperation;
 import org.springframework.data.redis.connection.RedisStringCommands.SetOption;
 import org.springframework.data.redis.connection.RedisZSetCommands.Aggregate;
+import org.springframework.data.redis.connection.RedisZSetCommands.Limit;
 import org.springframework.data.redis.connection.RedisZSetCommands.Range;
 import org.springframework.data.redis.connection.RedisZSetCommands.Tuple;
 import org.springframework.data.redis.connection.SortParameters.Order;
@@ -85,6 +100,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.navercorp.redis.cluster.gateway.GatewayClient;
 
 /**
@@ -121,6 +138,16 @@ public class RedisClusterConnectionTest {
     static final byte[] KEY_1_BYTES = JedisConverters.toBytes(KEY_1);
     static final byte[] KEY_2_BYTES = JedisConverters.toBytes(KEY_2);
     static final byte[] KEY_3_BYTES = JedisConverters.toBytes(KEY_3);
+    
+    static final byte[] KEY_INT = JedisConverters.toBytes("key-int");
+    static final byte[] KEY_DEST = JedisConverters.toBytes("key-dest");
+    static final byte[] KEY_LIST = JedisConverters.toBytes("key-list");
+    static final byte[] KEY_SET = JedisConverters.toBytes("key-set");
+    static final byte[] KEY_ZSET = JedisConverters.toBytes("key-zset");
+    static final byte[] KEY_HASH = JedisConverters.toBytes("key-hash");
+    static final byte[] KEY_S3 = JedisConverters.toBytes("key-s3");
+    static final byte[] KEY_HLL = JedisConverters.toBytes("key-hll");
+    static final byte[] KEY_GEO = JedisConverters.toBytes("key-geo");
 
     static final byte[] SAME_SLOT_KEY_1_BYTES = JedisConverters.toBytes(SAME_SLOT_KEY_1);
     static final byte[] SAME_SLOT_KEY_2_BYTES = JedisConverters.toBytes(SAME_SLOT_KEY_2);
@@ -149,7 +176,6 @@ public class RedisClusterConnectionTest {
         connection.close();
         connection = null;
     }
-
 
     private void clear() {
         connection.del("sfoo");
@@ -184,10 +210,624 @@ public class RedisClusterConnectionTest {
         connection.del(KEY_1_BYTES);
         connection.del(KEY_2_BYTES);
         connection.del(KEY_3_BYTES);
+        connection.del(KEY_INT);
+        connection.del(KEY_DEST);
+        connection.del(KEY_LIST);
+        connection.del(KEY_SET);
+        connection.del(KEY_ZSET);
+        connection.del(KEY_HASH);
+        connection.del(KEY_S3);
+        connection.del(KEY_HLL);
+        connection.del(KEY_GEO);
         connection.del(SAME_SLOT_KEY_1_BYTES);
         connection.del(SAME_SLOT_KEY_2_BYTES);
         connection.del(SAME_SLOT_KEY_3_BYTES);
     }
+    
+	boolean isPipe = false;
+	
+	void t(String methodName, Class[] paramTypes, Object[] args, Object expectedResult, ResultChecker checker) {
+		if (isPipe) {
+			byteConnection.openPipeline();
+		}
+
+		Method m;
+		Object r;
+		try {
+			m = byteConnection.getClass().getDeclaredMethod(methodName, paramTypes);
+			r = m.invoke(byteConnection, args);
+		} catch (Exception cause) {
+			throw new RuntimeException(methodName, cause);
+		}
+		
+		if (m.getGenericReturnType() != Void.TYPE) {
+			if (isPipe) {
+				List<Object> rs = byteConnection.closePipeline();
+				assertEquals(methodName, 1, rs.size());
+				checker.check(methodName, expectedResult, rs.get(0));
+			} else {
+				checker.check(methodName, expectedResult, r);
+			}
+		}
+	}
+	
+	@Test
+	public void testCommands() throws Exception {
+		_testCommands();
+		clear();
+		
+		try {
+			isPipe = true;
+			_testCommands();
+		} finally {
+			byteConnection.closePipeline();
+		}
+	}
+	
+	public void _testCommands() throws Exception {
+		long now = System.currentTimeMillis();
+		byte[] key_1_dump = new byte[] {0, 7, 118, 97, 108, 117, 101, 45, 49, 7, 0, 37, -11, 66, -57, 121, 120, 104, 29};
+		byte[] ZERO = JedisConverters.toBytes("0");
+		
+		t("ping", p(), a(), "PONG", EQ);
+		t("set", p(byte[].class, byte[].class), a(KEY_1_BYTES, VALUE_2_BYTES), null, null);
+		t("getSet", p(byte[].class, byte[].class), a(KEY_1_BYTES, VALUE_1_BYTES), VALUE_2_BYTES, EQ);
+		t("ttl", p(byte[].class), a(KEY_1_BYTES), -1L, EQ);
+		t("exists", p(byte[].class), a(KEY_1_BYTES), true, EQ);
+		t("expire", p(byte[].class, long.class), a(KEY_1_BYTES, 100000), true, EQ);
+		t("expireAt", p(byte[].class, long.class), a(KEY_1_BYTES, now + 100000), true, EQ);
+		t("persist", p(byte[].class), a(KEY_1_BYTES), true, EQ);
+		t("type", p(byte[].class), a(KEY_1_BYTES), DataType.STRING, EQ);
+		t("pExpire", p(byte[].class, long.class), a(KEY_1_BYTES, 100000), true, EQ);
+		t("pExpireAt", p(byte[].class, long.class), a(KEY_1_BYTES, now + 100000), true, EQ);
+		t("pTtl", p(byte[].class), a(KEY_1_BYTES), 1000L, LT);
+		t("dump", p(byte[].class), a(KEY_1_BYTES), key_1_dump, EQ);
+		t("del", p(byte[][].class), a((Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES}), 1L, EQ);
+		t("restore", p(byte[].class, long.class, byte[].class), a(KEY_1_BYTES, 1000000L, key_1_dump), null, null);
+		t("get", p(byte[].class), a(KEY_1_BYTES), VALUE_1_BYTES, EQ);
+		t("append", p(byte[].class, byte[].class), a(KEY_2_BYTES, VALUE_2_BYTES), 7L, EQ);
+		Map<byte[], byte[]> mSetArgs = Maps.newHashMap();
+		mSetArgs.put(KEY_2_BYTES, VALUE_2_BYTES);
+		mSetArgs.put(KEY_3_BYTES, VALUE_3_BYTES);
+		t("mSet", p(Map.class), a(mSetArgs), null, null);
+		t("mGet", p(byte[][].class), a((Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES, KEY_3_BYTES}), Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES, VALUE_3_BYTES), EQ);
+		t("setEx", p(byte[].class, long.class, byte[].class), a(KEY_1_BYTES, 100000L, VALUE_1_BYTES), null, null);
+		t("pSetEx", p(byte[].class, long.class, byte[].class), a(KEY_1_BYTES, 100000L, VALUE_1_BYTES), null, null);
+		t("ttl", p(byte[].class, TimeUnit.class), a(KEY_1_BYTES, TimeUnit.SECONDS), 10L, LT);
+		t("pTtl", p(byte[].class, TimeUnit.class), a(KEY_1_BYTES, TimeUnit.MILLISECONDS), 10000L, LT);
+		t("getRange", p(byte[].class, long.class, long.class), a(KEY_1_BYTES, 3, 4), new byte[] { VALUE_1_BYTES[3], VALUE_1_BYTES[4] }, EQ);
+		t("setNX", p(byte[].class, byte[].class), a(KEY_INT, ZERO), true, EQ);
+		t("decr", p(byte[].class), a(KEY_INT), -1L, EQ);
+		t("decrBy", p(byte[].class, long.class), a(KEY_INT, 10), -11L, EQ);
+		t("incr", p(byte[].class), a(KEY_INT), -10L, EQ);
+		t("incrBy", p(byte[].class, long.class), a(KEY_INT, 10), 0L, EQ);
+		t("incrBy", p(byte[].class, double.class), a(KEY_INT, 5.0), 5.0, EQ);
+		t("getBit", p(byte[].class, long.class), a(KEY_1_BYTES, 7), (VALUE_1_BYTES[0] & 0x01) > 0, EQ);
+		t("setBit", p(byte[].class, long.class, boolean.class), a(KEY_1_BYTES, 7, false), false, EQ);
+		t("setRange", p(byte[].class, byte[].class, long.class), a(KEY_1_BYTES, VALUE_1_BYTES, 0), null, null);
+		t("bitCount", p(byte[].class), a(KEY_1_BYTES), 28L, EQ);
+		t("bitCount", p(byte[].class, long.class, long.class), a(KEY_1_BYTES, 0, 0), 5L, EQ);
+		t("info", p(), a(), null, NN);
+		t("info", p(String.class), a("memory"), null, NN);
+		t("strLen", p(byte[].class), a(KEY_1_BYTES), 7L, EQ);
+		t("dbSize", p(), a(), 0L, LT);
+		
+		// List
+		t("lPush", p(byte[].class, byte[][].class), a(KEY_LIST, (Object) new byte[][] {VALUE_2_BYTES, VALUE_1_BYTES}), 2L, EQ);
+		// VALUE_1_BYTES VALUE_2_BYTES
+		t("rPush", p(byte[].class, byte[][].class), a(KEY_LIST, (Object) new byte[][] {VALUE_3_BYTES}), 3L, EQ);
+		// VALUE_1_BYTES VALUE_2_BYTES VALUE_3_BYTES
+		t("lLen", p(byte[].class), a(KEY_LIST), 3L, EQ);
+		t("lInsert", p(byte[].class, Position.class, byte[].class, byte[].class), a(KEY_LIST, Position.BEFORE, VALUE_2_BYTES, ZERO), 4L, EQ);
+		// VALUE_1_BYTES ZERO VALUE_2_BYTES VALUE_3_BYTES
+		t("lRange", p(byte[].class, long.class, long.class), a(KEY_LIST, 0, -1), Arrays.asList(VALUE_1_BYTES, ZERO, VALUE_2_BYTES, VALUE_3_BYTES), EQ);
+		t("lIndex", p(byte[].class, long.class), a(KEY_LIST, 0), VALUE_1_BYTES, EQ);
+		t("lPop", p(byte[].class), a(KEY_LIST), VALUE_1_BYTES, EQ);
+		// ZERO VALUE_2_BYTES VALUE_3_BYTES
+		t("lRem", p(byte[].class, long.class, byte[].class), a(KEY_LIST, 1, VALUE_2_BYTES), 1L, EQ);
+		// ZERO VALUE_3_BYTES
+		t("lSet", p(byte[].class, long.class, byte[].class), a(KEY_LIST, 0, VALUE_1_BYTES), null, null);
+		// VALUE_1_BYTES VALUE_3_BYTES
+		t("lTrim", p(byte[].class, long.class, long.class), a(KEY_LIST, 0, 0), null, null);
+		// VALUE_1_BYTES
+		t("lPushX", p(byte[].class, byte[].class), a(KEY_LIST, ZERO), 2L, EQ);
+		t("rPop", p(byte[].class), a(KEY_LIST), VALUE_1_BYTES, EQ);
+		t("rPushX", p(byte[].class, byte[].class), a(KEY_LIST, VALUE_2_BYTES), 2L, EQ);
+		t("lRange", p(byte[].class, long.class, long.class), a(KEY_LIST, 0, -1), Arrays.asList(ZERO, VALUE_2_BYTES), EQ);
+		
+		// Set
+		t("sAdd", p(byte[].class, byte[][].class), a(KEY_SET, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES }), 2L, EQ);
+		t("sCard", p(byte[].class), a(KEY_SET), 2L, EQ);
+		t("sIsMember", p(byte[].class, byte[].class), a(KEY_SET, VALUE_1_BYTES), true, EQ);
+		t("sMembers", p(byte[].class), a(KEY_SET), Sets.newLinkedHashSet(Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES)), EQ);
+		t("sRandMember", p(byte[].class), a(KEY_SET), Sets.newHashSet(VALUE_1_BYTES, VALUE_2_BYTES), IN);
+		t("sRandMember", p(byte[].class, long.class), a(KEY_SET, 2), Arrays.asList(VALUE_2_BYTES, VALUE_1_BYTES), EQ);
+		t("sRem", p(byte[].class, byte[][].class), a(KEY_SET, (Object) new byte[][] { VALUE_2_BYTES, VALUE_1_BYTES }), 2L, EQ);
+		
+		// Sorted set
+		t("zAdd", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 1.0, VALUE_1_BYTES), true, EQ);
+		if (isPipe) {
+			t("zAdd", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 0.5, VALUE_2_BYTES), true, EQ);
+			t("zAdd", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 3.0, VALUE_3_BYTES), true, EQ);
+		} else {
+			t("zAdd", p(byte[].class, Set.class), a(KEY_ZSET, Sets.newHashSet(new DefaultTuple(VALUE_2_BYTES, 0.5), new DefaultTuple(VALUE_3_BYTES, 3.0))), 2L, EQ);
+		}
+		t("zIncrBy", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 1.5, VALUE_2_BYTES), Double.valueOf(2.0), EQ);
+		t("zCard", p(byte[].class), a(KEY_ZSET), 3L, EQ);
+		t("zCount", p(byte[].class, double.class, double.class), a(KEY_ZSET, 0.5, 2.5), 2L, EQ);
+		t("zCount", p(byte[].class, Range.class), a(KEY_ZSET, Range.unbounded()), 3L, EQ);
+		t("zRank", p(byte[].class, byte[].class), a(KEY_ZSET, VALUE_1_BYTES), 0L, EQ);
+		t("zRem", p(byte[].class, byte[][].class), a(KEY_ZSET, (Object) new byte[][] { VALUE_1_BYTES }), 1L, EQ);
+		t("zAdd", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 1.0, VALUE_1_BYTES), true, EQ);
+		t("zScore", p(byte[].class, byte[].class), a(KEY_ZSET, VALUE_1_BYTES), 1.0, EQ);
+		Set<byte[]> zValueResults = Sets.newLinkedHashSet();
+		zValueResults.add(VALUE_1_BYTES);
+		zValueResults.add(VALUE_2_BYTES);
+		zValueResults.add(VALUE_3_BYTES);
+		t("zRange", p(byte[].class, long.class, long.class), a(KEY_ZSET, 0L, -1L), zValueResults, EQ);
+		t("zRangeByScore", p(byte[].class, double.class, double.class), a(KEY_ZSET, Long.MIN_VALUE, Long.MAX_VALUE), zValueResults, EQ);
+		t("zRangeByScore", p(byte[].class, double.class, double.class, long.class, long.class), a(KEY_ZSET, Long.MIN_VALUE, Long.MAX_VALUE, 0, 99), zValueResults, EQ);
+		t("zRangeByScore", p(byte[].class, String.class, String.class), a(KEY_ZSET, "-10", "+10"), zValueResults, EQ);
+		zValueResults.remove(VALUE_1_BYTES);
+		t("zRangeByScore", p(byte[].class, String.class, String.class, long.class, long.class), a(KEY_ZSET, "-10", "10", 1L, 2L), zValueResults, EQ);
+		Set<DefaultTuple> zTupleResults = Sets.newLinkedHashSet();
+		zTupleResults.add(new DefaultTuple(VALUE_1_BYTES, 1.0));
+		zTupleResults.add(new DefaultTuple(VALUE_2_BYTES, 2.0));
+		zTupleResults.add(new DefaultTuple(VALUE_3_BYTES, 3.0));
+		t("zRangeWithScores", p(byte[].class, long.class, long.class), a(KEY_ZSET, 0L, -1L), zTupleResults, EQ);
+		t("zRangeByScoreWithScores", p(byte[].class, double.class, double.class), a(KEY_ZSET, Double.MIN_VALUE, Double.MAX_VALUE), zTupleResults, EQ);
+		t("zRangeByScoreWithScores", p(byte[].class, Range.class), a(KEY_ZSET, Range.unbounded()), zTupleResults, EQ);
+		zTupleResults.clear();
+		zTupleResults.add(new DefaultTuple(VALUE_1_BYTES, 1.0));
+		t("zRangeByScoreWithScores", p(byte[].class, Range.class, Limit.class), a(KEY_ZSET, Range.unbounded(), Limit.limit().count(1)), zTupleResults, EQ);
+		t("zRangeByScoreWithScores", p(byte[].class, double.class, double.class, long.class, long.class), a(KEY_ZSET, Double.MIN_VALUE, Double.MAX_VALUE, 0L, 1L), zTupleResults, EQ);
+		zValueResults.clear();
+		zValueResults.add(VALUE_3_BYTES);
+		zValueResults.add(VALUE_2_BYTES);
+		zValueResults.add(VALUE_1_BYTES);
+		t("zRevRange", p(byte[].class, long.class, long.class), a(KEY_ZSET, 0L, -1L), zValueResults, EQ);
+		t("zRevRank", p(byte[].class, byte[].class), a(KEY_ZSET, VALUE_1_BYTES), 2L, EQ);
+		t("zRevRangeByScore", p(byte[].class, double.class, double.class), a(KEY_ZSET, Double.MIN_VALUE, Double.MAX_VALUE), zValueResults, EQ);
+		t("zRevRangeByScore", p(byte[].class, Range.class), a(KEY_ZSET, Range.unbounded()), zValueResults, EQ);
+		zValueResults.clear();
+		zValueResults.add(VALUE_3_BYTES);
+		t("zRevRangeByScore", p(byte[].class, Range.class, Limit.class), a(KEY_ZSET, Range.unbounded(), Limit.limit().count(1)), zValueResults, EQ);
+		t("zRevRangeByScore", p(byte[].class, double.class, double.class, long.class, long.class), a(KEY_ZSET, Double.MIN_VALUE, Double.MAX_VALUE, 0L, 1L), zValueResults, EQ);
+		zTupleResults.clear();
+		zTupleResults.add(new DefaultTuple(VALUE_3_BYTES, 3.0));
+		zTupleResults.add(new DefaultTuple(VALUE_2_BYTES, 2.0));
+		zTupleResults.add(new DefaultTuple(VALUE_1_BYTES, 1.0));
+		t("zRevRangeByScoreWithScores", p(byte[].class, double.class, double.class), a(KEY_ZSET, Double.MIN_VALUE, Double.MAX_VALUE), zTupleResults, EQ);
+		t("zRevRangeByScoreWithScores", p(byte[].class, Range.class), a(KEY_ZSET, Range.unbounded()), zTupleResults, EQ);
+		t("zRevRangeWithScores", p(byte[].class, long.class, long.class), a(KEY_ZSET, 0L, -1L), zTupleResults, EQ);
+		zTupleResults.clear();
+		zTupleResults.add(new DefaultTuple(VALUE_3_BYTES, 3.0));
+		t("zRevRangeByScoreWithScores", p(byte[].class, Range.class, Limit.class), a(KEY_ZSET, Range.unbounded(), Limit.limit().count(1)), zTupleResults, EQ);
+		t("zRevRangeByScoreWithScores", p(byte[].class, double.class, double.class, long.class, long.class), a(KEY_ZSET, Double.MIN_VALUE, Double.MAX_VALUE, 0L, 1L), zTupleResults, EQ);
+		t("zRemRangeByScore", p(byte[].class, double.class, double.class), a(KEY_ZSET, 0.5, 1.5), 1L, EQ);
+		t("zRemRange", p(byte[].class, long.class, long.class), a(KEY_ZSET, Long.MIN_VALUE, Long.MAX_VALUE), 2L, EQ);
+		t("zAdd", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 1.0, VALUE_1_BYTES), true, EQ);
+		t("zAdd", p(byte[].class, double.class, byte[].class), a(KEY_ZSET, 2.0, VALUE_2_BYTES), true, EQ);
+		t("zRangeByScore", p(byte[].class, Range.class), a(KEY_ZSET, Range.range().gt(0.5).lt(1.5)), Sets.newHashSet(VALUE_1_BYTES), EQ);
+		t("zRangeByScore", p(byte[].class, Range.class, Limit.class), a(KEY_ZSET, Range.unbounded(), Limit.limit().count(1)), Sets.newHashSet(VALUE_1_BYTES), EQ);
+		t("zRangeByLex", p(byte[].class), a(KEY_ZSET), Sets.newHashSet(VALUE_1_BYTES, VALUE_2_BYTES), EQ);
+		t("zRangeByLex", p(byte[].class, Range.class), a(KEY_ZSET, Range.range().gt("value").lt("z")), Sets.newHashSet(VALUE_2_BYTES), EQ);
+		t("zRangeByLex", p(byte[].class, Range.class, Limit.class), a(KEY_ZSET, Range.unbounded(), Limit.limit().count(1)), Sets.newHashSet(VALUE_1_BYTES), EQ);
+		t("zRangeByLex", p(byte[].class), a(KEY_ZSET), Sets.newHashSet(VALUE_1_BYTES, VALUE_2_BYTES), EQ);
+		t("zRemRangeByScore", p(byte[].class, Range.class), a(KEY_ZSET, Range.range().gt(0.5).lt(1.5)), 1L, EQ);
+		t("zRemRangeByScore", p(byte[].class, Range.class), a(KEY_ZSET, Range.unbounded()), 1L, EQ);
+		
+		// Hash
+		t("hSet", p(byte[].class, byte[].class, byte[].class), a(KEY_HASH, KEY_1_BYTES, ZERO), true, EQ);
+		t("hSetNX", p(byte[].class, byte[].class, byte[].class), a(KEY_HASH, KEY_1_BYTES, ZERO), false, EQ);
+		t("hExists", p(byte[].class, byte[].class), a(KEY_HASH, KEY_1_BYTES), true, EQ);
+		t("hGet", p(byte[].class, byte[].class), a(KEY_HASH, KEY_1_BYTES), ZERO, EQ);
+		HashMap<byte[], byte[]> keyValue = Maps.newHashMap();
+		keyValue.put(KEY_1_BYTES, ZERO);
+		t("hGetAll", p(byte[].class), a(KEY_HASH), keyValue, EQ);
+		t("hIncrBy", p(byte[].class, byte[].class, long.class), a(KEY_HASH, KEY_1_BYTES, 10L), 10L, EQ);
+		t("hIncrBy", p(byte[].class, byte[].class, double.class), a(KEY_HASH, KEY_1_BYTES, 10.0), 20.0, EQ);
+		keyValue.put(KEY_2_BYTES, VALUE_2_BYTES);
+		t("hMSet", p(byte[].class, Map.class), a(KEY_HASH, keyValue), null, null);
+		t("hMGet", p(byte[].class, byte[][].class), a(KEY_HASH, (Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES}), Arrays.asList(ZERO, VALUE_2_BYTES), EQ);
+		t("hKeys", p(byte[].class), a(KEY_HASH), Sets.newHashSet(KEY_1_BYTES, KEY_2_BYTES), EQ);
+		t("hVals", p(byte[].class), a(KEY_HASH), Arrays.asList(ZERO, VALUE_2_BYTES), EQ);
+		t("hLen", p(byte[].class), a(KEY_HASH), 2L, EQ);
+		t("hDel", p(byte[].class, byte[][].class), a(KEY_HASH, (Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES}), 2L, EQ);
+		
+		// TripleS Set
+		Map<byte[], Set<byte[]>> keyValueSet = new HashMap<byte[], Set<byte[]>>();
+		keyValueSet.put(KEY_1_BYTES, Sets.newHashSet(VALUE_1_BYTES, VALUE_2_BYTES));
+		keyValueSet.put(KEY_2_BYTES, Sets.newHashSet(VALUE_1_BYTES, VALUE_2_BYTES));
+		t("ssSet", p(byte[].class, byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 1L, EQ);
+		t("ssSet", p(byte[].class, byte[].class, byte[].class, long.class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, 86400000L, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 0L, EQ);
+		t("ssGet", p(byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES), Sets.newHashSet(VALUE_1_BYTES, VALUE_2_BYTES), EQ);
+		t("ssAdd", p(byte[].class, byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 2L, EQ);
+		t("ssAdd", p(byte[].class, byte[].class, byte[].class, long.class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES, 86400000L, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 0L, EQ);
+		t("ssAddAt", p(byte[].class, byte[].class, byte[].class, long.class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES, now + 86400000L, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 0L, EQ);
+		t("ssMGet", p(byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, (Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES}), keyValueSet, EQ);
+		t("ssKeys", p(byte[].class), a(KEY_S3), Sets.newHashSet(KEY_1_BYTES), EQ);
+		t("ssKeys", p(byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES), Sets.newHashSet(KEY_1_BYTES, KEY_1_BYTES, KEY_2_BYTES, KEY_2_BYTES), EQ);
+		t("ssCount", p(byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES), 2L, EQ);
+		t("ssExists", p(byte[].class, byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, VALUE_1_BYTES), true, EQ);
+		t("ssExpire", p(byte[].class, long.class), a(KEY_S3, 86400000L), 1L, EQ);
+		t("ssExpire", p(byte[].class, byte[].class, long.class), a(KEY_S3, KEY_1_BYTES, 86400000L), 1L, EQ);
+		t("ssExpire", p(byte[].class, byte[].class, byte[].class, long.class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, 86400000L), 1L, EQ);
+		t("ssExpire", p(byte[].class, byte[].class, byte[].class, byte[].class, long.class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, VALUE_1_BYTES, 86400000L), 1L, EQ);
+		t("ssTTL", p(byte[].class, byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, VALUE_1_BYTES), 864000L, LT);
+		t("ssVals", p(byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES), Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES, VALUE_1_BYTES, VALUE_2_BYTES), EQ);
+		t("ssRem", p(byte[].class, byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 2L, EQ);
+		t("ssRem", p(byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES), 2L, EQ);
+		t("ssRem", p(byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES), 0L, EQ);
+		t("ssDel", p(byte[].class), a(KEY_S3), 0L, EQ);
+		
+		// TripleS List
+		Map<byte[], List<byte[]>> keyValueList = new HashMap<byte[], List<byte[]>>();
+		keyValueList.put(KEY_1_BYTES, new ArrayList<byte[]>(Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES)));
+		keyValueList.put(KEY_2_BYTES, new ArrayList<byte[]>(Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES)));
+		t("slSet", p(byte[].class, byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 1L, EQ);
+		t("slSet", p(byte[].class, byte[].class, byte[].class, long.class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, 86400000L, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 0L, EQ);
+		t("slGet", p(byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES), Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES), EQ);
+		t("slAdd", p(byte[].class, byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 2L, EQ);
+		t("slAdd", p(byte[].class, byte[].class, byte[].class, long.class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES, 86400000L, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 2L, EQ);
+		keyValueList.get(KEY_2_BYTES).add(VALUE_1_BYTES.clone());
+		keyValueList.get(KEY_2_BYTES).add(VALUE_2_BYTES.clone());
+		t("slAddAt", p(byte[].class, byte[].class, byte[].class, long.class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES, now + 86400000L, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 2L, EQ);
+		keyValueList.get(KEY_2_BYTES).add(VALUE_1_BYTES.clone());
+		keyValueList.get(KEY_2_BYTES).add(VALUE_2_BYTES.clone());
+		t("slMGet", p(byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, (Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES}), keyValueList, EQ);
+		t("slKeys", p(byte[].class), a(KEY_S3), Sets.newHashSet(KEY_1_BYTES), EQ);
+		t("slKeys", p(byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES), Sets.newHashSet(KEY_1_BYTES, KEY_1_BYTES, KEY_2_BYTES, KEY_2_BYTES, KEY_2_BYTES, KEY_2_BYTES, KEY_2_BYTES, KEY_2_BYTES), EQ);
+		t("slCount", p(byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES), 2L, EQ);
+		t("slExists", p(byte[].class, byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, VALUE_1_BYTES), true, EQ);
+		t("slExpire", p(byte[].class, long.class), a(KEY_S3, 86400000L), 1L, EQ);
+		t("slExpire", p(byte[].class, byte[].class, long.class), a(KEY_S3, KEY_1_BYTES, 86400000L), 1L, EQ);
+		t("slExpire", p(byte[].class, byte[].class, byte[].class, long.class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, 86400000L), 1L, EQ);
+		t("slExpire", p(byte[].class, byte[].class, byte[].class, byte[].class, long.class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, VALUE_1_BYTES, 86400000L), 1L, EQ);
+		t("slTTL", p(byte[].class, byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, VALUE_1_BYTES), 864000L, LT);
+		t("slVals", p(byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES), Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES, VALUE_1_BYTES, VALUE_2_BYTES, VALUE_1_BYTES, VALUE_2_BYTES, VALUE_1_BYTES, VALUE_2_BYTES), EQ);
+		t("slRem", p(byte[].class, byte[].class, byte[].class, byte[][].class), a(KEY_S3, KEY_1_BYTES, KEY_1_BYTES, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 2L, EQ);
+		t("slRem", p(byte[].class, byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES, KEY_2_BYTES), 6L, EQ);
+		t("slRem", p(byte[].class, byte[].class), a(KEY_S3, KEY_1_BYTES), 0L, EQ);
+		t("slDel", p(byte[].class), a(KEY_S3), 0L, EQ);
+		
+		// HyperLogLog
+		t("pfAdd", p(byte[].class, byte[][].class), a(KEY_HLL, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), 1L, EQ);
+		t("pfCount", p(byte[][].class), a((Object) new byte[][] {KEY_HLL}), 2L, EQ);
+		
+		// Scan
+		if (isPipe == false) {
+			t("scan", p(ScanOptions.class), a(ScanOptions.scanOptions().match("key-*").build()), Arrays.asList(KEY_1_BYTES, KEY_2_BYTES, KEY_3_BYTES), new ScanEqual<List<byte[]>>());
+			
+			t("sAdd", p(byte[].class, byte[][].class), a(KEY_SET, (Object) new byte[][] { VALUE_1_BYTES, VALUE_2_BYTES }), 2L, EQ);
+			t("sScan", p(byte[].class, ScanOptions.class), a(KEY_SET, ScanOptions.scanOptions().match("value-*").build()), Arrays.asList(VALUE_1_BYTES, VALUE_2_BYTES), new ScanEqual<List<byte[]>>());
+			
+			t("zAdd", p(byte[].class, Set.class), a(KEY_ZSET, Sets.newHashSet(new DefaultTuple(VALUE_2_BYTES, 2.0), new DefaultTuple(VALUE_3_BYTES, 3.0), new DefaultTuple(ZERO, 0.0))), 3L, EQ);
+			t("zScan", p(byte[].class, ScanOptions.class), a(KEY_ZSET, ScanOptions.scanOptions().match("value-*").build()), 
+					Arrays.asList(new DefaultTuple(VALUE_2_BYTES, 2.0), new DefaultTuple(VALUE_3_BYTES, 3.0), new DefaultTuple(ZERO, 0.0)), new ScanEqual<List<DefaultTuple>>());
+
+			t("hSet", p(byte[].class, byte[].class, byte[].class), a(KEY_HASH, KEY_1_BYTES, ZERO), true, EQ);
+			t("hSet", p(byte[].class, byte[].class, byte[].class), a(KEY_HASH, KEY_2_BYTES, ZERO), true, EQ);
+			t("hSet", p(byte[].class, byte[].class, byte[].class), a(KEY_HASH, ZERO, ZERO), true, EQ);
+			List<AbstractMap.SimpleEntry<byte[], byte[]>> expectedResults = new ArrayList<AbstractMap.SimpleEntry<byte[], byte[]>>();
+			expectedResults.add(new AbstractMap.SimpleEntry<byte[], byte[]>(KEY_1_BYTES, ZERO));
+			expectedResults.add(new AbstractMap.SimpleEntry<byte[], byte[]>(KEY_2_BYTES, ZERO));
+			t("hScan", p(byte[].class, ScanOptions.class), a(KEY_HASH, ScanOptions.scanOptions().match("key-*").build()), expectedResults, new ScanEqual<List<AbstractMap.SimpleEntry<byte[], byte[]>>>());
+		}
+		
+		// GEO
+		t("geoAdd", p(byte[].class, Point.class, byte[].class), a(KEY_GEO, new Point(10.0, 20.0), VALUE_1_BYTES), 1L, EQ);
+		t("geoAdd", p(byte[].class, GeoLocation.class), a(KEY_GEO, new GeoLocation<byte[]>(VALUE_2_BYTES, new Point(30.0, 40.0))), 1L, EQ);
+		Map<byte[], Point> geoMap = new HashMap<byte[], Point>();
+		geoMap.put(VALUE_3_BYTES, new Point(50.0, 60.0));
+		geoMap.put(KEY_1_BYTES, new Point(1.0, 1.0));
+		t("geoAdd", p(byte[].class, Map.class), a(KEY_GEO, geoMap), 2L, EQ);
+		List<GeoLocation<byte[]>> geoList = new ArrayList<GeoLocation<byte[]>>();
+		geoList.add(new GeoLocation<byte[]>(KEY_2_BYTES, new Point(2.0, 3.0)));
+		geoList.add(new GeoLocation<byte[]>(KEY_3_BYTES, new Point(4.0, 5.0)));
+		t("geoAdd", p(byte[].class, Iterable.class), a(KEY_GEO, geoList), 2L, EQ);
+		t("geoDist", p(byte[].class, byte[].class, byte[].class), a(KEY_GEO, VALUE_1_BYTES, VALUE_2_BYTES), new Distance(2928211.0133, DistanceUnit.METERS), EQ);
+		t("geoDist", p(byte[].class, byte[].class, byte[].class, Metric.class), a(KEY_GEO, VALUE_1_BYTES, VALUE_2_BYTES, DistanceUnit.KILOMETERS), new Distance(2928.2110, DistanceUnit.KILOMETERS), EQ);
+		t("geoHash", p(byte[].class, byte[][].class), a(KEY_GEO, (Object) new byte[][] { VALUE_1_BYTES, VALUE_2_BYTES }), Arrays.asList("s5x1g8cu2y0", "sxj7d9v2fs0"), EQ);
+		t("geoPos", p(byte[].class, byte[][].class), a(KEY_GEO, (Object) new byte[][] {VALUE_1_BYTES, VALUE_2_BYTES}), Arrays.asList(new Point(10.0, 20.0), new Point(30.0, 40.0)), EQ);
+		List<GeoResult<GeoLocation<byte[]>>> geoResultList = new ArrayList<GeoResult<GeoLocation<byte[]>>>();
+		geoResultList.add(
+				new GeoResult<GeoLocation<byte[]>>(
+						new GeoLocation<byte[]>(KEY_1_BYTES, null), new Distance(0, DistanceUnit.METERS)
+						)
+				);
+		t("geoRadius", p(byte[].class, Circle.class, GeoRadiusCommandArgs.class), a(KEY_GEO, new Circle(new Point(0.0, 0.0), new Distance(1000000, DistanceUnit.METERS)), GeoRadiusCommandArgs.newGeoRadiusArgs().limit(1)), geoResultList, EQ);
+		geoResultList.add(
+				new GeoResult<GeoLocation<byte[]>>(
+						new GeoLocation<byte[]>(KEY_2_BYTES, null), new Distance(0, DistanceUnit.METERS)
+						)
+				);
+		geoResultList.add(
+				new GeoResult<GeoLocation<byte[]>>(
+						new GeoLocation<byte[]>(KEY_3_BYTES, null), new Distance(0, DistanceUnit.METERS)
+						)
+				);
+		t("geoRadius", p(byte[].class, Circle.class), a(KEY_GEO, new Circle(new Point(0.0, 0.0), new Distance(1000000, DistanceUnit.METERS))), geoResultList, EQ);
+		t("geoRadius", p(byte[].class, Circle.class), a(KEY_GEO, new Circle(0.0, 0.0, 1000000.0)), geoResultList, EQ);
+		t("geoRadius", p(byte[].class, Circle.class), a(KEY_GEO, new Circle(new Point(0.0, 0.0), 1000000.0)), geoResultList, EQ);
+		t("geoRadiusByMember", p(byte[].class, byte[].class, double.class), a(KEY_GEO, KEY_1_BYTES, 1000000.0), geoResultList, EQ);
+		t("geoRadiusByMember", p(byte[].class, byte[].class, Distance.class), a(KEY_GEO, KEY_1_BYTES, new Distance(1000000.0, DistanceUnit.METERS)), geoResultList, EQ);
+		geoResultList.remove(2);
+		t("geoRadiusByMember", p(byte[].class, byte[].class, Distance.class, GeoRadiusCommandArgs.class), a(KEY_GEO, KEY_1_BYTES, new Distance(1000000.0, DistanceUnit.METERS), GeoRadiusCommandArgs.newGeoRadiusArgs().limit(2)), geoResultList, EQ);
+		t("geoRemove", p(byte[].class, byte[][].class), a(KEY_GEO, (Object) new byte[][] {KEY_1_BYTES, KEY_2_BYTES, KEY_3_BYTES}), 3L, EQ);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testExecute() {
+		connection.execute("set", KEY_1_BYTES, VALUE_1_BYTES);
+	}
+
+	@Test
+	public void testIsClosed() {
+		assertFalse(connection.isClosed());
+	}
+
+	@Test
+	public void testGetNativeConnection() {
+		assertNotNull(connection.getNativeConnection());
+	}
+
+	@Test
+	public void testPipeline() {
+		assertFalse(connection.isPipelined());
+		try {
+			connection.openPipeline();
+			assertTrue(connection.isPipelined());
+		} finally {
+			connection.closePipeline();
+			assertFalse(connection.isPipelined());
+		}
+	}
+
+	@Test
+	public void testIsQueueing() {
+		assertFalse(connection.isQueueing());
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSortByteArraySortParameters() {
+		connection.sort(KEY_1_BYTES, null);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSortByteArraySortParametersByteArray() {
+		connection.sort(KEY_1_BYTES,  null, KEY_2_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testShutdown() {
+		connection.shutdown();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testDiscard() {
+		connection.discard();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testExec() {
+		connection.exec();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testMove() {
+		connection.move("", 0);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testRenameNX() {
+		connection.renameNX(new byte[] {}, new byte[] {});
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSelect() {
+		connection.select(0);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testBitOp() {
+		connection.bitOp(BitOperation.AND, KEY_DEST, KEY_1_BYTES, KEY_2_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testZInterStoreByteArrayAggregateIntArrayByteArrayArray() {
+		connection.zInterStore(KEY_ZSET, Aggregate.SUM, new int[] {1,2,3}, KEY_1_BYTES, KEY_2_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testZInterStoreByteArrayByteArrayArray() {
+		connection.zInterStore(KEY_ZSET, KEY_1_BYTES, KEY_2_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testZUnionStoreByteArrayAggregateIntArrayByteArrayArray() {
+		connection.zUnionStore(KEY_ZSET, Aggregate.SUM, new int[] { 0 }, new byte[][] { KEY_1_BYTES });
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testZUnionStoreByteArrayByteArrayArray() {
+		connection.zUnionStore(KEY_ZSET,  new byte[][] { KEY_1_BYTES });
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testPublish() {
+		connection.publish(KEY_1_BYTES, VALUE_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testGetSubscription() {
+		connection.getSubscription();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testIsSubscribed() {
+		connection.isSubscribed();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testPSubscribe() {
+		connection.pSubscribe(null, KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSubscribe() {
+		connection.subscribe(null, KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testScriptFlush() {
+		connection.scriptFlush();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testScriptKill() {
+		connection.scriptKill();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testScriptLoad() {
+		connection.scriptLoad(KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testScriptExists() {
+		connection.scriptExists("");
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testEval() {
+		connection.eval(KEY_1_BYTES, null, 0, KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testEvalShaStringReturnTypeIntByteArrayArray() {
+		connection.evalSha("", null, 0, KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testMulti() {
+		connection.multi();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testUnwatch() {
+		connection.unwatch();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testWatch() {
+		connection.watch(KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testBgSave() {
+		connection.bgSave();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testBgWriteAof() {
+		byteConnection.bgWriteAof();
+	}
+	
+	@Test(expected = UnsupportedOperationException.class)
+	public void testFlushAll() {
+		connection.flushAll();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testLastSave() {
+		connection.lastSave();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testResetConfigStats() {
+		connection.resetConfigStats();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSave() {
+		connection.save();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSetConfig() {
+		connection.setConfig("",  "");
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testBgReWriteAof() {
+		connection.bgReWriteAof();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testGetClientList() {
+		byteConnection.getClientList();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testGetClientName() {
+		byteConnection.getClientName();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testKillClient() {
+		byteConnection.killClient("", 0);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSetClientName() {
+		byteConnection.setClientName(null);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testShutdownShutdownOption() {
+		byteConnection.shutdown(null);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSlaveOf() {
+		byteConnection.slaveOf("", 0);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testSlaveOfNoOne() {
+		byteConnection.slaveOfNoOne();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testTime() {
+		byteConnection.time();
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testEvalShaByteArrayReturnTypeIntByteArrayArray() {
+		byteConnection.evalSha(KEY_1_BYTES, null, 0, KEY_1_BYTES);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testPfMerge() {
+		connection.pfMerge(KEY_HLL, new byte[][] {});
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testMigrateByteArrayRedisNodeIntMigrateOption() {
+		byteConnection.migrate(KEY_1_BYTES, RedisNode.newRedisNode().build(), 0, MigrateOption.COPY);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testMigrateByteArrayRedisNodeIntMigrateOptionLong() {
+		byteConnection.migrate(KEY_1_BYTES, RedisNode.newRedisNode().build(), 0, MigrateOption.COPY, 1000000L);
+	}
+
+	@Test(expected = UnsupportedOperationException.class)
+	public void testGetSentinelConnection() {
+		byteConnection.getSentinelConnection();
+	}
 
     @Test
     public void testExpire() throws Exception {
@@ -338,7 +978,6 @@ public class RedisClusterConnectionTest {
     public void testInfo() throws Exception {
         Properties info = connection.info();
         assertNotNull(info);
-        System.out.println(info);
     }
 
     @Ignore
@@ -823,13 +1462,9 @@ public class RedisClusterConnectionTest {
                 connection.sMembers("otherset"));
     }
 
-    @Ignore
-    @Test
+    @Test(expected = UnsupportedOperationException.class)
     public void testSPop() {
-        connection.sAdd("myset", "foo");
-        connection.sAdd("myset", "bar");
-        assertTrue(new HashSet<String>(Arrays.asList(new String[]{"foo", "bar"}))
-                .contains(connection.sPop("myset")));
+    	connection.sPop(KEY_SET);
     }
 
     @Test

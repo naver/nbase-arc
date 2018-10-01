@@ -2481,11 +2481,11 @@ public class RedisClusterPipeline extends Queable {
         });
     }
 
-    public Response<String> srandmember(final String key, final int count) {
-        return this.executeCallback(new PipelineCallback<Response<String>>() {
-            public Response<String> doInPipeline() {
+    public Response<List<String>> srandmember(final String key, final int count) {
+        return this.executeCallback(new PipelineCallback<Response<List<String>>>() {
+            public Response<List<String>> doInPipeline() {
                 client.srandmember(key, count);
-                return getResponse(BuilderFactory.STRING);
+                return getResponse(BuilderFactory.STRING_LIST);
             }
 
             public int getPartitionNumber() {
@@ -2498,11 +2498,11 @@ public class RedisClusterPipeline extends Queable {
         });
     }
 
-    public Response<byte[]> srandmember(final byte[] key, final int count) {
-        return this.executeCallback(new PipelineCallback<Response<byte[]>>() {
-            public Response<byte[]> doInPipeline() {
+    public Response<List<byte[]>> srandmember(final byte[] key, final int count) {
+        return this.executeCallback(new PipelineCallback<Response<List<byte[]>>>() {
+            public Response<List<byte[]>> doInPipeline() {
                 client.srandmember(key, count);
-                return getResponse(BuilderFactory.BYTE_ARRAY);
+                return getResponse(BuilderFactory.BYTE_ARRAY_LIST);
             }
 
             public int getPartitionNumber() {

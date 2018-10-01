@@ -58,6 +58,7 @@ import org.springframework.data.redis.core.types.RedisClientInfo;
 import redis.clients.jedis.GeoCoordinate;
 import redis.clients.jedis.GeoUnit;
 import redis.clients.jedis.exceptions.JedisDataException;
+import redis.clients.util.SafeEncoder;
 
 import com.navercorp.redis.cluster.gateway.GatewayClient;
 import com.navercorp.redis.cluster.pipeline.RedisClusterPipeline;
@@ -815,7 +816,7 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public Boolean setBit(byte[] key, long offset, boolean value) {
         try {
             if (isPipelined()) {
-                pipeline(new JedisStatusResult(pipeline.setbit(key, offset, JedisConverters.toBit(value))));
+                pipeline(new JedisResult(pipeline.setbit(key, offset, JedisConverters.toBit(value))));
                 return null;
             }
 
@@ -1490,13 +1491,12 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     @Override
     public Set<byte[]> zRangeByScore(byte[] key, String min, String max) {
         try {
-            final String keyStr = new String(key, "UTF-8");
             if (isPipelined()) {
-                pipeline(new JedisResult(pipeline.zrangeByScore(keyStr, min, max)));
+                pipeline(new JedisResult(pipeline.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max))));
                 return null;
             }
 
-            return JedisConverters.stringSetToByteSet().convert(client.zrangeByScore(keyStr, min, max));
+            return client.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max));
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -1505,13 +1505,12 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     @Override
     public Set<byte[]> zRangeByScore(byte[] key, String min, String max, long offset, long count) {
         try {
-            final String keyStr = new String(key, "UTF-8");
             if (isPipelined()) {
-                pipeline(new JedisResult(pipeline.zrangeByScore(keyStr, min, max, (int) offset, (int) count)));
+            	pipeline(new JedisResult(pipeline.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max), (int) offset, (int) count)));
                 return null;
             }
 
-            return JedisConverters.stringSetToByteSet().convert(client.zrangeByScore(keyStr, min, max, (int) offset, (int) count));
+            return client.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max), (int) offset, (int) count);
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -3203,7 +3202,7 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public Long pTtl(byte[] key, TimeUnit timeUnit) {
         try {
             if (isPipelined()) {
-                pipeline(new JedisResult(pipeline.ttl(key), JedisConverters.millisecondsToTimeUnit(timeUnit)));
+                pipeline(new JedisResult(pipeline.pttl(key), JedisConverters.millisecondsToTimeUnit(timeUnit)));
                 return null;
             }
             
@@ -3253,11 +3252,11 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
 	}
     
     private byte[] minToBytesForZRange(Range range) {
-        return JedisConverters.boundaryToBytesForZRange(range.getMin(), JedisConverters.MINUS_BYTES);
+        return JedisConverters.boundaryToBytesForZRange(range.getMin(), JedisConverters.NEGATIVE_INFINITY_BYTES);
     }
     
     private byte[] maxToBytesForZRange(Range range) {
-        return JedisConverters.boundaryToBytesForZRange(range.getMax(), JedisConverters.PLUS_BYTES);
+        return JedisConverters.boundaryToBytesForZRange(range.getMax(), JedisConverters.POSITIVE_INFINITY_BYTES);
     }
     
     private byte[] minToBytesForZRangeByLex(Range range) {
@@ -3314,14 +3313,14 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(pipeline.zrevrangeByScore(key,
-                        minToBytesForZRange(range),
-                        maxToBytesForZRange(range))));
+                		maxToBytesForZRange(range),
+                		minToBytesForZRange(range))));
                 return null;
             }
 
             return this.client.zrevrangeByScore(key, 
-                    minToBytesForZRange(range),
-                    maxToBytesForZRange(range));
+            		maxToBytesForZRange(range),
+            		minToBytesForZRange(range));
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -3332,15 +3331,15 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(pipeline.zrevrangeByScore(key,
-                        minToBytesForZRange(range),
-                        maxToBytesForZRange(range),
+                		maxToBytesForZRange(range),
+                		minToBytesForZRange(range),
                         limit.getOffset(), limit.getCount())));
                 return null;
             }
 
             return this.client.zrevrangeByScore(key, 
+            		maxToBytesForZRange(range),
                     minToBytesForZRange(range),
-                    maxToBytesForZRange(range),
                     limit.getOffset(), limit.getCount());
         } catch (Exception ex) {
             throw convertException(ex);
@@ -3352,16 +3351,16 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(pipeline.zrevrangeByScoreWithScores(key,
-                        minToBytesForZRange(range),
-                        maxToBytesForZRange(range)),
+                		maxToBytesForZRange(range),
+                		minToBytesForZRange(range)),
                         JedisConverters.tupleSetToTupleSet()));
                 return null;
             }
 
             return JedisConverters.tupleSetToTupleSet().convert(
                     this.client.zrevrangeByScoreWithScores(key, 
-                    minToBytesForZRange(range),
-                    maxToBytesForZRange(range)));
+            		maxToBytesForZRange(range),
+                    minToBytesForZRange(range)));
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -3372,8 +3371,8 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(pipeline.zrevrangeByScoreWithScores(key,
-                        minToBytesForZRange(range),
                         maxToBytesForZRange(range),
+                        minToBytesForZRange(range),
                         limit.getOffset(), limit.getCount()),
                         JedisConverters.tupleSetToTupleSet()));
                 return null;
@@ -3381,8 +3380,8 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
 
             return JedisConverters.tupleSetToTupleSet().convert(
                     this.client.zrevrangeByScoreWithScores(key, 
-                    minToBytesForZRange(range),
                     maxToBytesForZRange(range),
+                    minToBytesForZRange(range),
                     limit.getOffset(), limit.getCount()));
         } catch (Exception ex) {
             throw convertException(ex);
@@ -3659,7 +3658,7 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(pipeline.georadius(key, within.getCenter().getX(), within.getCenter().getY(),
-                        within.getRadius().getValue(), GeoUnit.valueOf(within.getRadius().getUnit().toUpperCase())),
+                        within.getRadius().getValue(), JedisConverters.toGeoUnit(within.getRadius().getMetric())),
                         JedisConverters.geoRadiusResponseToGeoResultsConverter(within.getRadius().getMetric())));
                 return null;
             }
@@ -3667,7 +3666,7 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
             return JedisConverters.geoRadiusResponseToGeoResultsConverter(within.getRadius().getMetric())
                     .convert(client.georadius(key, within.getCenter().getX(), within.getCenter().getY(),
                             within.getRadius().getValue(),
-                            GeoUnit.valueOf(within.getRadius().getUnit().toUpperCase())));
+                            JedisConverters.toGeoUnit(within.getRadius().getMetric())));
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -3678,15 +3677,18 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(pipeline.georadius(key, within.getCenter().getX(), within.getCenter().getY(),
-                        within.getRadius().getValue(), GeoUnit.valueOf(within.getRadius().getUnit().toUpperCase()),
+                        within.getRadius().getValue(), JedisConverters.toGeoUnit(within.getRadius().getMetric()),
                         JedisConverters.toGeoRadiusParam(args)),
                         JedisConverters.geoRadiusResponseToGeoResultsConverter(within.getRadius().getMetric())));
                 return null;
             }
 
+            
+            
+            
             return JedisConverters.geoRadiusResponseToGeoResultsConverter(within.getRadius().getMetric())
                     .convert(client.georadius(key, within.getCenter().getX(), within.getCenter().getY(),
-                            within.getRadius().getValue(), GeoUnit.valueOf(within.getRadius().getUnit().toUpperCase()),
+                            within.getRadius().getValue(), JedisConverters.toGeoUnit(within.getRadius().getMetric()),
                             JedisConverters.toGeoRadiusParam(args)));
         } catch (Exception ex) {
             throw convertException(ex);
@@ -3714,13 +3716,13 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(
-                        pipeline.georadiusByMember(key, member, radius.getValue(), GeoUnit.valueOf(radius.getUnit().toUpperCase())),
+                        pipeline.georadiusByMember(key, member, radius.getValue(), JedisConverters.toGeoUnit(radius.getMetric())),
                         JedisConverters.geoRadiusResponseToGeoResultsConverter(radius.getMetric())));
                 return null;
             }
 
             return JedisConverters.geoRadiusResponseToGeoResultsConverter(radius.getMetric()).convert(
-                    client.georadiusByMember(key, member, radius.getValue(), GeoUnit.valueOf(radius.getUnit().toUpperCase())));
+                    client.georadiusByMember(key, member, radius.getValue(), JedisConverters.toGeoUnit(radius.getMetric())));
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -3732,14 +3734,14 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
         try {
             if (isPipelined()) {
                 pipeline(new JedisResult(
-                        pipeline.georadiusByMember(key, member, radius.getValue(), GeoUnit.valueOf(radius.getUnit().toUpperCase()),
+                        pipeline.georadiusByMember(key, member, radius.getValue(), JedisConverters.toGeoUnit(radius.getMetric()),
                                 JedisConverters.toGeoRadiusParam(args)),
                         JedisConverters.geoRadiusResponseToGeoResultsConverter(radius.getMetric())));
                 return null;
             }
 
             return JedisConverters.geoRadiusResponseToGeoResultsConverter(radius.getMetric())
-                    .convert(client.georadiusByMember(key, member, radius.getValue(), GeoUnit.valueOf(radius.getUnit().toUpperCase()),
+                    .convert(client.georadiusByMember(key, member, radius.getValue(), JedisConverters.toGeoUnit(radius.getMetric()),
                             JedisConverters.toGeoRadiusParam(args)));
         } catch (Exception ex) {
             throw convertException(ex);
