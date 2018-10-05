@@ -37,6 +37,7 @@ import org.springframework.data.redis.connection.jedis.JedisConverters;
 import org.springframework.data.redis.core.types.RedisClientInfo;
 
 import redis.clients.jedis.exceptions.JedisDataException;
+import redis.clients.util.SafeEncoder;
 
 import com.navercorp.redis.cluster.gateway.GatewayClient;
 import com.navercorp.redis.cluster.pipeline.RedisClusterPipeline;
@@ -748,7 +749,7 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
     public Boolean setBit(byte[] key, long offset, boolean value) {
         try {
             if (isPipelined()) {
-                pipeline(new JedisStatusResult(pipeline.setbit(key, offset, JedisConverters.toBit(value))));
+                pipeline(new JedisResult(pipeline.setbit(key, offset, JedisConverters.toBit(value))));
                 return null;
             }
 
@@ -1375,13 +1376,12 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
 
     public Set<byte[]> zRangeByScore(byte[] key, String min, String max) {
         try {
-            final String keyStr = new String(key, "UTF-8");
             if (isPipelined()) {
-                pipeline(new JedisResult(pipeline.zrangeByScore(keyStr, min, max)));
+                pipeline(new JedisResult(pipeline.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max))));
                 return null;
             }
 
-            return JedisConverters.stringSetToByteSet().convert(client.zrangeByScore(keyStr, min, max));
+            return client.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max));
         } catch (Exception ex) {
             throw convertException(ex);
         }
@@ -1389,13 +1389,12 @@ public class RedisClusterConnection implements RedisConnection, RedisSessionOfHa
 
     public Set<byte[]> zRangeByScore(byte[] key, String min, String max, long offset, long count) {
         try {
-            final String keyStr = new String(key, "UTF-8");
             if (isPipelined()) {
-                pipeline(new JedisResult(pipeline.zrangeByScore(keyStr, min, max, (int) offset, (int) count)));
+                pipeline(new JedisResult(pipeline.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max), (int) offset, (int) count)));
                 return null;
             }
 
-            return JedisConverters.stringSetToByteSet().convert(client.zrangeByScore(keyStr, min, max, (int) offset, (int) count));
+            return client.zrangeByScore(key, SafeEncoder.encode(min), SafeEncoder.encode(max), (int) offset, (int) count);
         } catch (Exception ex) {
             throw convertException(ex);
         }
