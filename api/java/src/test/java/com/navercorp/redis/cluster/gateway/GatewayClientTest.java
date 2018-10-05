@@ -2001,15 +2001,14 @@ public class GatewayClientTest {
         }
         
         ScanResult<String> result = gatewayClient.scan("0", JedisConverters.toScanParams(options));
-        while (result.getCursor() != 0 || result.getResult().size() > 0) {
+        while (true) {
             if (result.getResult().size() > 0) {
                 scanResults.addAll(result.getResult());
             }
-            result = gatewayClient.scan(result.getStringCursor(), JedisConverters.toScanParams(options));
-            
             if (result.getCursor() == 0) {
-                break;
+            	break;
             }
+            result = gatewayClient.scan(result.getStringCursor(), JedisConverters.toScanParams(options));
         }
         
         for (String key : keys) {

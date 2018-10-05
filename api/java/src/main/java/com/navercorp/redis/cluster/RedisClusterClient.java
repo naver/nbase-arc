@@ -66,6 +66,14 @@ public class RedisClusterClient extends BinaryRedisClusterClient {
         super(host, port, async);
     }
 
+	public void execute(Command cmd, String... args) {
+		final byte[][] bargs = new byte[args.length][];
+		for (int i = 0; i < args.length; i++) {
+			bargs[i] = SafeEncoder.encode(args[i]);
+		}
+		execute(cmd, bargs);
+	}
+
     /**
      * Sets the.
      *

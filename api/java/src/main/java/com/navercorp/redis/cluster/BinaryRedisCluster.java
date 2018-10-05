@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 
 import com.navercorp.redis.cluster.connection.RedisProtocol;
+import com.navercorp.redis.cluster.connection.RedisProtocol.Command;
 import com.navercorp.redis.cluster.pipeline.BuilderFactory;
 import com.navercorp.redis.cluster.triples.TriplesRedisCluster;
 
@@ -230,6 +231,11 @@ public class BinaryRedisCluster extends TriplesRedisCluster implements BinaryRed
         client.set(key, value, nxxx, expx, time);
         return client.getStatusCodeReply();
     }
+
+	public String set(final byte[]... args) {
+		client.execute(Command.SET, args);
+		return client.getStatusCodeReply();
+	}
     
     public Boolean setbit(byte[] key, long offset, byte[] value) {
         client.setbit(key, offset, value);
