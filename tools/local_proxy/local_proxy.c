@@ -24,6 +24,7 @@
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <strings.h>
 #include <errno.h>
@@ -77,6 +78,7 @@ typedef struct conf_t
 {
   char *cluster_name;
   char *zk_addr;
+  char *bindaddr;
   int port;
   int daemonize;
   int query_timeout_millis;
@@ -292,6 +294,10 @@ initFromConfigBuffer (sds config, conf_t * conf)
 	{
 	  conf->cluster_name = strdup (argv[1]);
 	}
+      else if (!strcasecmp (argv[0], "bind") && argc == 2)
+	{
+	  conf->bindaddr = strdup (argv[1]);
+	}
       else if (!strcasecmp (argv[0], "port") && argc == 2)
 	{
 	  conf->port = atoi (argv[1]);
@@ -460,6 +466,7 @@ initializeConfigStructure (conf_t * conf)
 {
   conf->cluster_name = NULL;
   conf->zk_addr = NULL;
+  conf->bindaddr = NULL;
   conf->port = -1;
   conf->daemonize = 0;
   conf->query_timeout_millis = 3000;
@@ -477,6 +484,10 @@ freeConfigStructure (conf_t * conf)
   if (conf->cluster_name != NULL)
     {
       free (conf->cluster_name);
+    }
+  if (conf->bindaddr != NULL)
+    {
+      free (conf->bindaddr);
     }
   if (conf->zk_addr != NULL)
     {
@@ -742,7 +753,22 @@ initServer ()
   memset (&sa, 0, sizeof (sa));
   sa.sin_family = AF_INET;
   sa.sin_port = htons (server.conf->port);
-  sa.sin_addr.s_addr = htonl (INADDR_ANY);
+  if (server.conf->bindaddr != NULL)
+    {
+      int ret;
+      ret = inet_aton (server.conf->bindaddr, &sa.sin_addr);
+      if (ret == 0)
+	{
+	  fprintf (stderr, "Bad bind address (numbers-and-dots notation): %s\n",
+		   server.conf->bindaddr);
+	  close (sfd);
+	  return -1;
+	}
+    }
+  else
+    {
+      sa.sin_addr.s_addr = htonl (INADDR_ANY);
+    }
 
   if (bind (sfd, (struct sockaddr *) &sa, sizeof (sa)) == -1)
     {
