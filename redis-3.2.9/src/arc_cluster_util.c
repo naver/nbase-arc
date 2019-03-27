@@ -16,6 +16,7 @@
 
 #include "arc_internal.h"
 #include <fcntl.h>
+#include <stdarg.h>
 
 #define PLAYDUMP_LOAD       0
 #define PLAYDUMP_RANGEDEL   1
@@ -40,8 +41,10 @@ struct dumpState
 /* Local declaration */
 /* ----------------- */
 static void exit_with_usage (void);
-static int cat_load_command (dumpScan * scan, rio * aof, int *is_eof);
-static int cat_del_command (dumpScan * scan, rio * aof, int *is_eof);
+static int cat_load_command (dumpScan * scan, rio * aof, int *is_eof,
+			     int for_mig);
+static int cat_del_command (dumpScan * scan, rio * aof, int *is_eof,
+			    int for_mig);
 static void playdump_write_handler (aeEventLoop * el, int fd, void *data,
 				    int mask);
 static void playdump_read_handler (aeEventLoop * el, int fd, void *data,
@@ -50,6 +53,7 @@ static int playdump_command (int argc, sds * argv);
 static int getdump_command (int argc, char **argv);
 static int getandplay_command (int argc, char **argv);
 static int rangedel_command (int argc, char **argv);
+static int respout_command (int argc, char **argv, int is_load);
 static int do_sub_commands (sds options);
 static void init_cluster_util ();
 
@@ -62,6 +66,8 @@ static const char *_usage =
   "  ./cluster-util --getdump <src addr> <port> <dest rdb> <range> [<rate(MB/s)>]                 \n"
   "  ./cluster-util --getandplay <src addr> <port> <dest addr> <port> <range> <tps> [<rate(MB/s)>]\n"
   "  ./cluster-util --rangedel <addr> <port> <range> <tps> [<rate(MB/s)>]                         \n"
+  "  ./cluster-util --catdata <src rdb>                                                           \n"
+  "  ./cluster-util --deldata <src rdb>                                                           \n"
   "    * If ommited, default rate limit is 30MB/s                                                 \n"
   "    * <range> is INCLUSIVE (e.g. 0-1024 has 1025 partitions)                                   \n"
   "Examples:                                                                                      \n"
@@ -74,6 +80,10 @@ static const char *_usage =
   "  ./cluster-util --rangedel localhost 6379 0-1024 30000                                        \n"
   "  ./cluster-util --rangedel localhost 6379 0-1024 30000 30                                     \n";
 
+static int verboselog = 1;
+#define SERVERLOG(l, ...) do {               \
+  if(verboselog) serverLog(l,__VA_ARGS__);   \
+} while(0)
 
 /* --------------- */
 /* Local functions */
@@ -88,7 +98,7 @@ exit_with_usage (void)
 
 // returns 0 (EOF), -1 (ERROR), number of op emitted 
 static int
-cat_load_command (dumpScan * scan, rio * aof, int *is_eof)
+cat_load_command (dumpScan * scan, rio * aof, int *is_eof, int for_mig)
 {
   robj *key = NULL, *val = NULL;
 
@@ -113,6 +123,10 @@ cat_load_command (dumpScan * scan, rio * aof, int *is_eof)
 	{
 	  int dbid = scan->d.selectdb.dbid;
 	  char cmd[] = "*2\r\n$6\r\nSELECT\r\n";
+	  if (!for_mig)
+	    {
+	      continue;
+	    }
 	  GOTOIF (err, rioWrite (aof, cmd, sizeof (cmd) - 1) == 0);
 	  GOTOIF (err, rioWriteBulkLongLong (aof, dbid) == 0);
 	  return 1;
@@ -151,14 +165,22 @@ cat_load_command (dumpScan * scan, rio * aof, int *is_eof)
 	      count = arc_sss_type_value_count (val);
 	      break;
 	    default:
-	      serverLog (LL_WARNING, "Unknown object type in rdb file");
+	      SERVERLOG (LL_WARNING, "Unknown object type in rdb file");
 	      goto err;
 	    }
 
 	  if (expiretime != -1)
 	    {
-	      char cmd[] = "*3\r\n$12\r\nMIGPEXPIREAT\r\n";
-	      GOTOIF (err, rioWrite (aof, cmd, sizeof (cmd) - 1) == 0);
+	      if (for_mig)
+		{
+		  char cmd[] = "*3\r\n$12\r\nMIGPEXPIREAT\r\n";
+		  GOTOIF (err, rioWrite (aof, cmd, sizeof (cmd) - 1) == 0);
+		}
+	      else
+		{
+		  char cmd[] = "*3\r\n$9\r\nPEXPIREAT\r\n";
+		  GOTOIF (err, rioWrite (aof, cmd, sizeof (cmd) - 1) == 0);
+		}
 	      GOTOIF (err, rioWriteBulkObject (aof, key) == 0);
 	      GOTOIF (err, rioWriteBulkLongLong (aof, expiretime) == 0);
 	      count += 1;
@@ -193,7 +215,7 @@ err:
 
 // returns 0 (EOF), -1 (ERROR), number of op emitted 
 static int
-cat_del_command (dumpScan * scan, rio * aof, int *is_eof)
+cat_del_command (dumpScan * scan, rio * aof, int *is_eof, int for_mig)
 {
   robj *key = NULL, *val = NULL;
 
@@ -217,6 +239,10 @@ cat_del_command (dumpScan * scan, rio * aof, int *is_eof)
 	{
 	  int dbid = scan->d.selectdb.dbid;
 	  char cmd[] = "*2\r\n$6\r\nSELECT\r\n";
+	  if (!for_mig)
+	    {
+	      continue;
+	    }
 	  GOTOIF (err, rioWrite (aof, cmd, sizeof (cmd) - 1) == 0);
 	  GOTOIF (err, rioWriteBulkLongLong (aof, dbid) == 0);
 	  return 1;
@@ -278,11 +304,11 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 	  int count;
 	  if (ds->flags == PLAYDUMP_LOAD)
 	    {
-	      ret = count = cat_load_command (ds->scan, &ds->aof, &is_eof);
+	      ret = count = cat_load_command (ds->scan, &ds->aof, &is_eof, 1);
 	    }
 	  else if (ds->flags == PLAYDUMP_RANGEDEL)
 	    {
-	      ret = count = cat_del_command (ds->scan, &ds->aof, &is_eof);
+	      ret = count = cat_del_command (ds->scan, &ds->aof, &is_eof, 1);
 	    }
 	  else
 	    {
@@ -323,7 +349,7 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
     }
   else if (nw <= 0)
     {
-      serverLog (LL_WARNING, "I/O error writing to target, ret:%d, err:%s",
+      SERVERLOG (LL_WARNING, "I/O error writing to target, ret:%d, err:%s",
 		 nw, strerror (errno));
       goto err;
     }
@@ -406,12 +432,12 @@ playdump_cron (struct aeEventLoop *el, long long id, void *data)
       ds->cursize = rioTell (&ds->scan->rdb);
       if (ds->flags == PLAYDUMP_LOAD)
 	{
-	  serverLog (LL_NOTICE, "load %lld%% done",
+	  SERVERLOG (LL_NOTICE, "load %lld%% done",
 		     (long long) ds->cursize * 100 / ds->totalsize);
 	}
       else if (ds->flags == PLAYDUMP_RANGEDEL)
 	{
-	  serverLog (LL_NOTICE, "delete %lld%% done",
+	  SERVERLOG (LL_NOTICE, "delete %lld%% done",
 		     (long long) ds->cursize * 100 / ds->totalsize);
 	}
     }
@@ -456,7 +482,7 @@ play_dump (char *filename, char *target_addr, int target_port, int tps,
   init_dumpscan (&scan_s);
   if (arcx_dumpscan_start (&scan_s, filename) < 0)
     {
-      serverLog (LL_WARNING, "Can not open rdb dumpfile(%s)", filename);
+      SERVERLOG (LL_WARNING, "Can not open rdb dumpfile(%s)", filename);
       return C_ERR;
     }
   scan = &scan_s;
@@ -465,7 +491,7 @@ play_dump (char *filename, char *target_addr, int target_port, int tps,
   fd = anetTcpNonBlockConnect (neterr, target_addr, target_port);
   if (fd == ANET_ERR)
     {
-      serverLog (LL_WARNING, "Unable to connect to redis server(%s:%d): %s",
+      SERVERLOG (LL_WARNING, "Unable to connect to redis server(%s:%d): %s",
 		 target_addr, target_port, neterr);
       arcx_dumpscan_finish (scan, 0);
       return C_ERR;
@@ -496,7 +522,7 @@ play_dump (char *filename, char *target_addr, int target_port, int tps,
       || aeCreateFileEvent (el, fd, AE_READABLE, playdump_read_handler,
 			    &ds) == AE_ERR)
     {
-      serverLog (LL_WARNING,
+      SERVERLOG (LL_WARNING,
 		 "Unable to create file event for playdump command.");
       ret = C_ERR;
       goto return_ret;
@@ -508,7 +534,7 @@ play_dump (char *filename, char *target_addr, int target_port, int tps,
 
   if (ds.ret == C_ERR)
     {
-      serverLog (LL_WARNING,
+      SERVERLOG (LL_WARNING,
 		 "Target redis server is not responding correctly.");
       ret = C_ERR;
       goto return_ret;
@@ -551,7 +577,7 @@ playdump_command (int argc, sds * argv)
 
   if (target_port <= 0 || tps <= 0 || net_limit <= 0)
     {
-      serverLog (LL_WARNING, "Negative number in playdump command arguments");
+      SERVERLOG (LL_WARNING, "Negative number in playdump command arguments");
       return C_ERR;
     }
 
@@ -584,20 +610,20 @@ getdump_command (int argc, char **argv)
 
   if (source_port <= 0)
     {
-      serverLog (LL_WARNING,
+      SERVERLOG (LL_WARNING,
 		 "Negative number of source port in getdump command");
       return C_ERR;
     }
 
   if (!strchr (range, '-'))
     {
-      serverLog (LL_WARNING, "Invalid range format");
+      SERVERLOG (LL_WARNING, "Invalid range format");
       return C_ERR;
     }
 
   if (net_limit <= 0)
     {
-      serverLog (LL_WARNING,
+      SERVERLOG (LL_WARNING,
 		 "Negative number of bandwidth in playdump command");
       return C_ERR;
     }
@@ -633,26 +659,26 @@ getandplay_command (int argc, char **argv)
 
   if (source_port <= 0 || target_port <= 0)
     {
-      serverLog (LL_WARNING, "Negative number of port in getandplay command");
+      SERVERLOG (LL_WARNING, "Negative number of port in getandplay command");
       return C_ERR;
     }
 
   if (tps <= 0)
     {
-      serverLog (LL_WARNING, "Negative number of tps in getandplay command");
+      SERVERLOG (LL_WARNING, "Negative number of tps in getandplay command");
       return C_ERR;
     }
 
   if (net_limit <= 0)
     {
-      serverLog (LL_WARNING,
+      SERVERLOG (LL_WARNING,
 		 "Negative number of bandwidth in playdump command");
       return C_ERR;
     }
 
   if (!strchr (range, '-'))
     {
-      serverLog (LL_WARNING, "Invalid range format");
+      SERVERLOG (LL_WARNING, "Invalid range format");
       return C_ERR;
     }
 
@@ -701,19 +727,19 @@ rangedel_command (int argc, char **argv)
 
   if (port <= 0)
     {
-      serverLog (LL_WARNING, "Negative number of port in rangedel command");
+      SERVERLOG (LL_WARNING, "Negative number of port in rangedel command");
       return C_ERR;
     }
 
   if (tps <= 0)
     {
-      serverLog (LL_WARNING, "Negative number of tps in rangedel command");
+      SERVERLOG (LL_WARNING, "Negative number of tps in rangedel command");
       return C_ERR;
     }
 
   if (!strchr (range, '-'))
     {
-      serverLog (LL_WARNING, "Invalid range format");
+      SERVERLOG (LL_WARNING, "Invalid range format");
       return C_ERR;
     }
 
@@ -736,6 +762,47 @@ rangedel_command (int argc, char **argv)
   return C_OK;
 }
 
+/* cat dump command: emit RESP dump of the rdb to stdout
+ * --catdata <src rdb> */
+static int
+respout_command (int argc, char **argv, int is_load)
+{
+  char *filename;
+  dumpScan scan;
+  rio sout;
+  int is_eof = 0;
+  UNUSED (argc);
+
+  // Init dump scan
+  filename = (char *) argv[1];
+  init_dumpscan (&scan);
+  if (arcx_dumpscan_start (&scan, filename) < 0)
+    {
+      return C_ERR;
+    }
+  // Init standard output
+  rioInitWithFile (&sout, stdout);
+  while (!is_eof)
+    {
+      int ret;
+      if (is_load)
+	{
+	  ret = cat_load_command (&scan, &sout, &is_eof, 0);
+	}
+      else
+	{
+	  ret = cat_del_command (&scan, &sout, &is_eof, 0);
+	}
+      if (ret < 0)
+	{
+	  arcx_dumpscan_finish (&scan, 0);
+	  return C_ERR;
+	}
+    }
+  arcx_dumpscan_finish (&scan, 0);
+  return C_OK;
+}
+
 /* Command Executor */
 static int
 do_sub_commands (sds options)
@@ -744,6 +811,7 @@ do_sub_commands (sds options)
   int argc;
   int ret;
 
+  verboselog = 1;
   options = sdstrim (options, " \t\r\n");
   argv = sdssplitargs (options, &argc);
   sdstolower (argv[0]);
@@ -764,13 +832,23 @@ do_sub_commands (sds options)
     {
       ret = rangedel_command (argc, argv);
     }
+  else if (!strcasecmp (argv[0], "catdata") && argc == 2)
+    {
+      verboselog = 0;
+      ret = respout_command (argc, argv, 1);
+    }
+  else if (!strcasecmp (argv[0], "deldata") && argc == 2)
+    {
+      verboselog = 0;
+      ret = respout_command (argc, argv, 0);
+    }
   else
     {
       exit_with_usage ();
     }
   if (ret == C_OK)
     {
-      serverLog (LL_NOTICE, "%s success\n", argv[0]);
+      SERVERLOG (LL_NOTICE, "%s success\n", argv[0]);
     }
   sdsfreesplitres (argv, argc);
   return ret;
