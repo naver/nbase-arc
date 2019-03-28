@@ -25,6 +25,7 @@ import subprocess
 import string
 import random
 import testbase
+import redis_sock
 
 class TestClusterUtil(unittest.TestCase):
     cluster = config.clusters[0]
@@ -37,23 +38,21 @@ class TestClusterUtil(unittest.TestCase):
     playdump_proxy_log = "playdump.log"
     playdump_proxy_proc = None
 
+
     def setUp(self):
         util.set_process_logfile_prefix('TestClusterUtil_%s' % self._testMethodName)
         self.conf_checker = default_cluster.initialize_starting_up_smr_before_redis(self.cluster)
         self.assertIsNotNone(self.conf_checker, 'failed to initialize cluster')
-
-        # Setup proxy server
-        self.getdump_proxy_proc = self.setup_proxy_server(self.getdump_proxy_port, self.cluster['servers'][0]['redis_port'],
-                                                          "/dev/null", self.getdump_proxy_log, "getdump.fifo")
-        self.playdump_proxy_proc = self.setup_proxy_server(self.playdump_proxy_port, self.cluster['servers'][0]['redis_port'],
-                                                           self.playdump_proxy_log, "/dev/null", "playdump.fifo")
         return 0
 
     def tearDown(self):
-        # Release proxy server
-        self.release_proxy_server(self.getdump_proxy_proc, "getdump.fifo")
-        self.release_proxy_server(self.playdump_proxy_proc, "playdump.fifo")
-
+        # teardown proxies if installed
+        if self.getdump_proxy_proc:
+            self.release_proxy_server(self.getdump_proxy_proc, "getdump.fifo")
+            self.getdump_proxy_proc = None
+        if self.playdump_proxy_proc:
+            self.release_proxy_server(self.playdump_proxy_proc, "playdump.fifo")
+            self.playdump_proxy_proc = None
         testbase.defaultTearDown(self)
 
     def insertLargeKey(self, redis, key):
@@ -79,6 +78,12 @@ class TestClusterUtil(unittest.TestCase):
                 redis.write("PING\r\n")
                 ret = redis.read_until("+PONG\r\n", 30)
                 self.assertTrue("+PONG" in ret)
+
+    def setup_proxies(self):
+        self.getdump_proxy_proc = self.setup_proxy_server(self.getdump_proxy_port, self.cluster['servers'][0]['redis_port'],
+                                                          "/dev/null", self.getdump_proxy_log, "getdump.fifo")
+        self.playdump_proxy_proc = self.setup_proxy_server(self.playdump_proxy_port, self.cluster['servers'][0]['redis_port'],
+                                                           self.playdump_proxy_log, "/dev/null", "playdump.fifo")
 
     def setup_proxy_server(self, in_port, out_port, in_log, out_log, fifo_name):
         try:
@@ -125,6 +130,7 @@ class TestClusterUtil(unittest.TestCase):
 
     def test_getdump_and_playdump(self):
         util.print_frame()
+        self.setup_proxies()
 
         test_limit_mb = 10
 
@@ -178,6 +184,7 @@ class TestClusterUtil(unittest.TestCase):
 
     def test_getandplay(self):
         util.print_frame()
+        self.setup_proxies()
 
         test_limit_mb = 10
 
@@ -211,3 +218,34 @@ class TestClusterUtil(unittest.TestCase):
                  % (dump_file_size, play_file_size, elapse_time, test_limit_mb,
                     (dump_file_size + play_file_size) / elapse_time / 1024 / 1024))
         self.assertTrue((dump_file_size + play_file_size) / (10 * 1024 * 1024) < elapse_time)
+
+    def test_catdatadel(self):
+        util.print_frame()
+        test_limit_mb = 10
+
+        # Make data
+        server = self.cluster['servers'][0]
+        redis = telnetlib.Telnet(server['ip'], server['redis_port'])
+        util.log("Insert large key about 100MB")
+        self.insertLargeKey(redis, "test_key")
+
+        # Get dump
+        util.log("Start getdump, start ts:%d" % time.time())
+        cmd = "./cluster-util --getdump %s %d getdump.rdb 0-8191 %d" % (server['ip'], server['redis_port'], test_limit_mb)
+        proc = util.exec_proc_async(util.cluster_util_dir(0), cmd, True, None, subprocess.PIPE, None)
+        ret = proc.wait()
+        self.assertEqual(0, ret)
+
+        # Test --catdata sub command
+        util.log("Start --catdata, start ts:%d" % time.time())
+        cmd = "./cluster-util --catdata getdump.rdb > catdata.resp"
+        proc = util.exec_proc_async(util.cluster_util_dir(0), cmd, True, None, subprocess.PIPE, None)
+        ret = proc.wait()
+        self.assertEqual(0, ret)
+
+        # test --deldata sub command
+        util.log("Start --deldata, start ts:%d" % time.time())
+        cmd = "./cluster-util --deldata getdump.rdb > deldata.resp"
+        proc = util.exec_proc_async(util.cluster_util_dir(0), cmd, True, None, subprocess.PIPE, None)
+        ret = proc.wait()
+        self.assertEqual(0, ret)
