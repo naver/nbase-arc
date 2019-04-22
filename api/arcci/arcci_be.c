@@ -548,7 +548,7 @@ format_binary (char *buf, int bufsz, char *data, int data_size)
 
   for (i = 0; i < count; i++, bp++, dp++)
     {
-      if (isprint ((unsigned char)*dp))
+      if (isprint ((unsigned char) *dp))
 	{
 	  *bp = *dp;
 	}
@@ -594,7 +594,8 @@ debug_log_be_job (be_t * be, be_job_t * job, int err)
       arc_job_t *aj = (arc_job_t *) job->data;
 
       FMT_SEG_PRINTF ("\tARC JOB state:%s pred:%d err:%d timeout_ms:%d\n",
-		      arc_job_state2str (aj->state), aj->pred, aj->err, aj->to_ms);
+		      arc_job_state2str (aj->state), aj->pred, aj->err,
+		      aj->to_ms);
       FMT_SEG_PRINTF ("\tRQST ncmd:%d is_write:%d crc:%d sent_cnt:%d\n",
 		      aj->rqst.ncmd, aj->rqst.is_write, aj->rqst.crc,
 		      aj->rqst.sent_cnt);
@@ -710,7 +711,6 @@ create_gw_raw (be_t * be, short id, long target_version)
     }
   init_gw (gw);
   gw->id = id;
-  gw->state = GW_STATE_UNUSED;
   gw->gwl_version = target_version;
 
   return gw;
@@ -3250,11 +3250,23 @@ zk_watcher (zhandle_t * zzh, int type, int state, const char *path,
 
   LOG_INFO (be, "Callback zk_watcher type:%d state:%d path:%s", type, state,
 	    path ? path : "");
-  if (type == ZOO_SESSION_EVENT && state == ZOO_CONNECTED_STATE)
+  if (type == ZOO_SESSION_EVENT)
     {
-      LOG_INFO (be, "Connected to the zookeeper");
-      add_watch = 1;
-      add_get = 1;
+      if (state == ZOO_CONNECTED_STATE)
+	{
+	  LOG_INFO (be, "Connected to the zookeeper");
+	  add_watch = 1;
+	  add_get = 1;
+	}
+      else if (state == ZOO_CONNECTING_STATE)
+	{
+	  LOG_INFO (be, "Connecting to the zookeeper...");
+	  return;
+	}
+      else
+	{
+	  goto zk_error;
+	}
     }
   else if (type == ZOO_CHILD_EVENT)
     {
@@ -3556,9 +3568,16 @@ zk_getchildren_completion (int rc,
        *
        * So it is possible for the BE to have active gateway if this kind of error is not handled separately.
        */
-      be->zk_gwl_version++;
-      is_also_error = 1;
-      goto apply_new_gw_ary;
+      if (rc == ZNONODE)
+	{
+	  be->zk_gwl_version++;
+	  is_also_error = 1;
+	  goto apply_new_gw_ary;
+	}
+      else
+	{
+	  goto zk_error;
+	}
     }
   else
     {
@@ -3621,6 +3640,12 @@ zk_getchildren_completion (int rc,
 	{
 	  LOG_INFO (be, "Gateway:%s is already in my gateway list",
 		    format_gw (be, gw));
+	  // Can be NONE if there were error between list aget and node aget
+	  // Trigger node aget
+	  if (gw->state == GW_STATE_NONE)
+	    {
+	      gw->gwl_version = be->zk_gwl_version;
+	    }
 	}
       new_gw_ary[new_gw_idx++] = gw;
     }
@@ -3737,11 +3762,14 @@ zk_getgw_completion (int rc, const char *value, int value_len,
   assert (gwc != NULL);
   be = gwc->be;
 
+  BE_FI(rc, ZOPERATIONTIMEOUT, 0);
+  FI_END();
   if (rc != ZOK || value == NULL || value_len < 0)
     {
       LOG_ERROR (be, "Zookeeper error:%d", rc);
       if (gwc != NULL)
 	{
+	  zk_force_reconn (gwc->be);
 	  destroy_gw_completion (gwc);
 	}
       return;
@@ -3770,7 +3798,7 @@ zk_getgw_completion (int rc, const char *value, int value_len,
   for (i = 0; i < be->n_gw; i++)
     {
       gw = be->gw_ary[i];
-      if (gw->state == GW_STATE_UNUSED && gw->gwl_version == gwc->version
+      if (gw->state == GW_STATE_NONE && gw->gwl_version == gwc->version
 	  && gw->id == gwc->id)
 	{
 	  break;
@@ -4000,9 +4028,8 @@ zk_getaffinity_completion (int rc, const char *value,
     }
   memcpy (buf, value, value_len);
   buf[value_len] = '\0';
-  
-  LOG_INFO (be, "Callback zk_getaffinity_completion rc:%d value:%s", rc,
-	    buf);
+
+  LOG_INFO (be, "Callback zk_getaffinity_completion rc:%d value:%s", rc, buf);
 
   // Parse affinity data
   if (aff_data_parse_check_and_peek (be, buf, gwid_ary, aff_ary, &n_item) < 0)
