@@ -23,6 +23,8 @@
 #define SSS_KV_LIST 1
 #define SSS_KV_SET  2
 
+#define MAX_ITERCATEGORIES_ONSTACK  8192
+
 /*-----------------------------------------------------------------------------
  * Flags
  *----------------------------------------------------------------------------*/
@@ -939,10 +941,15 @@ s3_mget (client * c, robj * s3obj)
     }
   else
     {
-      sssIterCategories ctg[key_count];
+      sssIterCategories ctg_stk[MAX_ITERCATEGORIES_ONSTACK];
+      sssIterCategories *ctg = &ctg_stk[0];
       sssTypeIterator *iter;
       robj *key;
 
+      if (key_count > MAX_ITERCATEGORIES_ONSTACK)
+	{
+	  ctg = zmalloc (key_count * sizeof (sssIterCategories));
+	}
       for (i = 0; i < key_count; i++)
 	{
 	  key = c->argv[i + 4];
@@ -979,6 +986,10 @@ s3_mget (client * c, robj * s3obj)
 		  tot_count--;
 		}
 	    }
+	}
+      if (ctg != &ctg_stk[0])
+	{
+	  zfree (ctg);
 	}
     }
   serverAssert (tot_count == 0);
