@@ -4,6 +4,19 @@ import redis
 import sys
 
 access_port = 6379
+
+def assert_1(resp):
+    redis.rr_assert_equal(resp, 1)
+
+def assert_0(resp):
+    redis.rr_assert_equal(resp, 0)
+
+def assert_err(resp):
+    redis.rr_assert_substring('ERR', resp)
+
+def assert_wrongtype(resp):
+    redis.rr_assert_substring('WRONGTYPE', resp)
+
 class TestSSS (unittest.TestCase):
 
     def setUp(self):
@@ -112,7 +125,7 @@ class TestSSS (unittest.TestCase):
         self.r('s3ladd', 'ks', 'uuid', 'svc', 'key1', 'val', '100000')
         self.r('s3ladd', 'ks', 'uuid', 'svc', 'key2', 'val', '100000')
         self.r('s3ladd', 'ks', 'uuid', 'svc', 'key1', 'val', '100000')
-        self.assert_equal(['key4', 'key3', 'key1', 'key2', 'key1'], self.r('s3lkeys', 'ks', 'uuid', 'svc'))
+        self.assert_equal(['key1', 'key2', 'key3', 'key4'], self.r('s3lkeys', 'ks', 'uuid', 'svc'))
         self.assert_subs(".*wrong kind.*", self.r('s3skeys', 'ks', 'uuid', 'svc'))
         self.r('s3ladd', 'ks', 'uuid', 'svc1', 'key1', 'val', '100000')
         self.r('s3ladd', 'ks', 'uuid', 'svc1', 'key1', 'val', '100000')
@@ -122,7 +135,7 @@ class TestSSS (unittest.TestCase):
         self.r('s3ladd', 'ks', 'uuid', 'svc2', 'key3', 'val', '100000')
         self.r('s3ladd', 'ks', 'uuid', 'svc3', 'key1', 'val', '100000')
         self.r('s3ladd', 'ks', 'uuid', 'svc4', 'key1', 'val', '100000')
-        self.assert_equal(['key1', 'key1', 'key1'], self.r('s3lkeys', 'ks', 'uuid', 'svc1'))
+        self.assert_equal(['key1'], self.r('s3lkeys', 'ks', 'uuid', 'svc1'))
         self.assert_equal(['key1', 'key2', 'key3'], self.r('s3lkeys', 'ks', 'uuid', 'svc2'))
         self.assert_equal(['svc', 'svc1', 'svc2', 'svc3', 'svc4'], self.r('s3lkeys', 'ks', 'uuid'))
         self.assert_equal([], self.r('s3skeys', 'ks', 'uuid'))
@@ -772,7 +785,7 @@ class TestSSS (unittest.TestCase):
         self.assert_equal([], self.r('s3svals', 'ks', 'uuid', 'svc2'))
         self.r('s3lmadd', 'ks', 'uuid', 'svc2', 'key1', 'val1', '100000', 'key1', 'val1', '100000', 'key2', 'val1', '100000')
         self.r('s3smadd', 'ks', 'uuid', 'svc1', 'key1', 'val1', '100000', 'key2', 'val2', '100000', 'key3', 'val3', '100000')
-        self.assert_equal(['key1', 'key1', 'key2'], self.r('s3lkeys', 'ks', 'uuid', 'svc2'))
+        self.assert_equal(['key1', 'key2'], self.r('s3lkeys', 'ks', 'uuid', 'svc2'))
         self.assert_equal(['val1', 'val1', 'val1'], self.r('s3lvals', 'ks', 'uuid', 'svc2'))
         self.assert_equal(['key1', 'key2', 'key3'], self.r('s3skeys', 'ks', 'uuid', 'svc1'))
         self.assert_equal(['val1', 'val2', 'val3'], self.r('s3svals', 'ks', 'uuid', 'svc1'))
@@ -880,6 +893,73 @@ class TestSSS (unittest.TestCase):
         self.r('del', 'uuid')
         self.r('restore', 'uuid', '0', payload)
         assert(self.r('s3sget', 'ks', 'uuid', 'svc1', 'key1') == ['val'])
+
+    def _kS(self, uuid, svc, key, count, ttl, assertf = None):
+        for i in range(count):
+            resp = self.r('s3sadd', '*', uuid, svc, key, 'v%d' % i, ttl)
+            if assertf:
+                assertf(resp)
+
+    def _kL(self, uuid, svc, key, count, ttl, assertf = None):
+        for i in range(count):
+            resp = self.r('s3ladd', '*', uuid, svc, key, 'v%d' % i, ttl)
+            if assertf:
+                assertf(resp)
+
+    def test_set_list_mode_is_determined_by_svc_level(self):
+        r = self.r
+        # Set first
+        r('del', 'uuid')
+        self._kS('uuid', 'svc0', 'k1', 10, 3600000, assert_1)
+        self._kS('uuid', 'svc0', 'k1', 10, 3600000, assert_0)
+        self._kL('uuid', 'svc0', 'k1', 10, 3600000, assert_wrongtype)
+        self._kL('uuid', 'svc0', 'k2', 10, 3600000, assert_wrongtype)
+        self._kS('uuid', 'svc1', 'k1', 10, 3600000, assert_1)
+        self._kS('uuid', 'svc1', 'k1', 10, 3600000, assert_0)
+        # List first
+        r('del', 'uuid')
+        self._kL('uuid', 'svc0', 'k1', 10, 3600000, assert_1)
+        self._kL('uuid', 'svc0', 'k1', 10, 3600000, assert_1)
+        self._kS('uuid', 'svc0', 'k1', 10, 3600000, assert_wrongtype)
+        self._kS('uuid', 'svc0', 'k2', 10, 3600000, assert_wrongtype)
+        self._kL('uuid', 'svc1', 'k1', 10, 3600000, assert_1)
+        self._kL('uuid', 'svc1', 'k1', 10, 3600000, assert_1)
+
+    def test_mget_of_duplicated_keys(self):
+        r = self.r
+        r('del', 'uuid')
+        self._kS('uuid', 'svc0', 'k1', 10, 3600000, assert_1)
+        self._kS('uuid', 'svc0', 'k2', 10, 3600000, assert_1)
+        self._kS('uuid', 'svc0', 'k3', 10, 3600000, assert_1)
+        keys = ['k1', 'k1', 'k2', 'k3', 'k3', 'k2']
+        resp = r('s3smget', '*', 'uuid', 'svc0', *keys)
+        idx = 0
+        for key in keys:
+            for i in range(10):
+                # return value is key value pair
+                assert(resp[idx*2] == key), (resp[idx], key)
+                idx = idx + 1
+
+    def test_sxskeys_returns_keys_in_lexi_order(self):
+        r = self.r
+        r('del', 'uuid')
+        self._kS('uuid', 'svc0', 'k2', 10, 3600000, assert_1)
+        self._kS('uuid', 'svc0', 'k1', 10, 3600000, assert_1)
+        resp = r('s3skeys', '*', 'uuid', 'svc0')
+        assert resp == ['k1', 'k2'], resp
+        r = self.r
+        r('del', 'uuid')
+        self._kL('uuid', 'svc0', 'k2', 10, 3600000, assert_1)
+        self._kL('uuid', 'svc0', 'k1', 10, 3600000, assert_1)
+        resp = r('s3lkeys', '*', 'uuid', 'svc0')
+        assert resp == ['k1', 'k2'], resp
+
+    def test_s3mget_lots_of_keys(self):
+        r = self.r
+        r('del', 'uuid')
+        self._kS('uuid', 'svc0', 'k1', 1, 3600000, assert_1)
+        keys = ['k1']*65536
+        resp = r('s3smget', '*', 'uuid', 'svc0', *keys)
 
 if __name__ == '__main__':
     if len(sys.argv) == 2:
