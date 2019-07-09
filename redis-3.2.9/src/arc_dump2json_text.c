@@ -23,6 +23,8 @@
 #include <assert.h>
 #include "arc_dump_plugin.h"
 
+static long long num_s3collections = 0;
+
 static void
 fwrite_repr (char *p, size_t len, FILE * fp)
 {
@@ -144,6 +146,7 @@ begin_key (void *ctx, int type, char *key, int keylen, long long expiretime)
       break;
     case PLUGIN_RDB_TYPE_SSS:
       fputs ("\"type\":\"sss\",\"value\":[", fp);
+      num_s3collections = 0;
       break;
     }
   return RET_OK;
@@ -244,6 +247,7 @@ end_sss_collection (void *ctx, int mode)
 
   fseek (fp, -1, SEEK_CUR);
   fputs ("]},", fp);
+  num_s3collections++;
 
   return RET_OK;
 }
@@ -253,7 +257,13 @@ end_key (void *ctx, int type)
 {
   FILE *fp = ctx;
 
-  fseek (fp, -1, SEEK_CUR);
+  if (type != PLUGIN_RDB_TYPE_SSS || num_s3collections > 0)
+    {
+      // Empty s3 object can exist by active purge during read operation.
+      // Empty objects are deleted during s3 GC.
+      fseek (fp, -1, SEEK_CUR);
+      num_s3collections = 0;
+    }
   switch (type)
     {
     case PLUGIN_RDB_TYPE_STRING:

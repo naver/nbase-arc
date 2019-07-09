@@ -23,6 +23,8 @@
 #define SSS_KV_LIST 1
 #define SSS_KV_SET  2
 
+#define MAX_ITERCATEGORIES_ONSTACK  8192
+
 /*-----------------------------------------------------------------------------
  * Flags
  *----------------------------------------------------------------------------*/
@@ -116,8 +118,8 @@ struct madd_arg
 
 struct s3_keys_cb_arg
 {
-  robj *svc;
-  robj *prev_svc;
+  int match_svc;		// if set to 1 match distinct svc. match distinct keys otherwise.
+  robj *prev;			// prev svc or key
 };
 
 struct s3_count_cb_arg
@@ -939,10 +941,15 @@ s3_mget (client * c, robj * s3obj)
     }
   else
     {
-      sssIterCategories ctg[key_count];
+      sssIterCategories ctg_stk[MAX_ITERCATEGORIES_ONSTACK];
+      sssIterCategories *ctg = &ctg_stk[0];
       sssTypeIterator *iter;
       robj *key;
 
+      if (key_count > MAX_ITERCATEGORIES_ONSTACK)
+	{
+	  ctg = zmalloc (key_count * sizeof (sssIterCategories));
+	}
       for (i = 0; i < key_count; i++)
 	{
 	  key = c->argv[i + 4];
@@ -980,6 +987,10 @@ s3_mget (client * c, robj * s3obj)
 		}
 	    }
 	}
+      if (ctg != &ctg_stk[0])
+	{
+	  zfree (ctg);
+	}
     }
   serverAssert (tot_count == 0);
 }
@@ -988,24 +999,27 @@ static void
 s3_keys_cb (sssEntry * e, int *flag, void *arg)
 {
   struct s3_keys_cb_arg *cbarg = (struct s3_keys_cb_arg *) arg;
+  robj *curr;
 
-  if (cbarg->svc == NULL)
+  if (cbarg->match_svc)
     {
-      /* Categorize svc entries, if svc field is omitted in s3keys command */
-      if (obj_compare (cbarg->prev_svc, e->svc) != 0)
+      // filter mode
+      if (!((s_Kv_mode & SSS_KV_SET && e->index == 0LL)
+	    || (s_Kv_mode & SSS_KV_LIST && e->index > 0)))
 	{
-	  /* check if this svc is same kv_mode */
-	  if ((s_Kv_mode & SSS_KV_SET && e->index == 0LL) ||
-	      (s_Kv_mode & SSS_KV_LIST && e->index > 0))
-	    {
-	      cbarg->prev_svc = e->svc;
-	      *flag = CATEGORY_MATCHED;
-	    }
+	  return;
 	}
+      curr = e->svc;
     }
   else
     {
-      /* Categorize key entries, if svc field is filled in s3keys command */
+      // already checked
+      curr = e->key;
+    }
+
+  if (obj_compare (cbarg->prev, curr) != 0)
+    {
+      cbarg->prev = curr;
       *flag = CATEGORY_MATCHED;
     }
 }
@@ -1027,8 +1041,8 @@ s3_keys (client * c, robj * s3obj)
       svc = c->argv[3];
     }
 
-  arg.svc = svc;
-  arg.prev_svc = NULL;
+  arg.match_svc = (svc == NULL);
+  arg.prev = NULL;
   iterate_values_with_hook (s3obj, ks, svc, NULL, curr_time, &ctg,
 			    s3_keys_cb, &arg);
   iter = &ctg.iter[CATEGORY_MATCHED];
@@ -1037,10 +1051,6 @@ s3_keys (client * c, robj * s3obj)
       sssEntry *se;
 
       addReplyMultiBulkLen (c, iter->count);
-      if (c->argc == 4 && s_Kv_mode == SSS_KV_LIST)
-	{
-	  iter = iter_sort_by_index (iter);
-	}
       while ((se = arcx_sss_iter_next (iter)) != NULL)
 	{
 	  if (c->argc == 4)
