@@ -151,20 +151,25 @@ static long long mstime(void) {
 }
 
 static void cliRefreshPrompt(void) {
-    int len;
-
     if (config.eval_ldb) return;
-    if (config.hostsocket != NULL)
-        len = snprintf(config.prompt,sizeof(config.prompt),"redis %s",
-                       config.hostsocket);
-    else
-        len = anetFormatAddr(config.prompt, sizeof(config.prompt),
-                           config.hostip, config.hostport);
+
+    sds prompt = sdsempty();
+    if (config.hostsocket != NULL) {
+        prompt = sdscatfmt(prompt,"redis %s",config.hostsocket);
+    } else {
+        char addr[256];
+        anetFormatAddr(addr, sizeof(addr), config.hostip, config.hostport);
+        prompt = sdscatlen(prompt,addr,strlen(addr));
+    }
+
     /* Add [dbnum] if needed */
     if (config.dbnum != 0)
-        len += snprintf(config.prompt+len,sizeof(config.prompt)-len,"[%d]",
-            config.dbnum);
-    snprintf(config.prompt+len,sizeof(config.prompt)-len,"> ");
+        prompt = sdscatfmt(prompt,"[%i]",config.dbnum);
+
+    /* Copy the prompt in the static buffer. */
+    prompt = sdscatlen(prompt,"> ",2);
+    snprintf(config.prompt,sizeof(config.prompt),"%s",prompt);
+    sdsfree(prompt);
 }
 
 /* Return the name of the dotfile for the specified 'dotfilename'.
@@ -1330,9 +1335,10 @@ static void repl(void) {
                 } else {
                     long long start_time = mstime(), elapsed;
                     int repeat, skipargs = 0;
+                    char *endptr;
 
-                    repeat = atoi(argv[0]);
-                    if (argc > 1 && repeat) {
+                    repeat = strtol(argv[0], &endptr, 10);
+                    if (argc > 1 && *endptr == '\0' && repeat) {
                         skipargs = 1;
                     } else {
                         repeat = 1;
@@ -1351,7 +1357,9 @@ static void repl(void) {
                     }
 
                     elapsed = mstime()-start_time;
-                    if (elapsed >= 500) {
+                    if (elapsed >= 500 &&
+                        config.output == OUTPUT_STANDARD)
+                    {
                         printf("(%.2fs)\n",(double)elapsed/1000);
                     }
                 }
