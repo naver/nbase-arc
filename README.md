@@ -34,7 +34,7 @@ nbase-arc (n-base-ARC) is an open source distributed memory store based on Redis
 * More 
   - [Migration](doc/migration.md)
   - [Failure detection and fail-over](doc/failure-detection-and-failover.md)
-  - [Supported commands](doc/supported-commands-3.2.9.md)
+  - [Supported commands](doc/supported-commands.md)
   - [Compare with Redis Cluster](doc/compare-redis-cluster.md)
 
 ## Discussions
