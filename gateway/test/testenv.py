@@ -28,7 +28,7 @@ import redis
 # --------------------------
 CWD = os.getcwd()
 
-REDIS_BIN = os.path.join(os.path.abspath("../../redis-3.2.9/src"), "redis-server")
+REDIS_BIN = os.path.join(os.path.abspath("../../redis/src"), "redis-server")
 if 'REDIS_BIN' in os.environ:
     REDIS_BIN = os.environ['REDIS_BIN']
 

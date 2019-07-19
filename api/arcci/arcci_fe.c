@@ -212,7 +212,7 @@ static struct redisCommand redisCommandTable[] = {
   {"s3mrem", NULL, -4, "w", 0, NULL, 2, 2, 1, 0, 0},
   {"s3gc", NULL, 2, "w", 0, NULL, 0, 0, 0, 0, 0},
   {"crc16", NULL, 3, "wm", 0, NULL, 1, 1, 1, 0, 0},
-  /* from redis-3.2.9 */
+  /* from redis command table */
   {"get", _D, 2, "rF", 0, NULL, 1, 1, 1, 0, 0},
   {"set", _D, -3, "wm", 0, NULL, 1, 1, 1, 0, 0},
   {"setnx", _D, 3, "wmF", 0, NULL, 1, 1, 1, 0, 0},
