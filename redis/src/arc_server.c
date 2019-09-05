@@ -246,6 +246,7 @@ init_config (void)
   arc.mem_limit_active_kb = 0;
   arc.mem_max_allowed_byte = 0;
   arc.mem_hard_limit_kb = 0;
+  arc.pg_deny_oom = 0;
 
   /* Local ip check */
   arc.local_ip_addrs = arcx_get_local_ip_addrs ();	//TODO why here?
@@ -1192,5 +1193,25 @@ crc16Command (client * c)
   addReply (c, new);
   addReply (c, shared.crlf);
 }
+
+void
+denyoomCommand (client * c)
+{
+  long val = 0;
+
+  if (getLongFromObjectOrReply (c, c->argv[1], &val, "invalid deny-oom value")
+      != C_OK)
+    {
+      return;
+    }
+  if (val != 0 && val != 1)
+    {
+      addReplyError (c, "invalid deny-oom value");
+      return;
+    }
+  arc.pg_deny_oom = (int) val;
+  addReply (c, shared.ok);
+}
+
 
 #endif

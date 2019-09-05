@@ -185,6 +185,7 @@ struct arcServer
   unsigned long mem_limit_active_kb;
   unsigned long mem_max_allowed_byte;
   unsigned long mem_hard_limit_kb;
+  int pg_deny_oom;
 
   /* local ip check */
   char **local_ip_addrs;
@@ -262,6 +263,8 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     shared.db_migrate_slot = createStringObject("\001\002\003db_migrate_slot", 18);    \
     /* key for saving migration state */                                               \
     shared.db_migclear_slot = createStringObject("\001\002\003db_migclear_slot", 19);  \
+    /* PG deny oom state */                                                            \
+    shared.pg_deny_oom = createStringObject("\001\002\003pg_deny_oom", 14);            \
     /* Reserved object in order to reply through replication stream. */                \
     shared.addreply_through_smr = createStringObject("dummyobject_notused", 19);       \
 } while(0)
@@ -305,12 +308,13 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     {"s3expire",s3expireCommand,4,"w",0,NULL,2,2,1,0,0},              \
     {"s3rem",s3remCommand,3,"w",0,NULL,2,2,1,0,0},                    \
     {"s3mrem",s3mremCommand,-4,"w",0,NULL,2,2,1,0,0},                 \
-    {"s3gc",s3gcCommand,2,"w",0,NULL,0,0,0,0,0},                       \
+    {"s3gc",s3gcCommand,2,"w",0,NULL,0,0,0,0,0},                      \
     {"checkpoint",checkpointCommand,2,"ars",0,NULL,0,0,0,0,0},        \
     {"migstart",migstartCommand,2,"aw",0,NULL,0,0,0,0,0},             \
     {"migend",migendCommand,1,"aw",0,NULL,0,0,0,0,0},                 \
     {"migconf",migconfCommand,-2,"aw",0,NULL,0,0,0,0,0},              \
     {"migpexpireat",migpexpireatCommand,3,"w",0,NULL,1,1,1,0,0},      \
+    {"deny-oom",denyoomCommand,2,"aw",0,NULL,0,0,0,0,0},              \
     {"crc16",crc16Command,3,"wm",0,NULL,1,1,1,0,0},                   \
     {"bping",bpingCommand,1,"r",0,NULL,0,0,0,0,0},                    \
     {"quit",quitCommand,1,"r",0,NULL,0,0,0,0,0}                       \
@@ -344,6 +348,7 @@ extern int arc_handle_command_rewrite (client * c);
 // return 1 if handled, 0 otherwise
 extern int arc_debug_hook (client * c);
 extern void crc16Command (client * c);
+extern void denyoomCommand (client * c);
 
 /* arc_networking.c */
 extern void arc_smrc_create (client * c);

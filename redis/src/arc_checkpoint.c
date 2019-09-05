@@ -337,11 +337,10 @@ arcx_is_auxkey (robj * key)
     }
   return !compareStringObjects (key, shared.db_version) ||
     !compareStringObjects (key, shared.db_smr_mstime) ||
-    !compareStringObjects (key,
-			   shared.db_migrate_slot)
-    || !compareStringObjects (key, shared.db_migclear_slot);
+    !compareStringObjects (key, shared.db_migrate_slot) ||
+    !compareStringObjects (key, shared.db_migclear_slot) ||
+    !compareStringObjects (key, shared.pg_deny_oom);
 }
-
 
 /* --------------------- */
 /* Exported arc function */
@@ -547,6 +546,11 @@ arc_rdb_save_aux_fields (rio * rdb)
     {
       return -1;
     }
+  if (arc.pg_deny_oom
+      && rdbSaveAuxFieldStrInt (rdb, shared.pg_deny_oom->ptr, 1) == -1)
+    {
+      return -1;
+    }
   return 0;
 }
 
@@ -589,6 +593,12 @@ arc_rdb_load_aux_fields_hook (robj * auxkey, robj * auxval, long long *now)
 	  sdsfree (arc.migclear_slot);
 	}
       arc.migclear_slot = sdsdup (auxval->ptr);
+    }
+  else if (!compareStringObjects (auxkey, shared.pg_deny_oom))
+    {
+      long long v = 0;
+      getLongLongFromObject (auxval, &v);
+      arc.pg_deny_oom = (v > 0);
     }
   else
     {
