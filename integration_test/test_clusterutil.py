@@ -119,7 +119,9 @@ class TestClusterUtil(unittest.TestCase):
             if first != True:
                 mb = (last - prev) / 1024 / 1024
                 util.log("Network usage: %dMB/s, Limit: %dMB/s" % (mb, limit_mb))
-                self.assertTrue(mb <= limit_mb*1.3)
+                # proxy server checks file size via pipe line of nc and tees
+                # add marginal bandwidth (e.g. /proc/sys/fs/pipe-max-size --> 1M) to the assertion
+                self.assertTrue(mb <= (limit_mb + 10))
             first = False
             prev = last
 
