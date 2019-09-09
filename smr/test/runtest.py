@@ -39,6 +39,7 @@ integrated_tests = [
     './test_be_reconf.py',
     './test_quorum.py',
     './test_logutil.py',
+    './test_deletelog_cmd.py',
     ]
 
 for test in unit_tests:

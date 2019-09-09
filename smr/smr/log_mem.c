@@ -256,7 +256,8 @@ static smrLogAddr *mem_get_mmap (logDev * dev, long long seq, int for_read,
 static void mem_munmap_internal (masterShm * shm, smrLogAddr * addr);
 static int mem_munmap (logDev * dev, smrLogAddr * addr);
 int mem_remove_one (logDev * dev, long long upper, int gap_in_sec,
-		    int *removed, long long *removed_seq, int *has_more);
+		    long long retain_lb, int *removed, long long *removed_seq,
+		    int *has_more);
 static void mem_close (logDev * dev);
 static void mem_info_cs (masterShm * shm, gpbuf_t * gp);
 
@@ -1766,7 +1767,8 @@ mem_munmap (logDev * dev, smrLogAddr * addr)
 
 int
 mem_remove_one (logDev * dev, long long upper, int gap_in_sec,
-		int *removed, long long *removed_seq, int *has_more)
+		long long retain_lb, int *removed, long long *removed_seq,
+		int *has_more)
 {
   // notihg to implement
   return 0;

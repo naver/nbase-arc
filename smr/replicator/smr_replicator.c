@@ -47,7 +47,6 @@ static const char *_usage =
   "    -d <smr log file directory path>                                            \n"
   "    -b <base listen port> (default: 1900)                                       \n"
   "    -x <checkpointed log delete delay in seconds> (default: 86400)              \n"
-  "    -k slave connection idle timeout in msec. (0: no timeout) (default0)        \n"
   "    -v <verbose level> (0: error, 1: warn, 2: info, 3:debug)  (default 2)       \n";
 
 static const char *_logo =
@@ -337,6 +336,7 @@ static int info_slowlog (smrReplicator * rep, gpbuf_t * gp);
 static int info_request (mgmtConn * conn, char **tokens, int num_tok);
 static int slowlog_mapf (slowLogEntry * e, void *arg);
 static int slowlog_request (mgmtConn * conn, char **tokens, int num_tok);
+static int deletelog_request (mgmtConn * conn, char **tokens, int num_tok);
 static int smrversion_request (mgmtConn * conn, char **tokens, int num_tok);
 /* top handler */
 static int mgmt_request (mgmtConn * conn, char *bp, char *ep);
@@ -443,6 +443,7 @@ init_replicator (smrReplicator * rep, repRole role, smrLog * smrlog,
   aseq_init (&rep->cron_est_min_seq);
   aseq_init (&rep->mig_seq);
   rep->log_delete_gap = 86400;
+  aseq_init (&rep->log_delete_seq);
   /* general */
   rep->nid = -1;
   rep->stat_time = tv;
@@ -5689,6 +5690,33 @@ error:
   return ret;
 }
 
+// deletelog <retain>
+static int
+deletelog_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+  smrReplicator *rep = conn->rep;
+  int retain = 0;
+  long long log_delete_seq;
+
+  if (num_tok != 1)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
+				 num_tok);
+    }
+  else if (parse_int (tokens[0], &retain) != 0 || retain < 0)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad <retain> arg");
+    }
+  log_delete_seq = rep->be_ckpt_seq - retain * SMR_LOG_FILE_DATA_SIZE;
+  if (log_delete_seq < 0)
+    {
+      log_delete_seq = 0LL;
+    }
+  aseq_set (&rep->log_delete_seq, seq_round_down (log_delete_seq));
+  return mgmt_reply_cstring (conn, "+OK %lld",
+			     aseq_get (&rep->log_delete_seq));
+}
+
 static int
 smrversion_request (mgmtConn * conn, char **tokens, int num_tok)
 {
@@ -5828,6 +5856,10 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
   else if (strcasecmp (tokens[0], "slowlog") == 0)
     {
       ret = slowlog_request (conn, tokens + 1, arity - 1);
+    }
+  else if (strcasecmp (tokens[0], "deletelog") == 0)
+    {
+      ret = deletelog_request (conn, tokens + 1, arity - 1);
     }
   else if (strcasecmp (tokens[0], "smrversion") == 0)
     {
@@ -7057,13 +7089,6 @@ main (int argc, char *argv[])
 	case 'x':
 	  log_delete_gap = atoi (optarg);
 	  if (log_delete_gap < 0)
-	    {
-	      goto arg_error;
-	    }
-	  break;
-	case 'k':
-	  slave_idle_to = atoi (optarg);
-	  if (slave_idle_to < 0)
 	    {
 	      goto arg_error;
 	    }

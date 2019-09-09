@@ -410,7 +410,8 @@ smrlog_os_decache (smrLog * handle, long long seq)
 
 int
 smrlog_remove_one (smrLog * handle, long long upper, int gap_in_sec,
-		   int *removed, long long *removed_seq, int *has_more)
+		   long long retain_lb, int *removed, long long *removed_seq,
+		   int *has_more)
 {
   logDev *mem;
   logDev *disk;
@@ -458,8 +459,8 @@ smrlog_remove_one (smrLog * handle, long long upper, int gap_in_sec,
     {
       return 0;
     }
-  return disk->remove_one (disk, upper, gap_in_sec, removed, removed_seq,
-			   has_more);
+  return disk->remove_one (disk, upper, gap_in_sec, retain_lb, removed,
+			   removed_seq, has_more);
 }
 
 int

@@ -421,6 +421,7 @@ struct smrReplicator_
   smrAtomicSeq cron_est_min_seq;	// minimun sequence estimated by server cron (log file boundary)
   smrAtomicSeq mig_seq;		// upto which migration log caught-up
   int log_delete_gap;		// checkpointed log delete gap in seconds from now
+  smrAtomicSeq log_delete_seq;	// checkpointed log delete sequence
   /* general */
   short nid;			// node id of this replicator
   struct timeval stat_time;	// stat report time
