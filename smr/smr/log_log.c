@@ -332,10 +332,17 @@ smrlog_purge_after (smrLog * handle, long long seq)
   if (last_disk_idx >= 0 && (mem != NULL && last_mem_idx < 0))
     {
       smrLogAddr *src_addr = NULL;
+      int src_off;
       smrLogAddr *dest_addr = NULL;
 
       src_addr = disk->get_mmap (disk, dseqs[last_disk_idx], 1, 0);
       if (src_addr == NULL)
+	{
+	  ERRNO_POINT ();
+	  goto error;
+	}
+      src_off = addr_offset (src_addr);
+      if (src_off < 0)
 	{
 	  ERRNO_POINT ();
 	  goto error;
@@ -348,7 +355,7 @@ smrlog_purge_after (smrLog * handle, long long seq)
 	  goto error;
 	}
 
-      ret = smrlog_sync_maps (handle, src_addr, dest_addr);
+      ret = smrlog_sync_maps (handle, src_addr, src_off, dest_addr);
       disk->munmap (disk, src_addr);
       mem->munmap (mem, dest_addr);
       if (ret < 0)
@@ -637,7 +644,15 @@ smrlog_sync_upto (smrLog * handle, long long upto)
 
       if (src != NULL)
 	{
-	  ret = smrlog_sync_maps (handle, src, dest);
+	  int src_off;
+
+	  src_off = addr_offset (src);
+	  if (src_off < 0)
+	    {
+	      ERRNO_POINT ();
+	      goto err_ret;
+	    }
+	  ret = smrlog_sync_maps (handle, src, src_off, dest);
 	  if (ret < 0)
 	    {
 	      ERRNO_POINT ();

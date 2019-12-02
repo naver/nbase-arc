@@ -430,6 +430,8 @@ struct smrReplicator_
   localConn *local_client;	// local client
   /* salve only */
   masterConn *master;		// (slave) master replicator
+  /* client */
+  long long last_timestamp;	// last timestamp that master replicator issues (non decreasing)
   /* master only */
   dlisth clients;		// list haed for clientConn
   volatile int num_slaves;	// number of current slaves
@@ -615,4 +617,20 @@ extern void applog_leave_session (smrReplicator * rep);
 
 extern void log_msg (smrReplicator * rep, int level, char *fmt, ...);
 extern char *get_command_string (char cmd);
+
+
+//borrowed from redis/src/config.h
+#if (__i386 || __amd64 || __powerpc__) && __GNUC__
+#define GNUC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#if (defined(__GLIBC__) && defined(__GLIBC_PREREQ))
+#if (GNUC_VERSION >= 40100 && __GLIBC_PREREQ(2, 6))
+#define HAVE_MEMFENCE
+#endif
+#endif
+#endif
+
+#if !defined(HAVE_MEMFENCE)
+#error "Need glibc and gcc version that supports __sync_synchronize"
+#endif
+
 #endif

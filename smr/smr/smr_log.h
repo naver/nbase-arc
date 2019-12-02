@@ -146,7 +146,7 @@ extern int smrlog_append (smrLog * handle, smrLogAddr * addr, char *buf,
 			  int sz);
 extern int smrlog_sync (smrLog * handle, smrLogAddr * addr);
 extern int smrlog_sync_maps (smrLog * handle, smrLogAddr * src_addr,
-			     smrLogAddr * dest_addr);
+			     int src_off, smrLogAddr * dest_addr);
 extern int smrlog_sync_partial (smrLog * handle, smrLogAddr * addr, int from,
 				int to, int sync);
 extern int smrlog_finalize (smrLog * handle, smrLogAddr * addr);

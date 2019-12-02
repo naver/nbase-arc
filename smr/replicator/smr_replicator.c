@@ -216,7 +216,7 @@ static void free_client_conn (clientConn * cc);
 static void free_client_conn_by_nid (smrReplicator * rep, int nid);
 static int client_prepare_write (clientConn * cc);
 static void client_accept (smrReplicator * rep, aeEventLoop * el, int fd);
-static void timestamp_peek (struct segPeek *sp);
+static void timestamp_peek (smrReplicator * rep, struct segPeek *sp);
 static int client_read (clientConn * cc, aeEventLoop * el, int fd, int force);
 static void client_write (clientConn * cc, aeEventLoop * el, int fd);
 
@@ -452,6 +452,8 @@ init_replicator (smrReplicator * rep, repRole role, smrLog * smrlog,
   rep->local_client = NULL;
   /* salve only */
   rep->master = NULL;
+  /* client */
+  rep->last_timestamp = 0LL;
   /* master only */
   dlisth_init (&rep->clients);
   rep->num_slaves = 0;
@@ -981,6 +983,9 @@ log_write (smrReplicator * rep, char *buf, int sz)
 	}
 
       /* (check proper comment) this part should be after early log making */
+#ifdef HAVE_MEMFENCE
+      __sync_synchronize ();
+#endif
       aseq_add (&rep->log_seq, nw);
     }
 
@@ -2457,7 +2462,7 @@ client_prepare_write (clientConn * cc)
 }
 
 static void
-timestamp_peek (struct segPeek *sp)
+timestamp_peek (smrReplicator * rep, struct segPeek *sp)
 {
   long long ts;
   long long net_ts;
@@ -2483,7 +2488,16 @@ timestamp_peek (struct segPeek *sp)
       return;
     }
 
+  // issue non-decreasing timestamp
   ts = currtime_ms ();
+  if (ts > rep->last_timestamp)
+    {
+      rep->last_timestamp = ts;
+    }
+  else
+    {
+      ts = rep->last_timestamp;
+    }
 
   /* convert to network byte order */
   ts = htonll (ts);
@@ -2572,7 +2586,7 @@ client_read (clientConn * cc, aeEventLoop * el, int fd, int force)
 	  length = ntohl (length);
 	  BSR_READ (rep, cc->ins, NULL, length, NULL);
 	  n_safe = bsr_used;
-	  timestamp_peek (&sp);
+	  timestamp_peek (rep, &sp);
 	  break;
 	default:
 	  LOG (LG_ERROR,
@@ -5735,26 +5749,31 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
   char **tokens = NULL;
   int arity;
   int ret = 0;
-  smrReplicator *rep;
+  smrReplicator *rep = conn->rep;
+  int cmd_idx = 0, subcmd_idx = 1, no_spy = 1;
+  int pre_log_level = rep->log_level;
 
   assert (conn != NULL);
   assert (bp != NULL);
   assert (ep != NULL);
   assert (ep > bp);
 
-  rep = conn->rep;
-
   while (*bp && isspace (*bp))
     {
       bp++;
     }
-  /* handle ping request (to avoid a bunch of logs) */
+  if (*bp == 0)
+    {
+      // nothing todo
+      goto done;
+    }
+
+  // handle ping request (to avoid a bunch of logs)
+  // Needed for old versions before spy extension
   if (strcasecmp (bp, "ping") == 0)
     {
-      int pre_log_level = rep->log_level;
       rep->log_level = LG_WARN;
       ret = mgmt_reply_cstring (conn, "+OK %d %lld", rep->role, rep->role_id);
-      rep->log_level = pre_log_level;
       goto done;
     }
   else if (strcasecmp (bp, "quit") == 0)
@@ -5762,7 +5781,12 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
       ret = -1;
       goto done;
     }
-  LOG (LG_INFO, "%s", bp);
+
+  // 'spy' extension: command line start with 'spy' are not logged
+  if (ep - bp < 3 || !(bp[0] == 's' && bp[1] == 'p' && bp[2] == 'y'))
+    {
+      LOG (LG_INFO, "%s", bp);
+    }
 
   /* smrmp_parse_msg modifies input string (use strtok_r) */
   if (smrmp_parse_msg (bp, ep - bp, &tokens) < 0)
@@ -5775,13 +5799,20 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
     {
       arity++;
     }
+  // check spying and adjust variables
+  if (strcasecmp (tokens[0], "spy") == 0)
+    {
+      cmd_idx = 1;
+      subcmd_idx = 2;
+      no_spy = 0;
+      rep->log_level = LG_WARN;
+    }
 
-  if (arity == 0)
+  if (arity == cmd_idx)
     {
       ret = mgmt_reply_cstring (conn, "-ERR bad request: no token");
     }
-
-  if (strcasecmp (tokens[0], "rckpt") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "rckpt") == 0)
     {
       if (rep->role != LCONN)
 	{
@@ -5789,94 +5820,100 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
 	}
       else
 	{
-	  ret = rckpt_request (conn, tokens + 1, arity - 1);
+	  ret = rckpt_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
 	}
     }
-  else if (strcasecmp (tokens[0], "role") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "role") == 0)
     {
-      ret = role_request (conn, tokens + 1, arity - 1);
+      ret = role_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "migrate") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "migrate") == 0)
     {
-      ret = migrate_request (conn, tokens + 1, arity - 1);
+      ret = migrate_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "getseq") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "getseq") == 0)
     {
-      ret = getseq_request (conn, tokens + 1, arity - 1);
+      ret = getseq_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "setquorum") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "setquorum") == 0)
     {
       if (rep->role == MASTER)
 	{
-	  ret = setquorum_request (conn, tokens + 1, arity - 1);
+	  ret =
+	    setquorum_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
 	}
       else
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
     }
-  else if (strcasecmp (tokens[0], "getquorum") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "getquorum") == 0)
     {
       if (rep->role == MASTER)
 	{
-	  ret = getquorum_request (conn, tokens + 1, arity - 1);
+	  ret =
+	    getquorum_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
 	}
       else
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
     }
-  else if (strcasecmp (tokens[0], "getquorumv") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "getquorumv") == 0)
     {
       if (rep->role == MASTER)
 	{
-	  ret = getquorumv_request (conn, tokens + 1, arity - 1);
+	  ret =
+	    getquorumv_request (conn, tokens + subcmd_idx,
+				arity - subcmd_idx);
 	}
       else
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
     }
-  else if (strcasecmp (tokens[0], "singleton") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "singleton") == 0)
     {
-      ret = singleton_request (conn, tokens + 1, arity - 1);
+      ret = singleton_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "confget") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "confget") == 0)
     {
-      ret = confget_request (conn, tokens + 1, arity - 1);
+      ret = confget_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "confset") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "confset") == 0)
     {
-      ret = confset_request (conn, tokens + 1, arity - 1);
+      ret = confset_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "info") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "info") == 0)
     {
-      ret = info_request (conn, tokens + 1, arity - 1);
+      ret = info_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "slowlog") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "slowlog") == 0)
     {
-      ret = slowlog_request (conn, tokens + 1, arity - 1);
+      ret = slowlog_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "deletelog") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "deletelog") == 0)
     {
-      ret = deletelog_request (conn, tokens + 1, arity - 1);
+      ret = deletelog_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "smrversion") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "smrversion") == 0)
     {
-      ret = smrversion_request (conn, tokens + 1, arity - 1);
+      ret =
+	smrversion_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "fi") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "fi") == 0)
     {
-      ret = fi_request (conn, tokens + 1, arity - 1);
+      ret = fi_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
   else
     {
       ret =
-	mgmt_reply_cstring (conn, "-ERR bad request: unsupported cmd %s",
-			    tokens[0]);
+	mgmt_reply_cstring (conn, "-ERR bad request: unsupported %s cmd %s",
+			    no_spy ? "" : "spy", tokens[cmd_idx]);
     }
 
 done:
+  rep->log_level = pre_log_level;
   smrmp_free_msg (tokens);
   return ret;
 }
