@@ -216,7 +216,9 @@ sync_proc (bioState * bs)
 
   while (log_base_seq > sync_base_seq)
     {
-      ret = smrlog_sync_maps (rep->smrlog, bs->src->addr, bs->sync->addr);
+      ret =
+	smrlog_sync_maps (rep->smrlog, bs->src->addr, SMR_LOG_FILE_DATA_SIZE,
+			  bs->sync->addr);
       if (ret < 0)
 	{
 	  return ERR_LINE;
@@ -258,11 +260,14 @@ sync_proc (bioState * bs)
 	}
     }
 
-  ret = smrlog_sync_maps (rep->smrlog, bs->src->addr, bs->sync->addr);
+  ret =
+    smrlog_sync_maps (rep->smrlog, bs->src->addr,
+		      (int) (log_seq - log_base_seq), bs->sync->addr);
   if (ret < 0)
     {
       return ERR_LINE;
     }
+
   from = (int) (bs->sync_seq - log_base_seq);
   to = (int) (log_seq - log_base_seq);
   assert (from <= to);
@@ -345,6 +350,7 @@ del_proc (bioState * bs)
 {
   smrReplicator *rep = bs->rep;
   long long target_seq;
+  long long retain_lb;
   int removed = 0;
   int has_more = 0;
   long long removed_seq = 0LL;
@@ -356,7 +362,9 @@ del_proc (bioState * bs)
    * - target_seq < rep->be_ckpt_seq
    * - target_seq < decache base seq (fadvised)
    * - log file is older than rep->log_delete_gap (1 day by default)
+   *   or (inclusive) file seqence is less than rep->log_delete_seq
    */
+  retain_lb = aseq_get (&rep->log_delete_seq);
   bs->del_ms = bs->curr_ms;
   target_seq = seq_round_down (rep->be_ckpt_seq) - SMR_LOG_FILE_DATA_SIZE;
 
@@ -377,7 +385,7 @@ del_proc (bioState * bs)
     }
 
   if (smrlog_remove_one
-      (rep->smrlog, target_seq, rep->log_delete_gap,
+      (rep->smrlog, target_seq, rep->log_delete_gap, retain_lb,
        &removed, &removed_seq, &has_more) == -1)
     {
       LOG (LG_ERROR,

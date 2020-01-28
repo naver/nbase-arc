@@ -128,8 +128,9 @@ extern int smrlog_info_master (char *basedir, char **buf);
 extern smrLog *smrlog_init (char *basedir);
 extern void smrlog_destroy (smrLog * handle);
 extern int smrlog_remove_one (smrLog * handle, long long upper,
-			      int gap_in_sec, int *removed,
-			      long long *removed_seq, int *has_more);
+			      int gap_in_sec, long long retain_lb,
+			      int *removed, long long *removed_seq,
+			      int *has_more);
 extern int smrlog_purge_all (smrLog * handle);
 extern int smrlog_purge_after (smrLog * handle, long long seq_inclusive);
 extern int smrlog_os_decache (smrLog * handle, long long seq);
@@ -145,7 +146,7 @@ extern int smrlog_append (smrLog * handle, smrLogAddr * addr, char *buf,
 			  int sz);
 extern int smrlog_sync (smrLog * handle, smrLogAddr * addr);
 extern int smrlog_sync_maps (smrLog * handle, smrLogAddr * src_addr,
-			     smrLogAddr * dest_addr);
+			     int src_off, smrLogAddr * dest_addr);
 extern int smrlog_sync_partial (smrLog * handle, smrLogAddr * addr, int from,
 				int to, int sync);
 extern int smrlog_finalize (smrLog * handle, smrLogAddr * addr);

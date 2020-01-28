@@ -633,7 +633,7 @@ struct sharedObjectsStruct {
     *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *rpop, *lpop,
     *lpush, *emptyscan, *minstring, *maxstring,
 #ifdef NBASE_ARC
-    *db_version, *db_smr_mstime, *db_migrate_slot, *db_migclear_slot, *addreply_through_smr,
+    *db_version, *db_smr_mstime, *db_migrate_slot, *db_migclear_slot, *addreply_through_smr, *pg_deny_oom,
 #endif
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],

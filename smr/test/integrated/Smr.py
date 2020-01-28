@@ -142,6 +142,14 @@ class SMR (Proc.Proc):
             raise Exception(resp[0])
         return seg[1:]
 
+    def deletelog(self, retain):
+        resp = self._conn.do_request('deletelog %d' % retain)
+        seg = resp[0].split()
+        if seg[0] != '+OK':
+            raise Exception(resp[0])
+        # returns log_delete_seq set
+        return int(seg[1])
+
     def info(self, section='all'):
         ''' returns map(section --> map(key->value))'''
         resp = self._conn.do_request('info %s' % str(section))

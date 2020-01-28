@@ -396,7 +396,9 @@ process_command (client * c)
    *
    * we can use mstime of local machine for checking oom, 
    * because message is not inserted to smr log, yet. */
-  if (mstime () < arc.smr_oom_until && (cmdflags & CMD_DENYOOM))
+  if ((cmdflags & CMD_DENYOOM) &&
+      (arc.pg_deny_oom
+       || (arc.smr_oom_until > 0 && mstime () < arc.smr_oom_until)))
     {
       incrRefCount (shared.oomerr);
       replace_parsed_args (c, shared.oomerr);

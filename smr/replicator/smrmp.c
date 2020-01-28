@@ -60,7 +60,7 @@ smrmp_parse_msg (char *buf, int buf_sz, char ***rtok)
 
   while ((token = strtok_r (NULL, DELIM, &save_ptr)) != NULL)
     {
-      if (idx > tsz)
+      if (idx >= tsz)
 	{
 	  char **new_tokens;
 

@@ -49,11 +49,13 @@ class RedisClient:
         elif prefix == "-": # error
             return False, data
         elif prefix == ":": # integer reply
-            len = int(data)
-            return True, len
+            length = int(data)
+            return True, length
         elif prefix == "$": # bulk reply
-            len = int(data)
-            nextchunk = self.io_read(len+2)
+            length = int(data)
+            if length == -1:
+                return True, None
+            nextchunk = self.io_read(length+2)
 	    return True, nextchunk[:-2]
         elif prefix == "*": # multibulk reply
             count = int(data)
