@@ -2,15 +2,13 @@
 GIT_REFRESH:=$(shell git update-index --refresh)
 # Note --match value is glob(7) pattern
 VERSION:=$(shell git describe --tags --dirty --always --match=v[0-9]*\.[0-9]*\.[0-9]*)
-#REDIS_VERSION=2.8.8
-REDIS_VERSION=3.2.9
 RELEASE_DIR=release/nbase-arc
 
 default: all
 
 .DEFAULT:
 	cd smr && $(MAKE) $@
-	cd redis-$(REDIS_VERSION) && $(MAKE) $@
+	cd redis && $(MAKE) $@
 	cd gateway && $(MAKE) $@
 	cd api && $(MAKE) $@
 	cd confmaster && $(MAKE) $@
@@ -24,8 +22,8 @@ release: all
 	mkdir -p $(RELEASE_DIR)/api/c
 	mkdir -p $(RELEASE_DIR)/api/java
 	# Redis
-	cp -rf redis-$(REDIS_VERSION)/src/redis-arc $(RELEASE_DIR)/bin/redis-arc-$(VERSION)
-	cp -rf redis-$(REDIS_VERSION)/src/cluster-util $(RELEASE_DIR)/bin/cluster-util-$(VERSION)
+	cp -rf redis/src/redis-arc $(RELEASE_DIR)/bin/redis-arc-$(VERSION)
+	cp -rf redis/src/cluster-util $(RELEASE_DIR)/bin/cluster-util-$(VERSION)
 	# Confmaster
 	cp -rf confmaster/target/confmaster-1.0.0-SNAPSHOT-jar-with-dependencies.jar $(RELEASE_DIR)/confmaster/confmaster-$(VERSION).jar
 	cp -rf confmaster/target/cc.properties $(RELEASE_DIR)/confmaster
@@ -64,6 +62,6 @@ release32:
 	cp -rf tools/local_proxy/release32/local_proxy $(RELEASE_DIR)/bin/local_proxy32-$(VERSION)
 
 distclean: clean
-	cd redis-$(REDIS_VERSION) && $(MAKE) $@
+	cd redis && $(MAKE) $@
 	rm -rf $(RELEASE_DIR)
 	rm -rf release

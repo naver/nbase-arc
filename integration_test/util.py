@@ -2274,21 +2274,21 @@ def copy_redis_server( id ):
     if not os.path.exists( redis_dir( id ) ):
         os.mkdir( redis_dir( id ) )
 
-    src = '../redis-%s/src/%s' % (c.REDISVER, c.REDIS)
+    src = '../redis/src/%s' % (c.REDIS)
     shutil.copy(src, redis_dir( id ))
 
 def copy_cluster_util( id ):
     if not os.path.exists( cluster_util_dir( id ) ):
         os.mkdir( cluster_util_dir( id ) )
 
-    src = '../redis-%s/src/%s' % (c.REDISVER, c.CLUSTER_UTIL)
+    src = '../redis/src/%s' % (c.CLUSTER_UTIL)
     shutil.copy(src, cluster_util_dir( id ))
 
 def copy_dump_util( id ):
     if not os.path.exists( dump_util_dir( id ) ):
         os.mkdir( dump_util_dir( id ) )
 
-    src = '../redis-%s/src/%s' % (c.REDISVER, c.DUMP_UTIL)
+    src = '../redis/src/%s' % (c.DUMP_UTIL)
     shutil.copy(src, dump_util_dir( id ))
 
 def copy_log_util( id ):
@@ -2302,7 +2302,7 @@ def copy_dump_util_plugin( id ):
     if not os.path.exists( dump_util_dir( id ) ):
         os.mkdir( dump_util_dir( id ) )
 
-    src = '../redis-%s/src/%s' % (c.REDISVER, c.DUMP_UTIL_PLUGIN)
+    src = '../redis/src/%s' % (c.DUMP_UTIL_PLUGIN)
     shutil.copy(src, dump_util_dir( id ))
 
 def copy_capi_so_file( id ):

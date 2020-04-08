@@ -3,7 +3,7 @@ CC=gcc
 
 # DEPENDENCIES
 DEPS=deps
-JEMALLOC=../redis-3.2.9/deps/jemalloc
+JEMALLOC=../redis/deps/jemalloc
 
 # SETTINGS
 CFLAGS=-std=c99

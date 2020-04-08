@@ -63,5 +63,40 @@ class TestBeRetry (unittest.TestCase):
             if cm is not None:
                 cm.remove_workspace()
 
+    def test_split_connection(self):
+        cm = None
+        M = None
+        S = None
+        try:
+            cm = Cm.CM("test_split_connection")
+            cm.create_workspace()
+
+            # M (master) S(slave)
+            M = _init_pgs(0, 'localhost', 1900, cm.dir)
+            M.smr.role_master(M.id, 1, 0)
+            S = _init_pgs(1, 'localhost', 1910, cm.dir)
+            S.smr.role_slave(S.id, 'localhost', M.base_port, 0)
+            # M: confset "slave_idle_timeout_msec" to 100
+            M.smr.fi_once('__no_free_client_conn')
+            M.smr.confset('slave_idle_timeout_msec', 100)
+            S.smr.wait_role(Smr.SMR.LCONN)
+            M.smr.confset('slave_idle_timeout_msec', 18000)
+            # S: role slave again
+            ps = S.smr.getseq_log()
+            S.smr.role_slave(S.id, 'localhost', M.base_port, ps['max'])
+            S.smr.wait_role(Smr.SMR.SLAVE)
+            S.be.init_conn()
+            # check be at S works
+            # Util.tstop('before check it!')
+            r = S.be.set(0, '100')
+            assert r >= 0
+        finally:
+            if M is not None:
+                M.kill()
+            if S is not None:
+                S.kill()
+            if cm is not None:
+                cm.remove_workspace()
+
 if __name__ == '__main__':
     unittest.main()

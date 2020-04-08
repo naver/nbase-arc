@@ -47,7 +47,6 @@ static const char *_usage =
   "    -d <smr log file directory path>                                            \n"
   "    -b <base listen port> (default: 1900)                                       \n"
   "    -x <checkpointed log delete delay in seconds> (default: 86400)              \n"
-  "    -k slave connection idle timeout in msec. (0: no timeout) (default0)        \n"
   "    -v <verbose level> (0: error, 1: warn, 2: info, 3:debug)  (default 2)       \n";
 
 static const char *_logo =
@@ -148,7 +147,7 @@ static void term_replicator (smrReplicator * rep);
 /* basic event handling */
 /* -------------------- */
 /* master role */
-static int check_client_nid (smrReplicator * rep, short nid);
+static int check_client_nid (smrReplicator * rep, short nid, int *duplicated);
 static int check_slave_nid (smrReplicator * rep, short nid, int *duplicated);
 static int prepare_slaves_for_write (smrReplicator * rep);
 static int seq_compar (const void *v1, const void *v2);
@@ -217,7 +216,7 @@ static void free_client_conn (clientConn * cc);
 static void free_client_conn_by_nid (smrReplicator * rep, int nid);
 static int client_prepare_write (clientConn * cc);
 static void client_accept (smrReplicator * rep, aeEventLoop * el, int fd);
-static void timestamp_peek (struct segPeek *sp);
+static void timestamp_peek (smrReplicator * rep, struct segPeek *sp);
 static int client_read (clientConn * cc, aeEventLoop * el, int fd, int force);
 static void client_write (clientConn * cc, aeEventLoop * el, int fd);
 
@@ -308,9 +307,15 @@ static SFI_CB_RET fi_rw_delay_callback (const char *name,
 					sfi_probe_arg * pargs, void *arg);
 static SFI_CB_RET fi_rw_return_callback (const char *name,
 					 sfi_probe_arg * pargs, void *arg);
+static int fi_once (const char *name);
+static SFI_CB_RET fi_once_callback (const char *name, sfi_probe_arg * pargs,
+				    void *arg);
+#else
+#define fi_once(n) 0
 #endif
 
 static int fi_delay_request (mgmtConn * conn, char **tokens, int num_tok);
+static int fi_once_request (mgmtConn * conn, char **tokens, int num_tok);
 static int fi_rw_request (char *rw, mgmtConn * conn, char **tokens,
 			  int num_tok);
 
@@ -331,6 +336,7 @@ static int info_slowlog (smrReplicator * rep, gpbuf_t * gp);
 static int info_request (mgmtConn * conn, char **tokens, int num_tok);
 static int slowlog_mapf (slowLogEntry * e, void *arg);
 static int slowlog_request (mgmtConn * conn, char **tokens, int num_tok);
+static int deletelog_request (mgmtConn * conn, char **tokens, int num_tok);
 static int smrversion_request (mgmtConn * conn, char **tokens, int num_tok);
 /* top handler */
 static int mgmt_request (mgmtConn * conn, char *bp, char *ep);
@@ -437,6 +443,7 @@ init_replicator (smrReplicator * rep, repRole role, smrLog * smrlog,
   aseq_init (&rep->cron_est_min_seq);
   aseq_init (&rep->mig_seq);
   rep->log_delete_gap = 86400;
+  aseq_init (&rep->log_delete_seq);
   /* general */
   rep->nid = -1;
   rep->stat_time = tv;
@@ -445,6 +452,8 @@ init_replicator (smrReplicator * rep, repRole role, smrLog * smrlog,
   rep->local_client = NULL;
   /* salve only */
   rep->master = NULL;
+  /* client */
+  rep->last_timestamp = 0LL;
   /* master only */
   dlisth_init (&rep->clients);
   rep->num_slaves = 0;
@@ -601,7 +610,7 @@ term_replicator (smrReplicator * rep)
 }
 
 static int
-check_client_nid (smrReplicator * rep, short nid)
+check_client_nid (smrReplicator * rep, short nid, int *duplicated)
 {
   dlisth *h;
 
@@ -617,6 +626,7 @@ check_client_nid (smrReplicator * rep, short nid)
       clientConn *cc = (clientConn *) h;
       if (cc->nid == nid)
 	{
+	  *duplicated = 1;
 	  return -1;
 	}
     }
@@ -973,6 +983,9 @@ log_write (smrReplicator * rep, char *buf, int sz)
 	}
 
       /* (check proper comment) this part should be after early log making */
+#ifdef HAVE_MEMFENCE
+      __sync_synchronize ();
+#endif
       aseq_add (&rep->log_seq, nw);
     }
 
@@ -2250,6 +2263,7 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   long long net_seq;
   int ret;
   long long deadline;
+  int duplicated = 0;
 
   assert (fd == rep->client_lfd);
 
@@ -2311,10 +2325,19 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   cc->nid = ntohs (net_nid);
-  if (check_client_nid (rep, cc->nid) < 0)
+  if (check_client_nid (rep, cc->nid, &duplicated) < 0)
     {
-      LOG (LG_ERROR, "bad nid from new client:%d", cc->nid);
-      goto error;
+      if (duplicated)
+	{
+	  LOG (LG_WARN, "duplicated client nid. close current client: %d",
+	       cc->nid);
+	  free_client_conn_by_nid (rep, cc->nid);
+	}
+      else
+	{
+	  LOG (LG_ERROR, "bad nid from new client:%d", cc->nid);
+	  goto error;
+	}
     }
 
   net_seq = htonll (rep->commit_seq);
@@ -2359,7 +2382,12 @@ free_client_conn (clientConn * cc)
 
   assert (cc != NULL);
   rep = cc->rep;
-
+  if (fi_once ("__no_free_client_conn"))
+    {
+      aeDeleteFileEvent (rep->el, cc->fd, AE_READABLE);
+      aeDeleteFileEvent (rep->el, cc->fd, AE_WRITABLE);
+      return;
+    }
   LOG (LG_WARN, "close client connection");
   dlisth_delete (&cc->head);
 
@@ -2434,7 +2462,7 @@ client_prepare_write (clientConn * cc)
 }
 
 static void
-timestamp_peek (struct segPeek *sp)
+timestamp_peek (smrReplicator * rep, struct segPeek *sp)
 {
   long long ts;
   long long net_ts;
@@ -2460,7 +2488,16 @@ timestamp_peek (struct segPeek *sp)
       return;
     }
 
+  // issue non-decreasing timestamp
   ts = currtime_ms ();
+  if (ts > rep->last_timestamp)
+    {
+      rep->last_timestamp = ts;
+    }
+  else
+    {
+      ts = rep->last_timestamp;
+    }
 
   /* convert to network byte order */
   ts = htonll (ts);
@@ -2549,7 +2586,7 @@ client_read (clientConn * cc, aeEventLoop * el, int fd, int force)
 	  length = ntohl (length);
 	  BSR_READ (rep, cc->ins, NULL, length, NULL);
 	  n_safe = bsr_used;
-	  timestamp_peek (&sp);
+	  timestamp_peek (rep, &sp);
 	  break;
 	default:
 	  LOG (LG_ERROR,
@@ -4569,6 +4606,22 @@ fi_rw_return_callback (const char *name, sfi_probe_arg * pargs, void *arg)
   errno = s->erno;
   return CB_OK_DONE;
 }
+
+static int
+fi_once (const char *name)
+{
+  int called = 0;
+  SFI_PROBE1 (name, (long) &called);
+  return called;
+}
+
+static SFI_CB_RET
+fi_once_callback (const char *name, sfi_probe_arg * pargs, void *arg)
+{
+  int *called = (int *) pargs->arg1;
+  *called = 1;
+  return CB_OK_DONE;
+}
 #endif
 
 /*
@@ -4610,6 +4663,29 @@ fi_delay_request (mgmtConn * conn, char **tokens, int num_tok)
   s->per_sleep_msec = per_sleep_msec;
 
   sfi_enable (probe, fi_delay_callback, free, s);
+  return mgmt_reply_cstring (conn, "+OK");
+#else
+  return mgmt_reply_cstring (conn, "-ERR not supported");
+#endif
+}
+
+static int
+fi_once_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+#ifdef SFI_ENABLED
+  char *flag;
+
+  if (num_tok != 1)
+    {
+      return mgmt_reply_cstring (conn, "-ERR <flag>");
+    }
+  flag = tokens[0];
+  // all flags must start with underscore char
+  if (strlen (flag) == 0 || flag[0] != '_')
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad flag");
+    }
+  sfi_enable (flag, fi_once_callback, NULL, NULL);
   return mgmt_reply_cstring (conn, "+OK");
 #else
   return mgmt_reply_cstring (conn, "-ERR not supported");
@@ -4720,6 +4796,10 @@ fi_request (mgmtConn * conn, char **tokens, int num_tok)
 	   || strcasecmp (tokens[0], "accept") == 0)
     {
       return fi_rw_request (tokens[0], conn, tokens + 1, num_tok - 1);
+    }
+  else if (strcasecmp (tokens[0], "once") == 0)
+    {
+      return fi_once_request (conn, tokens + 1, num_tok - 1);
     }
   else if (strcasecmp (tokens[0], "clear") == 0)
     {
@@ -5624,6 +5704,33 @@ error:
   return ret;
 }
 
+// deletelog <retain>
+static int
+deletelog_request (mgmtConn * conn, char **tokens, int num_tok)
+{
+  smrReplicator *rep = conn->rep;
+  int retain = 0;
+  long long log_delete_seq;
+
+  if (num_tok != 1)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad number of token:%d",
+				 num_tok);
+    }
+  else if (parse_int (tokens[0], &retain) != 0 || retain < 0)
+    {
+      return mgmt_reply_cstring (conn, "-ERR bad <retain> arg");
+    }
+  log_delete_seq = rep->be_ckpt_seq - retain * SMR_LOG_FILE_DATA_SIZE;
+  if (log_delete_seq < 0)
+    {
+      log_delete_seq = 0LL;
+    }
+  aseq_set (&rep->log_delete_seq, seq_round_down (log_delete_seq));
+  return mgmt_reply_cstring (conn, "+OK %lld",
+			     aseq_get (&rep->log_delete_seq));
+}
+
 static int
 smrversion_request (mgmtConn * conn, char **tokens, int num_tok)
 {
@@ -5642,26 +5749,31 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
   char **tokens = NULL;
   int arity;
   int ret = 0;
-  smrReplicator *rep;
+  smrReplicator *rep = conn->rep;
+  int cmd_idx = 0, subcmd_idx = 1, no_spy = 1;
+  int pre_log_level = rep->log_level;
 
   assert (conn != NULL);
   assert (bp != NULL);
   assert (ep != NULL);
   assert (ep > bp);
 
-  rep = conn->rep;
-
   while (*bp && isspace (*bp))
     {
       bp++;
     }
-  /* handle ping request (to avoid a bunch of logs) */
+  if (*bp == 0)
+    {
+      // nothing todo
+      goto done;
+    }
+
+  // handle ping request (to avoid a bunch of logs)
+  // Needed for old versions before spy extension
   if (strcasecmp (bp, "ping") == 0)
     {
-      int pre_log_level = rep->log_level;
       rep->log_level = LG_WARN;
       ret = mgmt_reply_cstring (conn, "+OK %d %lld", rep->role, rep->role_id);
-      rep->log_level = pre_log_level;
       goto done;
     }
   else if (strcasecmp (bp, "quit") == 0)
@@ -5669,7 +5781,12 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
       ret = -1;
       goto done;
     }
-  LOG (LG_INFO, "%s", bp);
+
+  // 'spy' extension: command line start with 'spy' are not logged
+  if (ep - bp < 3 || !(bp[0] == 's' && bp[1] == 'p' && bp[2] == 'y'))
+    {
+      LOG (LG_INFO, "%s", bp);
+    }
 
   /* smrmp_parse_msg modifies input string (use strtok_r) */
   if (smrmp_parse_msg (bp, ep - bp, &tokens) < 0)
@@ -5682,13 +5799,20 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
     {
       arity++;
     }
+  // check spying and adjust variables
+  if (strcasecmp (tokens[0], "spy") == 0)
+    {
+      cmd_idx = 1;
+      subcmd_idx = 2;
+      no_spy = 0;
+      rep->log_level = LG_WARN;
+    }
 
-  if (arity == 0)
+  if (arity == cmd_idx)
     {
       ret = mgmt_reply_cstring (conn, "-ERR bad request: no token");
     }
-
-  if (strcasecmp (tokens[0], "rckpt") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "rckpt") == 0)
     {
       if (rep->role != LCONN)
 	{
@@ -5696,90 +5820,100 @@ mgmt_request (mgmtConn * conn, char *bp, char *ep)
 	}
       else
 	{
-	  ret = rckpt_request (conn, tokens + 1, arity - 1);
+	  ret = rckpt_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
 	}
     }
-  else if (strcasecmp (tokens[0], "role") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "role") == 0)
     {
-      ret = role_request (conn, tokens + 1, arity - 1);
+      ret = role_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "migrate") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "migrate") == 0)
     {
-      ret = migrate_request (conn, tokens + 1, arity - 1);
+      ret = migrate_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "getseq") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "getseq") == 0)
     {
-      ret = getseq_request (conn, tokens + 1, arity - 1);
+      ret = getseq_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "setquorum") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "setquorum") == 0)
     {
       if (rep->role == MASTER)
 	{
-	  ret = setquorum_request (conn, tokens + 1, arity - 1);
+	  ret =
+	    setquorum_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
 	}
       else
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
     }
-  else if (strcasecmp (tokens[0], "getquorum") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "getquorum") == 0)
     {
       if (rep->role == MASTER)
 	{
-	  ret = getquorum_request (conn, tokens + 1, arity - 1);
+	  ret =
+	    getquorum_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
 	}
       else
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
     }
-  else if (strcasecmp (tokens[0], "getquorumv") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "getquorumv") == 0)
     {
       if (rep->role == MASTER)
 	{
-	  ret = getquorumv_request (conn, tokens + 1, arity - 1);
+	  ret =
+	    getquorumv_request (conn, tokens + subcmd_idx,
+				arity - subcmd_idx);
 	}
       else
 	{
 	  ret = mgmt_reply_cstring (conn, "-ERR bad state:%d", rep->role);
 	}
     }
-  else if (strcasecmp (tokens[0], "singleton") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "singleton") == 0)
     {
-      ret = singleton_request (conn, tokens + 1, arity - 1);
+      ret = singleton_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "confget") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "confget") == 0)
     {
-      ret = confget_request (conn, tokens + 1, arity - 1);
+      ret = confget_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "confset") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "confset") == 0)
     {
-      ret = confset_request (conn, tokens + 1, arity - 1);
+      ret = confset_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "info") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "info") == 0)
     {
-      ret = info_request (conn, tokens + 1, arity - 1);
+      ret = info_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "slowlog") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "slowlog") == 0)
     {
-      ret = slowlog_request (conn, tokens + 1, arity - 1);
+      ret = slowlog_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "smrversion") == 0)
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "deletelog") == 0)
     {
-      ret = smrversion_request (conn, tokens + 1, arity - 1);
+      ret = deletelog_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
-  else if (strcasecmp (tokens[0], "fi") == 0)
+  else if (strcasecmp (tokens[cmd_idx], "smrversion") == 0)
     {
-      ret = fi_request (conn, tokens + 1, arity - 1);
+      ret =
+	smrversion_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
+    }
+  else if (no_spy && strcasecmp (tokens[cmd_idx], "fi") == 0)
+    {
+      ret = fi_request (conn, tokens + subcmd_idx, arity - subcmd_idx);
     }
   else
     {
       ret =
-	mgmt_reply_cstring (conn, "-ERR bad request: unsupported cmd %s",
-			    tokens[0]);
+	mgmt_reply_cstring (conn, "-ERR bad request: unsupported %s cmd %s",
+			    no_spy ? "" : "spy", tokens[cmd_idx]);
     }
 
 done:
+  rep->log_level = pre_log_level;
   smrmp_free_msg (tokens);
   return ret;
 }
@@ -6992,13 +7126,6 @@ main (int argc, char *argv[])
 	case 'x':
 	  log_delete_gap = atoi (optarg);
 	  if (log_delete_gap < 0)
-	    {
-	      goto arg_error;
-	    }
-	  break;
-	case 'k':
-	  slave_idle_to = atoi (optarg);
-	  if (slave_idle_to < 0)
 	    {
 	      goto arg_error;
 	    }

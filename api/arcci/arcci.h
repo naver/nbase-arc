@@ -248,7 +248,7 @@ extern "C"
  * \param rqst Pointer to arc_request_t.
  * \param timeout_millis Timeout specified in milliseconds.
  * \param be_errno Placeholder of the back-end error code.
- * \returns 0 if successfu1. 
+ * \returns 0 if successful.
  *   If error occurred, -1 returned and proper error code is set to errno.
  *   When error code is ARC_ERR_BACKEND or ARC_ERR_PARTIAL, be_errno is set to
  *   back-end errno.
@@ -263,7 +263,7 @@ extern "C"
  * \param rqst Pointer to arc_request_t
  * \param reply Placeholder for the reply 
  * \param be_errno Placeholder of the back-end error code.
- * \returns 0 if successfu1. 
+ * \returns 0 if successful.
  *   If error occurred, -1 returned and proper error code is set to errno.
  *   When error code is ARC_ERR_BACKEND or ARC_ERR_PARTIAL, be_errno is set to
  *   back-end errno.

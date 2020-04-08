@@ -77,7 +77,8 @@ static smrLogAddr *disk_get_mmap (logDev * dev, long long seq, int for_read,
 				  int create);
 static int disk_munmap (logDev * dev, smrLogAddr * addr);
 int disk_remove_one (logDev * dev, long long upper, int gap_in_sec,
-		     int *removed, long long *removed_seq, int *has_more);
+		     long long retain_lb, int *removed,
+		     long long *removed_seq, int *has_more);
 static void disk_close (logDev * dev);
 
 /* --------------- */
@@ -526,8 +527,9 @@ disk_munmap (logDev * dev, smrLogAddr * addr)
 }
 
 int
-disk_remove_one (logDev * dev, long long upper, int gap_in_sec, int *removed,
-		 long long *removed_seq, int *has_more)
+disk_remove_one (logDev * dev, long long upper, int gap_in_sec,
+		 long long retain_lb, int *removed, long long *removed_seq,
+		 int *has_more)
 {
   diskLogDev *disk = (diskLogDev *) dev;
   int ret;
@@ -578,7 +580,7 @@ disk_remove_one (logDev * dev, long long upper, int gap_in_sec, int *removed,
 	  ret = stat (path, &st);
 	  if (ret == 0)
 	    {
-	      if (st.st_mtime < upper_time)
+	      if (seqs[i] < retain_lb || st.st_mtime < upper_time)
 		{
 		  (void) unlink (path);
 		  *removed = 1;
@@ -611,7 +613,7 @@ disk_remove_one (logDev * dev, long long upper, int gap_in_sec, int *removed,
       ret = stat (path, &st);
       if (ret == 0)
 	{
-	  if (st.st_mtime < upper_time)
+	  if (seqs[i + 1] < retain_lb || st.st_mtime < upper_time)
 	    {
 	      *has_more = 1;
 	    }

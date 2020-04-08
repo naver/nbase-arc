@@ -89,6 +89,7 @@ static const char *_usage =
   "  -o <data output format specifier string> (default: Tshld)                \n"
   "    - t(timestamp) T(human timestamp) s(sequence number) h(hash)           \n"
   "      l(data length) d[<len>] (data [at most len])                         \n"
+  "      r(<length>\\n<raw data. no escape>)                                  \n"
   "    - no duplicated format specifier is allowed                            \n"
   "                                                                           \n"
   "Available subcommands:                                                     \n"
@@ -120,10 +121,12 @@ static const char *_usage =
 
 
 // -o option
-#define MAX_FIELDS 5
-static char opt_o_format[MAX_FIELDS + 1] = { 'T', 's', 'h', 'l', 'd', '\0' };
+#define MAX_FIELDS 6
+static char opt_o_format[MAX_FIELDS + 1] =
+  { 'T', 's', 'h', 'l', 'd', '\0', '\0' };
 
-static int opt_o_len = -1;
+static int opt_d_len = -1;
+static int has_r_opt = 0;
 
 /* ----------------------------- */
 /* LOCAL FUNCTION IMPLEMENTATION */
@@ -131,7 +134,7 @@ static int opt_o_len = -1;
 static void
 print_usage (void)
 {
-  printf ("%s", _usage);
+  fprintf (stderr, "%s", _usage);
 }
 
 static int
@@ -151,8 +154,8 @@ parse_ll (char *tok, long long *seq)
 static int
 parse_opt_o (char *opt)
 {
-  int i;
-  int idx = 0, len = -1;
+  int i, n_opt = 0;
+  int idx = 0, d_len = -1;
   char c, *p = opt;
 
   for (i = 0; i < MAX_FIELDS; i++)
@@ -165,7 +168,7 @@ parse_opt_o (char *opt)
       // check duplicated format specifier
       if (strchr (opt_o_format, c) != NULL)
 	{
-	  printf ("Duplicated format specifier:%c\n", c);
+	  fprintf (stderr, "-ERR Duplicated format specifier:%c\n", c);
 	  return -1;
 	}
 
@@ -177,35 +180,50 @@ parse_opt_o (char *opt)
 	case 'h':
 	case 'l':
 	case 'd':
+	case 'r':
 	  opt_o_format[idx++] = c;
 	  if (c == 'd' && isdigit (*p) && *p != '0')
 	    {
-	      len = 0;
+	      d_len = 0;
 	      while (isdigit (*p))
 		{
-		  len = len * 10 + (*p - '0');
+		  d_len = d_len * 10 + (*p - '0');
 		  p++;
 		}
 	    }
+	  if (c == 'r')
+	    {
+	      has_r_opt = 1;
+	    }
+	  n_opt++;
 	  break;
 	default:
-	  printf ("Invalid format specifier:%c\n", c);
+	  fprintf (stderr, "-ERR Invalid format specifier:%c\n", c);
 	  return -1;
 	}
     }
 
-  if (idx < 1 || idx > MAX_FIELDS)
+  if (has_r_opt && n_opt > 1)
     {
-      printf ("Too many format specifier\n");
+      fprintf
+	(stderr,
+	 "-ERR Can not specify other option when 'r' format option is used\n");
       return -1;
     }
 
-  if (len != -1 && len < 0)
+  if (idx < 1 || idx > MAX_FIELDS)
     {
-      printf ("Invalid data length:%d\n", len);
+      fprintf (stderr, "-ERR Too many format specifier\n");
       return -1;
     }
-  opt_o_len = len;
+
+  if (d_len != -1 && d_len < 0)
+    {
+      fprintf (stderr, "-ERR Invalid data length:%d\n", d_len);
+      return -1;
+    }
+  opt_d_len = d_len;
+
   return 0;
 }
 
@@ -881,6 +899,7 @@ print_logdata (long long seq, long long timestamp,
 	       int hash, unsigned char *buf, int size)
 {
   char *fmt = &opt_o_format[0];
+  char lenbuf[32];
 
   while (*fmt)
     {
@@ -905,9 +924,9 @@ print_logdata (long long seq, long long timestamp,
 	  fprintf (stdout, "%d%s", size, sep);
 	  break;
 	case 'd':
-	  if (opt_o_len != -1 && opt_o_len < size)
+	  if (opt_d_len != -1 && opt_d_len < size)
 	    {
-	      len = opt_o_len;
+	      len = opt_d_len;
 	    }
 	  else
 	    {
@@ -915,13 +934,21 @@ print_logdata (long long seq, long long timestamp,
 	    }
 	  print_raw (buf, len);
 	  break;
+	case 'r':
+	  sprintf (lenbuf, "%d\n", size);
+	  fwrite (lenbuf, 1, strlen (lenbuf), stdout);
+	  fwrite (buf, 1, size, stdout);
+	  break;
 	default:
 	  assert (0);
 	  break;
 	}
       fmt++;
     }
-  fprintf (stdout, "\n");
+  if (!has_r_opt)
+    {
+      fprintf (stdout, "\n");
+    }
 }
 
 static int
@@ -1199,14 +1226,14 @@ main (int argc, char *argv[])
       int ret;
       if (argc < 3)
 	{
-	  printf ("-o option needs value\n");
+	  fprintf (stderr, "-ERR -o option needs value\n");
 	  goto error;
 	}
 
       ret = parse_opt_o (argv[2]);
       if (ret < 0)
 	{
-	  printf ("Failed to parse -o option:%s\n", argv[2]);
+	  fprintf (stderr, "-ERR Failed to parse -o option:%s\n", argv[2]);
 	  goto error;
 	}
       argc = argc - 2;
@@ -1253,7 +1280,7 @@ main (int argc, char *argv[])
     }
   else
     {
-      printf ("Unsupported subcommand:%s\n", argv[1]);
+      fprintf (stderr, "Unsupported subcommand:%s\n", argv[1]);
       goto error;
     }
   return 0;

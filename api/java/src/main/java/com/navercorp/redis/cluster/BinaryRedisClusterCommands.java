@@ -453,6 +453,13 @@ public interface BinaryRedisClusterCommands {
     String set(byte[] key, byte[] value, byte[] nxxx, byte[] expx, long time);
   
     /**
+     * Set key to hold the string value.
+     * @param args contains a key, a value, and options for the set command.
+     * @return
+     */
+	String set(byte[]... args);
+	
+    /**
      * Sets or clears the bit at offset in the string value stored at key.
      *
      * @param key    the key

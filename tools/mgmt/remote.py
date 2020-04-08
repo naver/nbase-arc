@@ -494,7 +494,7 @@ def rangedel(src_ip, src_port, range_from, range_to, tps):
         return False
 
     with settings(warn_only=True):
-        if run(exec_str).failed: return Falseq
+        if run(exec_str).failed: return False
 
     return True
 

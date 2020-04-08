@@ -465,11 +465,15 @@ smrlog_sync (smrLog * handle, smrLogAddr * addr)
   return 0;
 }
 
+//
+// Sync src_addr data to dest_addr.  Note that this function assumes
+// (1) non-concurrent access to dest_addr
+// (2) data upto src + off is valid
+//
 int
-smrlog_sync_maps (smrLog * handle, smrLogAddr * src_addr,
+smrlog_sync_maps (smrLog * handle, smrLogAddr * src_addr, int src_off,
 		  smrLogAddr * dest_addr)
 {
-  int src_off;
   int dest_off;
   char *bp;
   int size;
@@ -485,13 +489,6 @@ smrlog_sync_maps (smrLog * handle, smrLogAddr * src_addr,
   if (src_addr == dest_addr)
     {
       return 0;
-    }
-
-  src_off = addr_offset (src_addr);
-  if (src_off < 0)
-    {
-      ERRNO_POINT ();
-      return -1;
     }
 
   dest_off = addr_offset (dest_addr);
