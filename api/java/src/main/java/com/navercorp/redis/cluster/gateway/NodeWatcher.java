@@ -82,7 +82,7 @@ public class NodeWatcher implements Watcher {
         this.connLatcher = new CountDownLatch(1);
         connectExecutor.submit(zkConnector);
         if (this.connLatcher.await(config.getZkConnectTimeout(), TimeUnit.MILLISECONDS) == false) {
-            throw new TimeoutException("[NodeWatcher] ZooKeeper Connect timeout. zkConnectTimeout=" + config.getZkConnectTimeout());
+            throw new TimeoutException("[NodeWatcher] ZooKeeper Connect failed. zkConnectTimeout=" + config.getZkConnectTimeout());
         }
     }
 
@@ -98,7 +98,7 @@ public class NodeWatcher implements Watcher {
                     zk = new ZooKeeper(config.getZkAddress(), config.getZkSessionTimeout(), NodeWatcher.this);
                     zkCreationFuture.set(true);
                     return;
-                } catch (IOException e) {
+                } catch (Exception e) {
                     log.warn("[NodeWatcher] failed to connect to zookeeper.", e);
                     zkCreationFuture.set(false);
                     retryDelay *= 2;
