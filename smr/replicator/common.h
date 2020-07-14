@@ -28,6 +28,7 @@
 #include "smr_log.h"
 #include "stream.h"
 #include "slowlog.h"
+#include "ipacl.h"
 
 /* define smr version */
 #define SMR_VERSION 201
@@ -55,6 +56,10 @@
 
 /* SMR_OP_EXT extensions */
 #define SMR_OP_EXT_NOOP ('n' << 24)
+
+/* Access control, client limit related */
+#define SMR_ACCEPT_BLOCK_MSEC        1500
+#define SMR_MAX_MGMT_CLIENTS_PER_IP  50
 
 /* replicator stat */
 typedef struct repStat
@@ -254,6 +259,7 @@ typedef struct mgmtConn
   int ibuf_sz;			// input buffer size
   char *ibuf_p;			// current input buffer position for read
   ioStream *ous;		// stream to backend
+  char cip[64];			// client IP
 } mgmtConn;
 #define init_mgmt_conn(s) do { \
   dlisth_init(&(s)->head);     \
@@ -265,6 +271,7 @@ typedef struct mgmtConn
   (s)->ibuf_sz = 0;            \
   (s)->ibuf_p = NULL;          \
   (s)->ous = NULL;             \
+  (s)->cip[0] = '\0';          \
 } while (0)
 
 /* atomic sequence number */
@@ -471,6 +478,10 @@ struct smrReplicator_
   long long mig_id;		// migration ID. valid if mig is not null
   int mig_ret;			// error code. 0 if successful          
   char mig_ebuf[1024];		// error message
+  /* ACL related */
+  ipacl_t *acl;			// black list
+  char cip[64];			// temporary buffer used in accept handlers (0..3)
+  int is_bad_client;		// flag used accept ACL handling
 };
 
 #define UNMAPH_LOCK(r) pthread_mutex_lock(&(r)->unmaph_mutex)

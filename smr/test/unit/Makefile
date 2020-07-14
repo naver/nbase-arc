@@ -10,7 +10,7 @@ INCLUDES = -I../../smr -I../../replicator
 CFLAGS = -std=c99 -pedantic -Wall $(INCLUDES) $(DEFS) $(OPT) $(DEBUG) $(GCOV_FLAGS)
 LINKS = -lpthread ../../smr/libsmr.a -lrt
 OBJECT = ../../replicator/part_filter.o ../../replicator/slowlog.o
-TESTS = test-stream test-filter test-rbtree test-dlist test-log test-slowlog test-memdev
+TESTS = test-stream test-filter test-rbtree test-dlist test-log test-slowlog test-memdev test-ipacl
 PERFS =
 
 all: $(OBJECT) $(TESTS) $(PERFS)
@@ -42,6 +42,9 @@ test-slowlog: test_slowlog.o
 
 test-memdev: test_memdev.o
 	$(CC) -o test-memdev $(DEFS) $(CFLAGS) $(DEBUG) $(OBJECT) $< $(LINKS)
+
+test-ipacl: test_ipacl.o
+	$(CC) -o test-ipacl $(DEFS) $(CFLAGS) $(DEBUG) $(OBJECT) $< $(LINKS)
 
 clean:
 	rm -rf *.o  $(TESTS) $(PERFS) *.gcno *.gcda *.gcov core

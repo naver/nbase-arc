@@ -174,6 +174,12 @@ static int fd_write_stream (connType conn_type, int fd, ioStream * ios,
 /* be configuration */
 static int be_configure_msg (char *buf, int bufsz, char *fmt, ...);
 
+/* acl related */
+static void acl_enter (smrReplicator * rep);
+static int acl_check_client (smrReplicator * rep);
+static void acl_good_client (smrReplicator * rep);
+static void acl_leave (smrReplicator * rep);
+
 /* ---------------- */
 /* local connection */
 /* ---------------- */
@@ -495,6 +501,10 @@ init_replicator (smrReplicator * rep, repRole role, smrLog * smrlog,
   rep->mig_id = 0LL;
   rep->mig_ret = 0;
   rep->mig_ebuf[0] = '\0';
+  /* ACL related */
+  rep->acl = NULL;
+  rep->cip[0] = '\0';
+  rep->is_bad_client = 0;
 }
 
 static void
@@ -604,6 +614,11 @@ term_replicator (smrReplicator * rep)
 	{
 	  delete_slowlog (rep->slow[i]);
 	}
+    }
+
+  if (rep->acl != NULL)
+    {
+      ipacl_destroy (rep->acl);
     }
 
   applog_term (rep);
@@ -1393,6 +1408,39 @@ be_configure_msg (char *buf, int bufsz, char *fmt, ...)
   return 1 + sizeof (int) + ret + 2;
 }
 
+/* acl related */
+static void
+acl_enter (smrReplicator * rep)
+{
+  rep->cip[0] = '\0';
+  // Be pessimistic. It is acceptor's responsibility to clear this flag
+  rep->is_bad_client = 1;
+}
+
+static int
+acl_check_client (smrReplicator * rep)
+{
+  ipacl_color_t color = ipacl_check (rep->acl, rep->cip, currtime_ms ());
+  return color == IPACL_WHITE;
+}
+
+static void
+acl_good_client (smrReplicator * rep)
+{
+  rep->is_bad_client = 0;
+}
+
+static void
+acl_leave (smrReplicator * rep)
+{
+  if (rep->is_bad_client && rep->cip[0] != '\0')
+    {
+      long long expire = currtime_ms () + SMR_ACCEPT_BLOCK_MSEC;
+      (void) ipacl_set (rep->acl, rep->cip, IPACL_BLACK, expire);
+    }
+  rep->is_bad_client = 0;
+}
+
 static int
 local_publish_safe_seq (localConn * lc, long long safe_seq)
 {
@@ -1500,7 +1548,7 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 {
   localConn *lc;
   int cfd = 0;
-  char cip[64];
+  char *cip = &rep->cip[0];
   int cport;
   long long net_seq;
   int ret;
@@ -1512,6 +1560,12 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   if (cfd < 0)
     {
       LOG (LG_WARN, "accept failed: %s", rep->ebuf);
+      return;
+    }
+  if (!acl_check_client (rep))
+    {
+      LOG (LG_DEBUG, "connection from %s:%d fd:%d is BLACK", cip, cport, cfd);
+      close (cfd);
       return;
     }
   LOG (LG_INFO, "connection from %s:%d fd:%d", cip, cport, cfd);
@@ -1593,6 +1647,7 @@ local_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   rep->local_client = lc;
   rep->role = LCONN;
   rep->role_id++;
+  acl_good_client (rep);
   return;
 
 error:
@@ -1712,7 +1767,9 @@ local_accept_handler (aeEventLoop * el, int fd, void *data, int mask)
 
   applog_enter_session (rep, LOCAL_CONN_IN, fd);
   SLOWLOG_ENTER ();
+  acl_enter (rep);
   local_accept (rep, el, fd);
+  acl_leave (rep);
   SLOWLOG_LEAVE (rep);
   applog_leave_session (rep);
 }
@@ -1839,7 +1896,7 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 {
   slaveConn *sc;
   int cfd = 0;
-  char cip[64];
+  char *cip = &rep->cip[0];
   int cport;
   int duplicated = 0;
   long long net_seq;
@@ -1856,6 +1913,12 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   if (cfd < 0)
     {
       LOG (LG_WARN, "accept failed: %s", rep->ebuf);
+      return;
+    }
+  if (!acl_check_client (rep))
+    {
+      LOG (LG_DEBUG, "connection from %s:%d fd:%d is BLACK", cip, cport, cfd);
+      close (cfd);
       return;
     }
   LOG (LG_INFO, "connection from %s:%d fd:%d", cip, cport, cfd);
@@ -2003,6 +2066,7 @@ slave_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 
   dlisth_insert_before (&sc->head, &rep->slaves);
   rep->num_slaves++;
+  acl_good_client (rep);
   return;
 
 error:
@@ -2101,7 +2165,9 @@ slave_accept_handler (aeEventLoop * el, int fd, void *data, int mask)
 
   applog_enter_session (rep, SLAVE_CONN_IN, fd);
   SLOWLOG_ENTER ();
+  acl_enter (rep);
   slave_accept (rep, el, fd);
+  acl_leave (rep);
   SLOWLOG_LEAVE (rep);
   applog_leave_session (rep);
 }
@@ -2257,7 +2323,7 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 {
   clientConn *cc;
   int cfd = 0;
-  char cip[64];
+  char *cip = &rep->cip[0];
   int cport;
   short net_nid;
   long long net_seq;
@@ -2271,6 +2337,12 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   if (cfd < 0)
     {
       LOG (LG_WARN, "accept failed: %s", rep->ebuf);
+      return;
+    }
+  if (!acl_check_client (rep))
+    {
+      LOG (LG_DEBUG, "connection from %s:%d fd:%d is BLACK", cip, cport, cfd);
+      close (cfd);
       return;
     }
   LOG (LG_INFO, "connection from %s:%d fd:%d", cip, cport, cfd);
@@ -2366,6 +2438,7 @@ client_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 
   /* link to replicator structure */
   dlisth_insert_after (&cc->head, &rep->clients);
+  acl_good_client (rep);
   return;
 
 error:
@@ -2683,7 +2756,9 @@ client_accept_handler (aeEventLoop * el, int fd, void *data, int mask)
 
   applog_enter_session (rep, CLIENT_CONN_IN, fd);
   SLOWLOG_ENTER ();
+  acl_enter (rep);
   client_accept (rep, el, fd);
+  acl_leave (rep);
   SLOWLOG_LEAVE (rep);
   applog_leave_session (rep);
 }
@@ -3421,7 +3496,7 @@ mgmt_accept (smrReplicator * rep, aeEventLoop * el, int fd)
 {
   mgmtConn *conn;
   int cfd = 0;
-  char cip[64];
+  char *cip = &rep->cip[0];
   int cport;
   int ret;
 
@@ -3430,6 +3505,12 @@ mgmt_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   if (cfd < 0)
     {
       LOG (LG_WARN, "accept failed: %s", rep->ebuf);
+      return;
+    }
+  if (!acl_check_client (rep))
+    {
+      LOG (LG_DEBUG, "connection from %s:%d fd:%d is BLACK", cip, cport, cfd);
+      close (cfd);
       return;
     }
   LOG (LG_INFO, "connection from %s:%d fd:%d", cip, cport, cfd);
@@ -3446,6 +3527,7 @@ mgmt_accept (smrReplicator * rep, aeEventLoop * el, int fd)
   init_mgmt_conn (conn);
   conn->rep = rep;
   conn->fd = cfd;
+  strcpy (conn->cip, cip);
 
   conn->ibuf_p = conn->ibuf = malloc (1024);
   if (conn->ibuf == NULL)
@@ -3481,7 +3563,30 @@ mgmt_accept (smrReplicator * rep, aeEventLoop * el, int fd)
     }
 
   /* link to managers */
-  dlisth_insert_after (&conn->head, &rep->managers);
+  do
+    {
+      dlisth *h;
+      int ipcnt = 0;
+
+      // limit the maximum number of client per IP by SMR_MAX_MGMT_CLIENTS_PER_IP
+      for (h = rep->managers.next; h != &rep->managers; h = h->next)
+	{
+	  mgmtConn *mc = (mgmtConn *) h;
+	  if (!strcmp (mc->cip, cip))
+	    {
+	      ipcnt++;
+	    }
+	}
+      if (ipcnt >= SMR_MAX_MGMT_CLIENTS_PER_IP)
+	{
+	  LOG (LG_DEBUG, "clients from ip:%s exceeds limt %d. deny accept.",
+	       cip, SMR_MAX_MGMT_CLIENTS_PER_IP);
+	  goto error;
+	}
+      dlisth_insert_after (&conn->head, &rep->managers);
+      acl_good_client (rep);
+    }
+  while (0);
   return;
 
 error:
@@ -3499,7 +3604,9 @@ mgmt_accept_handler (aeEventLoop * el, int fd, void *data, int mask)
 
   applog_enter_session (rep, MANAGEMENT_CONN_IN, fd);
   SLOWLOG_ENTER ();
+  acl_enter (rep);
   mgmt_accept (rep, el, fd);
+  acl_leave (rep);
   SLOWLOG_LEAVE (rep);
   applog_leave_session (rep);
 }
@@ -6943,6 +7050,11 @@ server_cron (struct aeEventLoop *eventLoop, long long id, void *clientData)
       }
   }
 
+  run_with_period (100)
+  {
+    ipacl_reap (rep->acl, currtime_ms ());
+  }
+
   if (rep->interrupted)
     {
       LOG (LG_WARN, "server interrupted...");
@@ -7215,6 +7327,13 @@ main (int argc, char *argv[])
   if (rep->log_dir == NULL)
     {
       LOG (LG_ERROR, "Memory failure");
+      exit (1);
+    }
+
+  rep->acl = ipacl_new (IPACL_WHITE);
+  if (rep->acl == NULL)
+    {
+      LOG (LG_ERROR, "Failed to create acl structure");
       exit (1);
     }
 
