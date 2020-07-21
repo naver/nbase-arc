@@ -404,6 +404,40 @@ process_command (client * c)
       replace_parsed_args (c, shared.oomerr);
       cmdflags = 0;
     }
+  // flushdb and flushall command can be done only via local proposer
+  if (cmdflags != 0 && c->smr->cmd != NULL
+      && (c->smr->cmd->proc == flushdbCommand
+	  || c->smr->cmd->proc == flushallCommand))
+    {
+      int deny_flush = 1;
+      char *peer = getClientPeerId (c);
+      if (peer != NULL
+	  && (strstr (peer, "127.0.0.1") != NULL
+	      || strstr (peer, "::1") != NULL))
+	{
+	  deny_flush = 0;
+	}
+      if (peer != NULL && deny_flush)
+	{
+	  int i;
+	  for (i = 0; i < server.bindaddr_count; i++)
+	    {
+	      if (strstr (peer, server.bindaddr[i]) != NULL)
+		{
+		  deny_flush = 0;
+		  break;
+		}
+	    }
+	}
+      if (deny_flush)
+	{
+	  replace_parsed_args (c,
+			       createStringObject
+			       ("-ERR flush or flushall is not permitted\r\n",
+				41));
+	  cmdflags = 0;
+	}
+    }
 
   keyhash = get_key_hash (c);
   assert (c->fd < 65535);
