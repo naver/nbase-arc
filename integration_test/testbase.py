@@ -399,7 +399,7 @@ def request_to_shutdown_gateway( cluster_name, server, leader_cm, check=False ):
     return 0
 
 
-def request_to_start_smr( server, verbose=3, log_delete_delay=86400 ):
+def request_to_start_smr( server, verbose=2, log_delete_delay=86400 ):
     id = server['id']
     ip = server['ip']
     smr_base_port = server['smr_base_port']

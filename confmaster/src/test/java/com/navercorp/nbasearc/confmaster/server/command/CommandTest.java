@@ -42,6 +42,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.MockitoAnnotations;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.convert.ConversionFailedException;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.junit4.SpringJUnit4ClassRunner;
 
@@ -867,10 +868,8 @@ public class CommandTest extends BasicSetting {
                 formatReply(result, null));
 
         result = doCommand("op_wf " + clusterName + " " + pgName + " AA invalid forced");
-        assertEquals(
-                "{\"state\":\"error\",\"msg\":\"-ERR Failed to convert from type java.lang.String to type boolean for value 'invalid';"
-                        + " nested exception is java.lang.IllegalArgumentException: Invalid boolean value 'invalid'\"}\r\n",
-                formatReply(result, null));
+        assertTrue(formatReply(result, null).startsWith("{\"state\":\"error\""));
+        assertEquals(ConversionFailedException.class, result.getExceptions().get(0).getClass());
         
         result = doCommand("op_wf " + clusterName + " " + pgName + " AA false not-forced");
         assertEquals(

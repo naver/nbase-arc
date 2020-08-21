@@ -1754,6 +1754,7 @@ read_input_state (smrConnector * connector, int *nconsumed)
 
 	      ret =
 		cb->noti_rckpt (connector->arg, ckpt->behost, ckpt->beport);
+	      cfg_free (cmd);
 	      if (ret != 0)
 		{
 		  ERRNO_POINT ();
@@ -1767,6 +1768,7 @@ read_input_state (smrConnector * connector, int *nconsumed)
 	       * master to disable replication message to the master (if exists) 
 	       */
 	      close_master (connector);
+	      cfg_free (cmd);
 	    }
 	  else
 	    {

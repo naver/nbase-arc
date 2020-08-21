@@ -117,12 +117,19 @@ class SMR (Proc.Proc):
             raise Exception(resp[0])
         return True
 
-    # loccal in(1)/out(2), slave in(3)/out(4), client in(5)/out(6), master in(7)/out(8)
+    # local in(1)/out(2), slave in(3)/out(4), client in(5)/out(6), master in(7)/out(8)
     # mgmt in(9)/out(10) mig in(11)/out(12)
     # ref: replicator/common.h
     def fi_error_client_accept(self):
         # 103 : ECONNABORTED
         resp = self._conn.do_request('fi accept 5 return -1 103')
+        seg = resp[0].split()
+        if seg[0] != '+OK':
+            raise Exception(resp[0])
+        return seg[1:]
+
+    def fi_once(self, name):
+        resp = self._conn.do_request('fi once %s' % name)
         seg = resp[0].split()
         if seg[0] != '+OK':
             raise Exception(resp[0])
@@ -134,6 +141,14 @@ class SMR (Proc.Proc):
         if seg[0] != '+OK':
             raise Exception(resp[0])
         return seg[1:]
+
+    def deletelog(self, retain):
+        resp = self._conn.do_request('deletelog %d' % retain)
+        seg = resp[0].split()
+        if seg[0] != '+OK':
+            raise Exception(resp[0])
+        # returns log_delete_seq set
+        return int(seg[1])
 
     def info(self, section='all'):
         ''' returns map(section --> map(key->value))'''

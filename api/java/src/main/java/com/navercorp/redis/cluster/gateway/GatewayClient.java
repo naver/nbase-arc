@@ -762,7 +762,27 @@ public class GatewayClient implements RedisClusterCommands, BinaryRedisClusterCo
             }
         });
     }
-    
+
+    /*
+     * @see BinaryRedisClusterCommands#set(byte[]...)
+     */
+    @Override
+	public String set(final byte[]... args) {
+		return this.execute(new RedisClusterCallback<String>() {
+			public String doInRedisCluster(RedisCluster redisCluster) {
+				return redisCluster.set(args);
+			}
+
+			public int getPartitionNumber() {
+				return GatewayPartitionNumber.get(args[0]);
+			}
+
+			public AffinityState getState() {
+				return AffinityState.WRITE;
+			}
+		});
+	}
+
     /* 
 	 * @see RedisClusterCommands#getSet(java.lang.String, java.lang.String)
 	 */

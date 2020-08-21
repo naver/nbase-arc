@@ -94,6 +94,10 @@ public class BinaryRedisClusterClient extends TriplesRedisClusterClient {
         }
     }
 
+	public void execute(Command cmd, byte[]... args) {
+		sendCommand(cmd, args);
+	}
+
     /**
      * Ping.
      */

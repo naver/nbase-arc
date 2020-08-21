@@ -9,7 +9,7 @@ INCLUDES =
 CFLAGS = -std=c99 -pedantic -Wall $(INCLUDES) $(DEFS) $(OPT) $(DEBUG) $(GCOV_FLAGS)
 LINKS = -lpthread -lrt
 
-OBJECT = tcp.o crc16.o dlist.o stream.o rbtree.o sfi.o gpbuf.o log_scan.o log_addr.o log_util.o log_disk.o log_mem.o log_recover.o log_log.o smr_be.o
+OBJECT = tcp.o crc16.o dlist.o stream.o rbtree.o sfi.o gpbuf.o log_scan.o log_addr.o log_util.o log_disk.o log_mem.o log_recover.o log_log.o smr_be.o ipacl.o
 MYLIB = libsmr.a
 
 all: $(OBJECT) $(MYLIB) smr-logutil
@@ -36,6 +36,7 @@ log_mem.o : log_mem.c
 log_recover.o : log_recover.c
 log_log.o : log_log.c
 smr_be.o : smr_be.c
+ipacl.o : ipacl.c
 
 $(MYLIB): $(OBJECT)
 	ar rcs $(MYLIB) $(OBJECT)

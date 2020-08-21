@@ -48,7 +48,8 @@ struct logDev_
 			   int create);
   int (*munmap) (logDev * dev, smrLogAddr * addr);
   int (*remove_one) (logDev * dev, long long upper, int gap_in_sec,
-		     int *removed, long long *removed_seq, int *has_more);
+		     long long retain_lb, int *removed,
+		     long long *removed_seq, int *has_more);
   void (*close) (logDev * dev);
 };
 #define init_log_dev(d) do {   \

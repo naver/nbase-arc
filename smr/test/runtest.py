@@ -27,6 +27,7 @@ unit_tests = [
     './unit/test-dlist',
     './unit/test-slowlog',
     './unit/test-memdev',
+    './unit/test-ipacl',
     ]
 
 integrated_tests = [
@@ -39,6 +40,8 @@ integrated_tests = [
     './test_be_reconf.py',
     './test_quorum.py',
     './test_logutil.py',
+    './test_deletelog_cmd.py',
+    './test_portscan.py',
     ]
 
 for test in unit_tests:

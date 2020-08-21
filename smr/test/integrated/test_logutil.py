@@ -60,6 +60,14 @@ class TestLogUtil (unittest.TestCase):
             # make some logs
             self.make_logs(master, 5)
 
+            # Test raw dump option
+            out, _ = Log.datadump_communicate(master.dir, 0, 5*1024, 'r')
+            lines = out.split('\n')
+            assert len(lines) > 0, len(lines)
+            # error case
+            out, err = Log.datadump_communicate(master.dir, 0, 5*1024, 'Tr')
+            assert len(err) > 0 and err.startswith('-ERR'), err
+
             # get file sequences
             seqs = master.smr.getseq_log()
             file_seqs = []

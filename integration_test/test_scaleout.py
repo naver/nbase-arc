@@ -29,7 +29,7 @@ import copy
 
 class TestScaleout(unittest.TestCase):
     cluster = config.clusters[0]
-    max_load_generator = 128
+    max_load_generator = 10
     load_gen_thrd_list = {}
 
     @classmethod
@@ -56,7 +56,7 @@ class TestScaleout(unittest.TestCase):
         util.log("start load_generator")
         for i in range(self.max_load_generator):
             ip, port = util.get_rand_gateway(self.cluster)
-            self.load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
+            self.load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port, ops_limit=500)
             self.load_gen_thrd_list[i].start()
 
         time.sleep(5) # generate load for 5 sec
@@ -133,7 +133,7 @@ class TestScaleout(unittest.TestCase):
         util.log("start load_generator")
         for i in range(self.max_load_generator):
             ip, port = util.get_rand_gateway(self.cluster)
-            self.load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port)
+            self.load_gen_thrd_list[i] = load_generator.LoadGenerator(i, ip, port, ops_limit=500)
             self.load_gen_thrd_list[i].start()
 
         time.sleep(5) # generate load for 5 sec

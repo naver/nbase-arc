@@ -28,6 +28,7 @@
 #include "smr_log.h"
 #include "stream.h"
 #include "slowlog.h"
+#include "ipacl.h"
 
 /* define smr version */
 #define SMR_VERSION 201
@@ -55,6 +56,10 @@
 
 /* SMR_OP_EXT extensions */
 #define SMR_OP_EXT_NOOP ('n' << 24)
+
+/* Access control, client limit related */
+#define SMR_ACCEPT_BLOCK_MSEC        1500
+#define SMR_MAX_MGMT_CLIENTS_PER_IP  50
 
 /* replicator stat */
 typedef struct repStat
@@ -254,6 +259,7 @@ typedef struct mgmtConn
   int ibuf_sz;			// input buffer size
   char *ibuf_p;			// current input buffer position for read
   ioStream *ous;		// stream to backend
+  char cip[64];			// client IP
 } mgmtConn;
 #define init_mgmt_conn(s) do { \
   dlisth_init(&(s)->head);     \
@@ -265,6 +271,7 @@ typedef struct mgmtConn
   (s)->ibuf_sz = 0;            \
   (s)->ibuf_p = NULL;          \
   (s)->ous = NULL;             \
+  (s)->cip[0] = '\0';          \
 } while (0)
 
 /* atomic sequence number */
@@ -421,6 +428,7 @@ struct smrReplicator_
   smrAtomicSeq cron_est_min_seq;	// minimun sequence estimated by server cron (log file boundary)
   smrAtomicSeq mig_seq;		// upto which migration log caught-up
   int log_delete_gap;		// checkpointed log delete gap in seconds from now
+  smrAtomicSeq log_delete_seq;	// checkpointed log delete sequence
   /* general */
   short nid;			// node id of this replicator
   struct timeval stat_time;	// stat report time
@@ -429,6 +437,8 @@ struct smrReplicator_
   localConn *local_client;	// local client
   /* salve only */
   masterConn *master;		// (slave) master replicator
+  /* client */
+  long long last_timestamp;	// last timestamp that master replicator issues (non decreasing)
   /* master only */
   dlisth clients;		// list haed for clientConn
   volatile int num_slaves;	// number of current slaves
@@ -468,6 +478,10 @@ struct smrReplicator_
   long long mig_id;		// migration ID. valid if mig is not null
   int mig_ret;			// error code. 0 if successful          
   char mig_ebuf[1024];		// error message
+  /* ACL related */
+  ipacl_t *acl;			// black list
+  char cip[64];			// temporary buffer used in accept handlers (0..3)
+  int is_bad_client;		// flag used accept ACL handling
 };
 
 #define UNMAPH_LOCK(r) pthread_mutex_lock(&(r)->unmaph_mutex)
@@ -614,4 +628,20 @@ extern void applog_leave_session (smrReplicator * rep);
 
 extern void log_msg (smrReplicator * rep, int level, char *fmt, ...);
 extern char *get_command_string (char cmd);
+
+
+//borrowed from redis/src/config.h
+#if (__i386 || __amd64 || __powerpc__) && __GNUC__
+#define GNUC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#if (defined(__GLIBC__) && defined(__GLIBC_PREREQ))
+#if (GNUC_VERSION >= 40100 && __GLIBC_PREREQ(2, 6))
+#define HAVE_MEMFENCE
+#endif
+#endif
+#endif
+
+#if !defined(HAVE_MEMFENCE)
+#error "Need glibc and gcc version that supports __sync_synchronize"
+#endif
+
 #endif

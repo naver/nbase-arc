@@ -65,11 +65,13 @@ def is_pgs_normal(pgs):
 
 class TestNetworkIsolation(unittest.TestCase):
     def setUp(self):
+        ret = util.nic_add('eth1:arc', '127.0.0.100')
         util.set_process_logfile_prefix( 'TestNetworkIsolation_%s' % self._testMethodName )
         self.cleanup_iptables()
         return 0
 
     def tearDown(self):
+        util.nic_del('eth1:arc')
         self.cleanup_iptables()
         return 0
 
