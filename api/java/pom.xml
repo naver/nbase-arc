@@ -58,7 +58,7 @@
         <spring-data-redis.version>1.8.4.RELEASE</spring-data-redis.version>
         <jedis.version>2.9.0</jedis.version>
         <guava.version>19.0</guava.version>
-        <jackson.version>2.9.10.1</jackson.version>
+        <jackson.version>2.9.10.5</jackson.version>
     </properties>
 
     <dependencies>
@@ -155,7 +155,7 @@
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
             <scope>test</scope>
-            <version>4.12</version>
+            <version>4.13.1</version>
         </dependency>
         <dependency>
             <groupId>org.springframework</groupId>
