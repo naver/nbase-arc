@@ -114,6 +114,7 @@ class ARC_API():
         self.conf.num_conn_per_gw = c_int(connectionPerGateway)
         self.conf.init_timeout_millis = c_int(timeoutMillis)
         self.conf.log_level = c_int(logLevel)
+        self.conf.zk_reconnect_millis = c_int(1000)
         self.conf.log_file_prefix = c_char_p(logFilePrefix)
 
         self.arcci.arc_new_zk.restype = c_void_p

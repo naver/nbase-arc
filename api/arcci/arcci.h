@@ -99,7 +99,7 @@ extern "C"
     char *log_file_prefix;	// log file prefix (default: NULL)
     int max_fd;			// maximum number of file descriptors of the calling process (min:1024, default: 4096)
     int conn_reconnect_millis;	// gateway reconnect trial interval after disconnection (min:100, default: 1000)
-    int zk_reconnect_millis;	// zookeeper reconnect trial interval after disconnection (min:100, default: 1000)
+    int zk_reconnect_millis;	// zookeeper reconnect trial interval after disconnection (min:1000, default: 10000)
     int zk_session_timeout_millis;	// zookeeper session timeout (min:1000, default: 10000)
   };
 

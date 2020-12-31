@@ -411,8 +411,8 @@ typedef enum
 #define CONF_MAX_FD_DEFAULT                           4096
 #define CONF_CONN_RECONNECT_MILLIS_MIN                100
 #define CONF_CONN_RECONNECT_MILLIS_DEFAULT            1000
-#define CONF_ZK_RECONNECT_MILLIS_MIN                  100
-#define CONF_ZK_RECONNECT_MILLIS_DEFAULT              1000
+#define CONF_ZK_RECONNECT_MILLIS_MIN                  1000
+#define CONF_ZK_RECONNECT_MILLIS_DEFAULT              10000
 #define CONF_ZK_SESSION_TIMEOUT_MILLIS_MIN            1000
 #define CONF_ZK_SESSION_TIMEOUT_MILLIS_DEFAULT        10000
 

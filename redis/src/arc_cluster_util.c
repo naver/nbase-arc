@@ -30,7 +30,7 @@ struct dumpState
   off_t aofpos;
   int tps_hz, opcount;
   long net_limit_bytes_hz, net_avail;
-  int ret, send_done;
+  int ret, emit_done, send_done;
   int cronloops;
   int flags;
   off_t cursize, totalsize;
@@ -334,7 +334,7 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
 	    {
 	      goto err;
 	    }
-	  ds->send_done = 1;
+	  ds->emit_done = 1;
 	}
     }
 
@@ -361,8 +361,12 @@ playdump_write_handler (aeEventLoop * el, int fd, void *data, int mask)
       sdsclear (ds->aof.io.buffer.ptr);
       ds->aof.io.buffer.pos = 0;
       ds->aofpos = 0;
-      if (ds->opcount >= ds->tps_hz || ds->send_done)
+      if (ds->opcount >= ds->tps_hz || ds->emit_done)
 	{
+	  if (ds->emit_done)
+	    {
+	      ds->send_done = 1;
+	    }
 	  aeDeleteFileEvent (el, fd, AE_WRITABLE);
 	  return;
 	}
@@ -511,6 +515,7 @@ play_dump (char *filename, char *target_addr, int target_port, int tps,
   ds.net_limit_bytes_hz = net_limit * 1024 * 1024 / server.hz;
   ds.net_avail = ds.net_limit_bytes_hz;
   ds.aofpos = 0;
+  ds.emit_done = 0;
   ds.send_done = 0;
   ds.ret = C_OK;
   ds.cronloops = 0;

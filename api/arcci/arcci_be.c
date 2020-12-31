@@ -3112,9 +3112,9 @@ done:
   /* adjust interval and htw_ticks */
   et = currtime_millis ();
   interval = interval - (et - st);
-  if (interval < 0)
+  if (interval < 1)
     {
-      interval = 0;
+      interval = 1;
     }
 
   return interval;
@@ -3345,7 +3345,7 @@ zk_evl_top_half (be_t * be)
   int interest = 0;
   struct timeval tv;
   int rc, ret;
-  long long curr;
+  long long curr, dur;
 #ifdef _WIN32
   rc =
     zookeeper_interest ((zhandle_t *) be->zh, &fd, &interest, &tv,
@@ -3401,7 +3401,13 @@ zk_evl_top_half (be_t * be)
 
   /* register timer event */
   curr = currtime_millis ();
-  be->zk_to_job.to = curr + tv.tv_sec * 1000 + tv.tv_usec / 1000;
+  dur = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+  if (dur < 1)
+    {
+      // at least 1 msec
+      dur = 1;
+    }
+  be->zk_to_job.to = curr + dur;
   htw_add (be, &be->zk_to_job);
   return 0;
 }
@@ -3431,9 +3437,13 @@ zk_read_handler (aeEventLoop * el, socket_t fd, void *clientData, int mask)
    * NOTE: if both AE_READABLE and AE_WRITABLE event is set in mask, 
    * ae calls read handler and then write handler
    */
-  if (mask & AE_WRITABLE)
+  if ((mask & AE_WRITABLE) && be->zk_w_prepared)
     {
       return;
+    }
+  if (mask & AE_WRITABLE)
+    {
+      be->zk_events |= ZOOKEEPER_WRITE;
     }
 
   ret = zk_evl_bottom_half (be);
@@ -3465,6 +3475,10 @@ zk_write_handler (aeEventLoop * el, socket_t fd, void *clientData, int mask)
 
   be = (be_t *) clientData;
   be->zk_events |= ZOOKEEPER_WRITE;
+  if (mask & AE_READABLE)
+    {
+      be->zk_events |= ZOOKEEPER_READ;
+    }
 
   ret = zk_evl_bottom_half (be);
   if (ret == -1)
@@ -3479,9 +3493,11 @@ static int
 zk_evl_bottom_half (be_t * be)
 {
   int rc;
+  int events = be->zk_events;
 
+  be->zk_events = 0;
   BE_FI (rc, ZOK + 1, 0);
-  rc = zookeeper_process ((zhandle_t *) be->zh, be->zk_events);
+  rc = zookeeper_process ((zhandle_t *) be->zh, events);
   FI_END ();
   if (rc != ZOK)
     {
@@ -3505,7 +3521,6 @@ zk_evl_bottom_half (be_t * be)
       be->zk_interest_fd = -1;
     }
   htw_del (be, &be->zk_to_job);
-  be->zk_events = 0;
 
   return zk_evl_top_half (be);
 }
@@ -3762,8 +3777,8 @@ zk_getgw_completion (int rc, const char *value, int value_len,
   assert (gwc != NULL);
   be = gwc->be;
 
-  BE_FI(rc, ZOPERATIONTIMEOUT, 0);
-  FI_END();
+  BE_FI (rc, ZOPERATIONTIMEOUT, 0);
+  FI_END ();
   if (rc != ZOK || value == NULL || value_len < 0)
     {
       LOG_ERROR (be, "Zookeeper error:%d", rc);
