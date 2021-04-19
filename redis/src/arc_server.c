@@ -30,6 +30,7 @@ static void ascii_art (void);
 static void process_smr_callback (aeEventLoop * el, int fd, void *privdata,
 				  int mask);
 static int smrcb_close (void *arg, long long seq, short nid, int sid);
+static void save_and_exit (void);
 static int smrcb_data (void *arg, long long seq, long long timestamp,
 		       short nid, int sid, int hash, smrData * smr_data,
 		       int size);
@@ -250,6 +251,10 @@ init_config (void)
 
   /* Local ip check */
   arc.local_ip_addrs = arcx_get_local_ip_addrs ();	//TODO why here?
+
+  /* logcompact-[seq|ts] */
+  arc.logcompact_seq = -1LL;
+  arc.logcompact_ts = -1LL;
 
 #ifdef COVERAGE_TEST
   arc.debug_mem_usage_fixed = 0;
@@ -533,6 +538,21 @@ smrcb_close (void *arg, long long seq, short nid, int sid)
   return 0;
 }
 
+static void
+save_and_exit (void)
+{
+  int ret;
+
+  ret = rdbSave (server.rdb_filename);
+  if (ret == C_OK)
+    {
+      exit (0);
+    }
+  else
+    {
+      exit (1);
+    }
+}
 
 static int
 smrcb_data (void *arg, long long seq, long long timestamp,
@@ -543,6 +563,13 @@ smrcb_data (void *arg, long long seq, long long timestamp,
   short cmdflags;
   dlisth *node;
   UNUSED (arg);
+
+  /* handle logcompaction */
+  if ((arc.logcompact_seq != -1LL && seq + size > arc.logcompact_seq) ||
+      (arc.logcompact_ts != -1LL && timestamp > arc.logcompact_ts))
+    {
+      save_and_exit ();
+    }
 
   /* Special commands */
   if (size == 1 && data[0] == ARC_SMR_CMD_CATCHUP_CHECK)
