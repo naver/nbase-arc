@@ -149,7 +149,7 @@ struct arcServer
   dlisth *gc_line;		/* fixed rate gc object headers */
   dlisth gc_eager;		/* s3 object header for eager mode gc */
   void *gc_obc;			/* s3 object cursor for incremental purge */
-  int gc_eager_loops;		/* event loop count in eager mode */
+  long long gc_eager_loops;	/* event loop count in eager mode */
 
   /* State machine replicator (SMR) */
   smrConnector *smr_conn;
@@ -332,14 +332,16 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     "instantaneous_replied_ops_per_sec:%lld\r\n"                      \
     "total_commands_lcon:%lld\r\n"                                    \
     "instantaneous_lcon_ops_per_sec:%lld\r\n"                         \
-    "background_deleted_keys:%lld\r\n"
+    "background_deleted_keys:%lld\r\n"                                \
+    "s3gc_eager_loops:%lld\r\n"
 
 #define ARC_INFO_STATS_ARG                                            \
     arc.stat_numcommands_replied,                                     \
     arc_get_instantaneous_metric(arc.replied_ops_sec_samples),        \
     arc.stat_numcommands_lcon,                                        \
     arc_get_instantaneous_metric(arc.lcon_ops_sec_samples),           \
-    arc.stat_bgdel_keys,
+    arc.stat_bgdel_keys,                                              \
+    arc.gc_eager_loops,
 
 extern void arc_amend_command_table (void);
 extern void arc_init_config (void);
