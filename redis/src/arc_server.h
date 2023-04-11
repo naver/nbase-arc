@@ -149,7 +149,7 @@ struct arcServer
   dlisth *gc_line;		/* fixed rate gc object headers */
   dlisth gc_eager;		/* s3 object header for eager mode gc */
   void *gc_obc;			/* s3 object cursor for incremental purge */
-  int gc_eager_loops;		/* event loop count in eager mode */
+  long long gc_eager_loops;	/* event loop count in eager mode */
 
   /* State machine replicator (SMR) */
   smrConnector *smr_conn;
@@ -189,6 +189,10 @@ struct arcServer
 
   /* local ip check */
   char **local_ip_addrs;
+
+  /* logcompact-[seq|ts] */
+  long long logcompact_seq;
+  long long logcompact_ts;
 
 #ifdef COVERAGE_TEST
   /* debugging value for injecting memory states */
@@ -237,6 +241,8 @@ extern struct arcServer arc;
     config_get_numerical_field("memory-max-allowed-percentage",arc.mem_max_allowed_perc);       \
     config_get_numerical_field("memory-hard-limit-percentage",arc.mem_hard_limit_perc);         \
     config_get_numerical_field("object-bio-delete-min-elems",arc.object_bio_delete_min_elems);  \
+    config_get_numerical_field("logcompact-seq",arc.logcompact_seq);                            \
+    config_get_numerical_field("logcompact-ts",arc.logcompact_ts);                              \
 } while(0);
 
 #define arc_rewrite_config() do {                                                                            \
@@ -246,8 +252,10 @@ extern struct arcServer arc;
     rewriteConfigNumericalOption(state, "number-of-rdb-backups",arc.num_rdb_backups,1900);                   \
     rewriteConfigNumericalOption(state, "memory-limit-activation-percentage",arc.mem_limit_active_perc,100); \
     rewriteConfigNumericalOption(state, "memory-max-allowed-percentage",arc.mem_max_allowed_perc,100);       \
-    rewriteConfigNumericalOption(state, "memory-hard-limit-percentage",arc.mem_hard_limit_perc,100);        \
+    rewriteConfigNumericalOption(state, "memory-hard-limit-percentage",arc.mem_hard_limit_perc,100);         \
     rewriteConfigNumericalOption(state, "object-bio-delete-min-elems",arc.object_bio_delete_min_elems,ARC_OBJ_BIO_DELETE_MIN_ELEMS);  \
+    rewriteConfigNumericalOption(state, "logcompact-seq",arc.logcompact_seq,-1);                             \
+    rewriteConfigNumericalOption(state, "logcompact-ts",arc.logcompact_ts,-1);                               \
 } while(0)
 
 extern int arc_config_set (client * c);
@@ -324,14 +332,16 @@ extern int arc_config_cmp_load (int argc, sds * argv, char **err_ret);
     "instantaneous_replied_ops_per_sec:%lld\r\n"                      \
     "total_commands_lcon:%lld\r\n"                                    \
     "instantaneous_lcon_ops_per_sec:%lld\r\n"                         \
-    "background_deleted_keys:%lld\r\n"
+    "background_deleted_keys:%lld\r\n"                                \
+    "s3gc_eager_loops:%lld\r\n"
 
 #define ARC_INFO_STATS_ARG                                            \
     arc.stat_numcommands_replied,                                     \
     arc_get_instantaneous_metric(arc.replied_ops_sec_samples),        \
     arc.stat_numcommands_lcon,                                        \
     arc_get_instantaneous_metric(arc.lcon_ops_sec_samples),           \
-    arc.stat_bgdel_keys,
+    arc.stat_bgdel_keys,                                              \
+    arc.gc_eager_loops,
 
 extern void arc_amend_command_table (void);
 extern void arc_init_config (void);

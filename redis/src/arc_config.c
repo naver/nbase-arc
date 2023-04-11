@@ -272,6 +272,30 @@ arc_config_cmp_load (int argc, sds * argv, char **err_ret)
 	  goto loaderr;
 	}
     }
+  else if (!strcasecmp (argv[0], "logcompact-seq") && argc == 2)
+    {
+      long long seq = -1LL;
+      int ret;
+      ret = string2ll (argv[1], strlen (argv[1]), &seq);
+      if (ret == 0 || seq < 0)
+	{
+	  err = "Invalid logcompact-seq spec";
+	  goto loaderr;
+	}
+      arc.logcompact_seq = seq;
+    }
+  else if (!strcasecmp (argv[0], "logcompact-ts") && argc == 2)
+    {
+      long long ts = -1LL;
+      int ret;
+      ret = string2ll (argv[1], strlen (argv[1]), &ts);
+      if (ret == 0 || ts < 0)
+	{
+	  err = "Invalid logcompact-ts spec";
+	  goto loaderr;
+	}
+      arc.logcompact_ts = ts;
+    }
   else
     {
       /* no match */

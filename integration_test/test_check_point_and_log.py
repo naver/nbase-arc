@@ -373,3 +373,58 @@ class TestCheckPointAndLog( unittest.TestCase ):
             time.sleep(3)
 
         self.assertTrue(len(loglist) < 5)
+
+    def test_redis_logcompact(self):
+        util.print_frame()
+
+        server = self.cluster['servers'][0]
+        redis = telnetlib.Telnet(server['ip'], server['redis_port'])
+
+        val = 'x' * 1048576 # 1MB
+        cmd = '*3\r\n$3\r\nset\r\n$4\r\ntest\r\n$1048576\r\n%s\r\n' % val
+
+        # create smr log file
+        for i in xrange(64*7): # at least 7 log files
+            redis.write(cmd)
+            ret = redis.read_until('\r\n', 3)
+            self.assertEquals(ret, '+OK\r\n')
+
+        # wait until synced
+        if config.opt_use_memlog:
+            time.sleep(3)
+
+        loglist = [f for f in os.listdir('%s/log0' % util.smr_dir(0)) if '.log' in f]
+        util.log('before log delete')
+        util.log(loglist)
+
+        self.assertTrue(len(loglist) > 7)
+
+        testbase.request_to_shutdown_redis(server)
+        # start redis-arc with logcompact-seq option
+        if True:
+            import constant as c
+            id = server['id']
+            ip = server['ip']
+            smr_base_port = server['smr_base_port']
+            redis_port = server['redis_port']
+            cmd = './%s --smr-local-port %d --port %d --save "" --logcompact-seq %d' % (c.REDIS, smr_base_port, redis_port, 64*1024*1024*6)
+            f_log_std = util.open_process_logfile( id, 'redis_std' )
+            f_log_err = util.open_process_logfile( id, 'redis_err' )
+            p = util.exec_proc_async(util.redis_dir(id), cmd, True, None, f_log_std, f_log_err)
+            ret = p.wait()
+            self.assertTrue(ret == 0)
+        testbase.request_to_shutdown_smr(server)
+
+        testbase.request_to_start_smr(server, log_delete_delay=1)
+        testbase.request_to_start_redis(server)
+
+        time.sleep(30)
+        loglist = [f for f in os.listdir('%s/log0' % util.smr_dir(0)) if '.log' in f]
+        util.log('after log delete')
+        util.log(loglist)
+
+        # wait until synced
+        if config.opt_use_memlog:
+            time.sleep(3)
+
+        self.assertTrue(len(loglist) < 5)

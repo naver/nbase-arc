@@ -23,6 +23,7 @@ release: all
 	mkdir -p $(RELEASE_DIR)/api/java
 	# Redis
 	cp -rf redis/src/redis-arc $(RELEASE_DIR)/bin/redis-arc-$(VERSION)
+	cp -rf redis/src/dump-util $(RELEASE_DIR)/bin/dump-util-$(VERSION)
 	cp -rf redis/src/cluster-util $(RELEASE_DIR)/bin/cluster-util-$(VERSION)
 	# Confmaster
 	cp -rf confmaster/target/confmaster-1.0.0-SNAPSHOT-jar-with-dependencies.jar $(RELEASE_DIR)/confmaster/confmaster-$(VERSION).jar

@@ -135,8 +135,8 @@ struct smrConnector
   ioStream *mous;		// out state (to master)
   long long curr_last_cseq;	// if not -1, log greater than this seq must got from new master
   int trac_enabled;		// tracking enabled flag
-  int trac_sent;		// total number of bytes sent to the master
-  int trac_rcvd;		// total number of bytes received from the master
+  long long trac_sent;		// total number of bytes sent to the master
+  long long trac_rcvd;		// total number of bytes received from the master
   int cb_enabled;		// callback endabled flag
   smrCallback *cb;		// callback
   void *arg;			// arg
@@ -1561,7 +1561,7 @@ process_input_state_range (smrConnector * connector, smrCallback * cb,
 
       if (connector->trac_enabled && connector->trac_rcvd > 0)
 	{
-	  int diff;
+	  long long diff;
 
 	  assert (connector->trac_sent >= connector->trac_rcvd);
 	  diff = connector->trac_rcvd;

@@ -95,12 +95,16 @@ struct sssObc_
   robj *ks;
   robj *svc;
   robj *key;
+  int index;
+  robj *val;
 };
 #define init_sss_obc(c) do { \
   (c)->s3 = NULL;            \
   (c)->ks = NULL;            \
   (c)->svc = NULL;           \
   (c)->key = NULL;           \
+  (c)->index = 0;            \
+  (c)->val = NULL;           \
 } while(0)
 
 struct add_arg
@@ -268,7 +272,6 @@ static int s_Kv_mode = 0;
 /*-----------------------------------------------------------------------------
  * Local function implementations
  *----------------------------------------------------------------------------*/
-
 /* 
  * if type conflict w.r.t (ks, uuid, svc) reply error and returns 1. returns 0 if ok 
  */
@@ -2272,27 +2275,34 @@ obc_set (sssObc * obc, sss * s3, sssEntry * e)
   robj *ks = NULL;
   robj *svc = NULL;
   robj *key = NULL;
+  robj *val = NULL;
 
   if (e)
     {
       assert (e->ks->refcount >= 1);
       assert (e->svc->refcount >= 1);
       assert (e->key->refcount >= 1);
+      assert (e->val->refcount >= 1);
       incrRefCount (e->ks);
       incrRefCount (e->svc);
       incrRefCount (e->key);
+      incrRefCount (e->val);
     }
 
   obc->s3 = s3;
   ks = obc->ks;
   svc = obc->svc;
   key = obc->key;
-  obc->ks = obc->svc = obc->key = NULL;
+  val = obc->val;
+  obc->ks = obc->svc = obc->key = obc->val = NULL;
+  obc->index = 0;
   if (e)
     {
       obc->ks = e->ks;
       obc->svc = e->svc;
       obc->key = e->key;
+      obc->index = e->index;
+      obc->val = e->val;
     }
   if (ks != NULL)
     {
@@ -2305,6 +2315,10 @@ obc_set (sssObc * obc, sss * s3, sssEntry * e)
   if (key != NULL)
     {
       decrRefCount (key);
+    }
+  if (val != NULL)
+    {
+      decrRefCount (val);
     }
 }
 
@@ -2322,8 +2336,8 @@ obc_purge_scan (sssObc * obc, long long to, int nscan, int *npur,
   ke.ks = obc->ks;
   ke.svc = obc->svc;
   ke.key = obc->key;
-  ke.index = 0LL;
-  ke.val = NULL;
+  ke.index = obc->index;
+  ke.val = obc->val;
 
   first = NULL;
   e = rb_tree_find_node_geq (&s3->tree, &ke);
@@ -2636,7 +2650,7 @@ arcx_sss_gc_cron (void)
   num_dead =
     purge_objects (&arc.gc_eager, (sssObc *) arc.gc_obc, curr_msec,
 		   until_usec, &h);
-
+  UNUSED(num_dead);
   /* restore purged objects to gc lines */
   while (!dlisth_is_empty (&arc.gc_eager))
     {
